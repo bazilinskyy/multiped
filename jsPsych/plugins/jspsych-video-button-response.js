@@ -4,7 +4,7 @@
  *
  * plugin for playing a video file and getting a button response
  *
- * documentation: domp.jspsych.org
+ * documentation: docs.jspsych.org
  *
  **/
 

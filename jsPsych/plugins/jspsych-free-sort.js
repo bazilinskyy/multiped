@@ -3,7 +3,7 @@
  * plugin for drag-and-drop sorting of a collection of images
  * Josh de Leeuw
  *
- * documentation: domp.jspsych.org
+ * documentation: docs.jspsych.org
  */
 
 

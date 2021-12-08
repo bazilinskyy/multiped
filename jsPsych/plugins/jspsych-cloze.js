@@ -4,7 +4,7 @@
  *
  * Plugin for displaying a cloze test and checking participants answers against a correct solution.
  *
- * documentation: domp.jspsych.org
+ * documentation: docs.jspsych.org
  **/
 
 jsPsych.plugins['cloze'] = (function () {

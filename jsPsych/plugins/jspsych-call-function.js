@@ -3,7 +3,7 @@
  * plugin for calling an arbitrary function during a jspsych experiment
  * Josh de Leeuw
  *
- * documentation: domp.jspsych.org
+ * documentation: docs.jspsych.org
  *
  **/
 

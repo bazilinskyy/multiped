@@ -15,20 +15,20 @@ import unicodedata
 import re
 import ast
 
-import multiped as mp
+import crossing as cs
 
 matplotlib.use('TkAgg')
-logger = mp.CustomLogger(__name__)  # use custom logger
+logger = cs.CustomLogger(__name__)  # use custom logger
 
 
 # todo: add optinal arguments to pass axis labels
 class Analysis:
     # set template for plotly output
-    template = mp.common.get_configs('plotly_template')
+    template = cs.common.get_configs('plotly_template')
     # store resolution for keypress data
-    res = mp.common.get_configs('kp_resolution')
+    res = cs.common.get_configs('kp_resolution')
     # number of stimuli
-    num_stimuli = mp.common.get_configs('num_stimuli')
+    num_stimuli = cs.common.get_configs('num_stimuli')
     # folder for output
     folder = '/figures/'
 
@@ -1172,7 +1172,7 @@ class Analysis:
             output_subdir (str): Folder for saving file.
         """
         # build path
-        path = mp.settings.output_dir + output_subdir
+        path = cs.settings.output_dir + output_subdir
         if not os.path.exists(path):
             os.makedirs(path)
         # limit name to 255 char
@@ -1200,7 +1200,7 @@ class Analysis:
         # turn name into valid file name
         file_no_path = self.slugify(file_no_path)
         # create path
-        path = mp.settings.output_dir + output_subdir
+        path = cs.settings.output_dir + output_subdir
         if not os.path.exists(path):
             os.makedirs(path)
         # save file

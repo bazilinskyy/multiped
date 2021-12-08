@@ -9,12 +9,12 @@ import ast
 from statistics import mean
 import warnings
 
-import multiped as mp
+import crossing as cs
 
 # warning about partial assignment
 pd.options.mode.chained_assignment = None  # default='warn'
 
-logger = mp.CustomLogger(__name__)  # use custom logger
+logger = cs.CustomLogger(__name__)  # use custom logger
 
 
 # todo: parse browser interactions
@@ -22,19 +22,19 @@ class Heroku:
     # pandas dataframe with extracted data
     heroku_data = pd.DataFrame()
     # pandas dataframe with mapping
-    mapping = pd.read_csv(mp.common.get_configs('mapping_stimuli'))
+    mapping = pd.read_csv(cs.common.get_configs('mapping_stimuli'))
     # resolution for keypress data
-    res = mp.common.get_configs('kp_resolution')
+    res = cs.common.get_configs('kp_resolution')
     # number of stimuli
-    num_stimuli = mp.common.get_configs('num_stimuli')
+    num_stimuli = cs.common.get_configs('num_stimuli')
     # number of stimuli shown for each participant
-    num_stimuli_participant = mp.common.get_configs('num_stimuli_participant')
+    num_stimuli_participant = cs.common.get_configs('num_stimuli_participant')
     # number of repeats for each stimulus
-    num_repeat = mp.common.get_configs('num_repeat')
+    num_repeat = cs.common.get_configs('num_repeat')
     # allowed number of stimuli with detected wrong duration
-    allowed_length = mp.common.get_configs('allowed_stimuli_wrong_duration')
+    allowed_length = cs.common.get_configs('allowed_stimuli_wrong_duration')
     # allowed number of mistakes for questions with signs
-    allowed_signs = mp.common.get_configs('allowed_mistakes_signs')
+    allowed_signs = cs.common.get_configs('allowed_mistakes_signs')
     # pickle file for saving data
     file_p = 'heroku_data.p'
     # csv file for saving data
@@ -90,7 +90,7 @@ class Heroku:
         """
         # load data
         if self.load_p:
-            df = mp.common.load_from_p(self.file_p,
+            df = cs.common.load_from_p(self.file_p,
                                        'heroku data')
         # process data
         else:
@@ -145,7 +145,7 @@ class Heroku:
                         stim_no_path = os.path.splitext(stim_no_path)[0]
                         # Check if it is a block with stimulus and not an
                         # instructions block
-                        if (mp.common.search_dict(self.prefixes, stim_no_path)
+                        if (cs.common.search_dict(self.prefixes, stim_no_path)
                                 is not None):
                             # stimulus is found
                             logger.debug('Found stimulus {}.', stim_no_path)
@@ -343,11 +343,11 @@ class Heroku:
             df.insert(0, 'worker_code', worker_code_col)
         # save to pickle
         if self.save_p:
-            mp.common.save_to_p(self.file_p, df, 'heroku data')
+            cs.common.save_to_p(self.file_p, df, 'heroku data')
         # save to csv
         if self.save_csv:
             # todo: check whith index=False is needed here
-            df.to_csv(mp.settings.output_dir + '/' + self.file_data_csv +
+            df.to_csv(cs.settings.output_dir + '/' + self.file_data_csv +
                       '.csv', index=False)
             logger.info('Saved heroku data to csv file {}',
                         self.file_data_csv + '.csv')
@@ -361,7 +361,7 @@ class Heroku:
         Read mapping.
         """
         # read mapping from a csv file
-        df = pd.read_csv(mp.common.get_configs('mapping_stimuli'))
+        df = pd.read_csv(cs.common.get_configs('mapping_stimuli'))
         # set index as stimulus_id
         df.set_index('video_id', inplace=True)
         # update attribute
@@ -471,7 +471,7 @@ class Heroku:
         # save to csv
         if self.save_csv:
             # save to csv
-            self.mapping.to_csv(mp.settings.output_dir + '/' +
+            self.mapping.to_csv(cs.settings.output_dir + '/' +
                                 self.file_mapping_csv + '.csv')
         # return new mapping
         return self.mapping
@@ -575,7 +575,7 @@ class Heroku:
         # save to csv
         if self.save_csv:
             # save to csv
-            self.mapping.to_csv(mp.settings.output_dir + '/' +
+            self.mapping.to_csv(cs.settings.output_dir + '/' +
                                 self.file_mapping_csv + '.csv')
         # return new mapping
         return self.mapping
@@ -647,7 +647,7 @@ class Heroku:
         # df to store data to filter out
         df_2 = pd.DataFrame()
         # answers to injected questions
-        signs_answers = mp.common.get_configs('signs_answers')
+        signs_answers = cs.common.get_configs('signs_answers')
         for index, row in tqdm(df.iterrows(), total=df.shape[0]):
             counter_filtered = 0
             # get array of data about traffic signs for each pedestrian

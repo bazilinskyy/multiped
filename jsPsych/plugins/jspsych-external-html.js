@@ -3,7 +3,7 @@ The html-plugin will load and display an external html pages. To proceed to the 
 user might either press a button on the page or a specific key. Afterwards, the page get hidden and
 the plugin will wait of a specified time before it proceeds.
 
-documentation: domp.jspsych.org
+documentation: docs.jspsych.org
 */
 
 jsPsych.plugins['external-html'] = (function() {

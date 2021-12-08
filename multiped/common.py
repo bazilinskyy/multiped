@@ -5,16 +5,16 @@ import json
 import pickle
 import sys
 
-import multiped as mp
+import crossing as cs
 
-logger = mp.CustomLogger(__name__)  # use custom logger
+logger = cs.CustomLogger(__name__)  # use custom logger
 
 
 def get_secrets(entry_name: str, secret_file_name: str = 'secret') -> Dict[str, str]:  # noqa: E501
     """
     Open the secrets file and return the requested entry.
     """
-    with open(os.path.join(mp.settings.root_dir, secret_file_name)) as f:
+    with open(os.path.join(cs.settings.root_dir, secret_file_name)) as f:
         return json.load(f)[entry_name]
 
 
@@ -25,13 +25,13 @@ def get_configs(entry_name: str, config_file_name: str = 'config',
     If no config file is found, open default.config.
     """
     # check if config file is updated
-    if not mp.common.check_config():
+    if not cs.common.check_config():
         sys.exit()
     try:
-        with open(os.path.join(mp.settings.root_dir, config_file_name)) as f:
+        with open(os.path.join(cs.settings.root_dir, config_file_name)) as f:
             content = json.load(f)
     except FileNotFoundError:
-        with open(os.path.join(mp.settings.root_dir, config_default_file_name)) as f:  # noqa: E501
+        with open(os.path.join(cs.settings.root_dir, config_default_file_name)) as f:  # noqa: E501
             content = json.load(f)
     return content[entry_name]
 
@@ -43,7 +43,7 @@ def check_config(config_file_name: str = 'config',
     """
     # load config file
     try:
-        with open(os.path.join(mp.settings.root_dir, config_file_name)) as f:
+        with open(os.path.join(cs.settings.root_dir, config_file_name)) as f:
             config = json.load(f)
     except FileNotFoundError:
         logger.error('Config file {} not found.', config_file_name)
@@ -54,7 +54,7 @@ def check_config(config_file_name: str = 'config',
         return False
     # load default.config file
     try:
-        with open(os.path.join(mp.settings.root_dir,
+        with open(os.path.join(cs.settings.root_dir,
                                config_default_file_name)) as f:
             default = json.load(f)
     except FileNotFoundError:
@@ -99,7 +99,7 @@ def save_to_p(file, data, desription_data='data'):
     """
     Save data to a pickle file.
     """
-    path = os.path.join(os.path.join(mp.settings.root_dir, 'crossing'), file)
+    path = os.path.join(os.path.join(cs.settings.root_dir, 'crossing'), file)
     with open(path, 'wb') as f:
         pickle.dump(data, f)
     logger.info('Saved ' + desription_data + ' to pickle file {}.', file)
@@ -109,7 +109,7 @@ def load_from_p(file, desription_data='data'):
     """
     Load data from a pickle file.
     """
-    path = os.path.join(os.path.join(mp.settings.root_dir, 'crossing'), file)
+    path = os.path.join(os.path.join(cs.settings.root_dir, 'crossing'), file)
     with open(path, 'rb') as f:
         data = pickle.load(f)
     logger.info('Loaded ' + desription_data + ' from pickle file {}.',

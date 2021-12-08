@@ -4,7 +4,7 @@
  *
  * Shane Martin
  *
- * documentation: domp.jspsych.org
+ * documentation: docs.jspsych.org
  *
  */
 

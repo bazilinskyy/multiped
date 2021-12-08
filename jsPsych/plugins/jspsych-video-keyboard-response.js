@@ -4,7 +4,7 @@
  *
  * plugin for playing a video file and getting a keyboard response
  *
- * documentation: domp.jspsych.org
+ * documentation: docs.jspsych.org
  *
  **/
 

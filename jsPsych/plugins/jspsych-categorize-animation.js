@@ -2,7 +2,7 @@
  * jspsych plugin for categorization trials with feedback and animated stimuli
  * Josh de Leeuw
  *
- * documentation: domp.jspsych.org
+ * documentation: docs.jspsych.org
  **/
 
 

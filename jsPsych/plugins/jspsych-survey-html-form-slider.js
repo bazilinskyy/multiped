@@ -4,7 +4,7 @@
  *
  * Jan Simson
  *
- * documentation: domp.jspsych.org
+ * documentation: docs.jspsych.org
  *
  */
 
