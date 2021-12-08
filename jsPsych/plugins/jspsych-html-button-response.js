@@ -4,7 +4,7 @@
  *
  * plugin for displaying a stimulus and getting a keyboard response
  *
- * documentation: docs.jspsych.org
+ * documentation: domp.jspsych.org
  *
  **/
 

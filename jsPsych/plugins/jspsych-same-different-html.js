@@ -4,7 +4,7 @@
  *
  * plugin for showing two stimuli sequentially and getting a same / different judgment
  *
- * documentation: docs.jspsych.org
+ * documentation: domp.jspsych.org
  *
  */
 

@@ -8,7 +8,7 @@
  *
  * based on code written for psychtoolbox by Ben Motz
  *
- * documentation: docs.jspsych.org
+ * documentation: domp.jspsych.org
  *
  **/
 
@@ -122,7 +122,7 @@ jsPsych.plugins["visual-search-circle"] = (function() {
     var possible_display_locs = trial.set_size;
     var random_offset = Math.floor(Math.random() * 360);
     for (var i = 0; i < possible_display_locs; i++) {
-      display_locs.push([
+      display_lomp.push([
         Math.floor(paper_size / 2 + (cosd(random_offset + (i * (360 / possible_display_locs))) * radi) - hstimw),
         Math.floor(paper_size / 2 - (sind(random_offset + (i * (360 / possible_display_locs))) * radi) - hstimh)
       ]);
@@ -165,7 +165,7 @@ jsPsych.plugins["visual-search-circle"] = (function() {
       }
       to_present = to_present.concat(trial.foil);
 
-      for (var i = 0; i < display_locs.length; i++) {
+      for (var i = 0; i < display_lomp.length; i++) {
 
         paper.innerHTML += "<img src='"+to_present[i]+"' style='position: absolute; top:"+display_locs[i][0]+"px; left:"+display_locs[i][1]+"px; width:"+trial.target_size[0]+"px; height:"+trial.target_size[1]+"px;'></img>";
 

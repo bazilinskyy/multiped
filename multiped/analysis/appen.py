@@ -4,9 +4,9 @@ import numpy as np
 import datetime as dt
 from collections import Counter
 
-import crossing as cs
+import multiped as mp
 
-logger = cs.CustomLogger(__name__)  # use custom logger
+logger = mp.CustomLogger(__name__)  # use custom logger
 
 
 class Appen:
@@ -88,7 +88,7 @@ class Appen:
         """
         # load data
         if self.load_p:
-            df = cs.common.load_from_p(self.file_p,
+            df = mp.common.load_from_p(self.file_p,
                                        'appen data')
         # process data
         else:
@@ -124,10 +124,10 @@ class Appen:
             df.insert(0, 'worker_code', worker_code_col)
         # save to pickle
         if self.save_p:
-            cs.common.save_to_p(self.file_p, df, 'appen data')
+            mp.common.save_to_p(self.file_p, df, 'appen data')
         # save to csv
         if self.save_csv:
-            df.to_csv(cs.settings.output_dir + '/' + self.file_csv)
+            df.to_csv(mp.settings.output_dir + '/' + self.file_csv)
             logger.info('Saved appen data to csv file {}', self.file_csv)
         # assign to attribute
         self.appen_data = df
@@ -152,11 +152,11 @@ class Appen:
         df_2 = df.loc[df['age'] < 18]
         logger.info('Filter-a2. People that are under 18 years of age: {}',
                     df_2.shape[0])
-        # People that took less than cs.common.get_configs('allowed_min_time')
+        # People that took less than mp.common.get_configs('allowed_min_time')
         # minutes to complete the study
-        df_3 = df.loc[df['time'] < cs.common.get_configs('allowed_min_time')]
+        df_3 = df.loc[df['time'] < mp.common.get_configs('allowed_min_time')]
         logger.info('Filter-a3. People who completed the study in under ' +
-                    str(cs.common.get_configs('allowed_min_time')) +
+                    str(mp.common.get_configs('allowed_min_time')) +
                     ' sec: {}',
                     df_3.shape[0])
         # people that completed the study from the same IP address
@@ -171,7 +171,7 @@ class Appen:
         # save to csv
         if self.save_csv:
             df_5 = df_5.reset_index()
-            df_5.to_csv(cs.settings.output_dir + '/' + self.file_cheaters_csv)
+            df_5.to_csv(mp.settings.output_dir + '/' + self.file_cheaters_csv)
             logger.info('Filter-a5. Saved list of cheaters to csv file {}',
                         self.file_cheaters_csv)
         # concatanate dfs with filtered data
@@ -251,7 +251,7 @@ class Appen:
 
     def mask_ips_ids(self, df, mask_ip=True, mask_id=True):
         """Anonymyse IPs and IDs. IDs are anonymised by subtracting the
-        given ID from cs.common.get_configs('mask_id').
+        given ID from mp.common.get_configs('mask_id').
         """
         # loop through rows of the file
         if mask_ip:
@@ -292,7 +292,7 @@ class Appen:
                 # new worker ID
                 if not any(d['o'] == df['worker_id'][i] for d in proc_ids):
                     # mask in format random_int - worker_id
-                    masked_id = (str(cs.common.get_configs('mask_id') -
+                    masked_id = (str(mp.common.get_configs('mask_id') -
                                      df['worker_id'][i]))
                     # record IP as already replaced
                     proc_ids.append({'o': df['worker_id'][i],
@@ -356,7 +356,7 @@ class Appen:
         self.countries_data = df_country
         # save to csv
         if self.save_csv:
-            df_country.to_csv(cs.settings.output_dir + '/'
+            df_country.to_csv(mp.settings.output_dir + '/'
                               + self.file_country_csv)
             logger.info('Saved country data to csv file {}', self.file_csv)
         # return df with data

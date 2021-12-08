@@ -4,7 +4,7 @@
  *
  * plugin for running a serial reaction time task
  *
- * documentation: docs.jspsych.org
+ * documentation: domp.jspsych.org
  *
  **/
 

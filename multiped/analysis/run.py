@@ -2,10 +2,10 @@
 # import matplotlib.pyplot as plt
 # import matplotlib._pylab_helpers
 
-import crossing as cs
+import multiped as mp
 
-cs.logs(show_level='info', show_color=True)
-logger = cs.CustomLogger(__name__)  # use custom logger
+mp.logs(show_level='info', show_color=True)
+logger = mp.CustomLogger(__name__)  # use custom logger
 
 # Const
 SAVE_P = True  # save pickle files with data
@@ -31,16 +31,16 @@ file_mapping = 'mapping.p'  # file to save updated mapping
 
 if __name__ == '__main__':
     # create object for working with heroku data
-    files_heroku = cs.common.get_configs('files_heroku')
-    heroku = cs.analysis.Heroku(files_data=files_heroku,
+    files_heroku = mp.common.get_configs('files_heroku')
+    heroku = mp.analysis.Heroku(files_data=files_heroku,
                                 save_p=SAVE_P,
                                 load_p=LOAD_P,
                                 save_csv=SAVE_CSV)
     # read heroku data
     heroku_data = heroku.read_data(filter_data=FILTER_DATA)
     # create object for working with appen data
-    file_appen = cs.common.get_configs('file_appen')
-    appen = cs.analysis.Appen(file_data=file_appen,
+    file_appen = mp.common.get_configs('file_appen')
+    appen = mp.analysis.Appen(file_data=file_appen,
                               save_p=SAVE_P,
                               load_p=LOAD_P,
                               save_csv=SAVE_CSV)
@@ -52,8 +52,8 @@ if __name__ == '__main__':
     appen_data_keys = appen_data.keys()
     # flag and reject cheaters
     if REJECT_CHEATERS:
-        qa = cs.analysis.QA(file_cheaters=cs.common.get_configs('file_cheaters'),  # noqa: E501
-                            job_id=cs.common.get_configs('appen_job'))
+        qa = mp.analysis.QA(file_cheaters=mp.common.get_configs('file_cheaters'),  # noqa: E501
+                            job_id=mp.common.get_configs('appen_job'))
         qa.flag_users()
         qa.reject_users()
     # merge heroku and appen dataframes into one
@@ -138,15 +138,15 @@ if __name__ == '__main__':
                                       'EC-yes_but_too_late-score',
                                       'EC-no-score']].mean(axis=1)
         # export to pickle
-        cs.common.save_to_p(file_mapping,
+        mp.common.save_to_p(file_mapping,
                             mapping,
                             'mapping with keypress data')
     else:
-        mapping = cs.common.load_from_p(file_mapping,
+        mapping = mp.common.load_from_p(file_mapping,
                                         'mapping of stimuli')
     if SHOW_OUTPUT:
         # Output
-        analysis = cs.analysis.Analysis()
+        analysis = mp.analysis.Analysis()
         logger.info('Creating figures.')
         # all keypresses with confidence interval
         # analysis.plot_kp(mapping, conf_interval=0.95)

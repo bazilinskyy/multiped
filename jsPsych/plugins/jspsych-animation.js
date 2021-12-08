@@ -2,7 +2,7 @@
  * jsPsych plugin for showing animations and recording keyboard responses
  * Josh de Leeuw
  *
- * documentation: docs.jspsych.org
+ * documentation: domp.jspsych.org
  */
 
 jsPsych.plugins.animation = (function() {

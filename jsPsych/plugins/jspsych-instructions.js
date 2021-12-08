@@ -7,7 +7,7 @@
  * Page numbers can be displayed to help with navigation by setting show_page_number
  * to true.
  *
- * documentation: docs.jspsych.org
+ * documentation: domp.jspsych.org
  *
  *
  */

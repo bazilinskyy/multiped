@@ -4,7 +4,7 @@
 *
 * plugin for controlling the real world size of the display
 *
-* documentation: docs.jspsych.org
+* documentation: domp.jspsych.org
 *
 **/
 

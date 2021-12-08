@@ -4,7 +4,7 @@
  *
  * plugin for playing a video file and getting a slider response
  *
- * documentation: docs.jspsych.org
+ * documentation: domp.jspsych.org
  *
  **/
 

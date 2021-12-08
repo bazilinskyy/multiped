@@ -2,7 +2,7 @@
  * jspsych-survey-multi-select
  * a jspsych plugin for multiple choice survey questions
  *
- * documentation: docs.jspsych.org
+ * documentation: domp.jspsych.org
  *
  */
 

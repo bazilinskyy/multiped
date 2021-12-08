@@ -1,7 +1,5 @@
 import os
 
-import pytz
-
 main_module_dir = os.path.dirname(__file__)
 root_dir = os.path.normpath(os.path.join(main_module_dir, '..'))
 cache_dir = os.path.join(root_dir, '_cache')

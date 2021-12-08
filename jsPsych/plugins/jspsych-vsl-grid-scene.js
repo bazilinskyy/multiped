@@ -7,7 +7,7 @@
  *
  * Josh de Leeuw
  *
- * documentation: docs.jspsych.org
+ * documentation: domp.jspsych.org
  *
  */
 

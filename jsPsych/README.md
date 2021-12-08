@@ -10,7 +10,7 @@ Several example experiments and plugin demonstrations are available in the `/exa
 Documentation
 -------------
 
-Documentation is available at [docs.jspsych.org](http://docs.jspsych.org).
+Documentation is available at [domp.jspsych.org](http://domp.jspsych.org).
 
 Need help?
 ----------

@@ -4,7 +4,7 @@
  *
  * a jsPsych plugin for displaying a canvas stimulus and getting a slider response
  *
- * documentation: docs.jspsych.org
+ * documentation: domp.jspsych.org
  *
  */
 
