@@ -1,5 +1,5 @@
 {
-  "name": "emhi-videos-multiple-presses",
+  "name": "multiped-crowdsourced",
   "version": "0.0.1",
   "description": "Experiment on eHMI stimuli with videos.",
   "main": "app.js",
@@ -8,18 +8,18 @@
   },
   "repository": {
     "type": "git",
-    "url": "https://github.com/bazilinskyy/emhi-videos-multiple-presses.git"
+    "url": "git+https://github.com/bazilinskyy/multiped-crowdsourced.git"
   },
   "author": "Pavlo Bazilinskyy",
   "license": "ISC",
   "bugs": {
-    "url": "https://github.com/bazilinskyy/emhi-videos-multiple-presses/issues"
+    "url": "https://github.com/bazilinskyy/multiped-crowdsourced/issues"
   },
-  "homepage": "https://github.com/bazilinskyy/emhi-videos-multiple-presses",
+  "homepage": "https://github.com/bazilinskyy/multiped-crowdsourced",
   "dependencies": {
     "body-parser": "^1.15.2",
     "ejs": "^2.3.1",
-    "express": "^4.12.0",
+    "express": "^4.17.1",
     "mongoose": "^5.12.0"
   }
 }
