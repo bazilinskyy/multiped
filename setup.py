@@ -2,7 +2,7 @@ import setuptools
 
 
 setuptools.setup(
-    name="crossing",
-    version="1.0",
+    name="multiped",
+    version="0.1",
     packages=setuptools.find_packages(),
 )
