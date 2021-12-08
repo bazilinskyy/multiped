@@ -3,9 +3,9 @@ import requests
 import pandas as pd
 from tqdm import tqdm
 
-import crossing as cs
+import multiped as mp
 
-logger = cs.CustomLogger(__name__)  # use custom logger
+logger = mp.CustomLogger(__name__)  # use custom logger
 
 
 class QA:
@@ -52,7 +52,7 @@ class QA:
                             + 'was inputted (html regex validator was ' \
                             + 'bypassed).'
             params = {'flag': flag_text,
-                      'key': cs.common.get_secrets('appen_api_key')}
+                      'key': mp.common.get_secrets('appen_api_key')}
             # send PUT request
             r = requests.put(cmd_put,
                              data=params)
@@ -107,7 +107,7 @@ class QA:
                             + 'bypassed).'
             params = {'reason': reason_text,
                       'manual': 'true',
-                      'key': cs.common.get_secrets('appen_api_key')}
+                      'key': mp.common.get_secrets('appen_api_key')}
             # send PUT request
             r = requests.put(cmd_put,
                              data=params)
