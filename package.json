@@ -1,0 +1,25 @@
+{
+  "name": "emhi-videos-multiple-presses",
+  "version": "0.0.1",
+  "description": "Experiment on eHMI stimuli with videos.",
+  "main": "app.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/bazilinskyy/emhi-videos-multiple-presses.git"
+  },
+  "author": "Pavlo Bazilinskyy",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/bazilinskyy/emhi-videos-multiple-presses/issues"
+  },
+  "homepage": "https://github.com/bazilinskyy/emhi-videos-multiple-presses",
+  "dependencies": {
+    "body-parser": "^1.15.2",
+    "ejs": "^2.3.1",
+    "express": "^4.12.0",
+    "mongoose": "^5.12.0"
+  }
+}

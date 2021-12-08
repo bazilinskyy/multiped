@@ -1,0 +1,409 @@
+<!doctype html>
+<html>
+  <head>
+    <title>Experiment page</title>
+    <script src='https://ajax.googleapis.com/ajax/libs/jquery/1.11.1/jquery.min.js'></script>
+    <script src='jsPsych/jspsych.js'></script>
+    <script src='jsPsych/plugins/jspsych-html-keyboard-response.js'></script>
+    <script src='jsPsych/plugins/jspsych-video-keyboard-multiple-responses-release.js'></script>
+    <script src='jsPsych/plugins/jspsych-call-function.js'></script>
+    <script src='jsPsych/plugins/jspsych-survey-html-form.js'></script>
+    <script src='jsPsych/plugins/jspsych-survey-multi-choice.js'></script>
+    <script src='jsPsych/plugins/jspsych-survey-html-form-slider.js'></script>
+    <script src='jsPsych/plugins/jspsych-html-slider-response.js'></script>
+    <script src='jsPsych/plugins/jspsych-fullscreen.js'></script>
+    <link href='jsPsych/css/jspsych.css' rel='stylesheet' type='text/css'></link>
+    <link href='css/experiment.css' rel='stylesheet' type='text/css'></link>
+    <link rel='icon' type='image/png' href='/img/favicon.png' />
+    <!-- bootstrap -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.0.0-beta2/dist/css/bootstrap.min.css" rel="stylesheet" integrity="sha384-BmbxuPwQa2lc/FVzBcNJ7UAyJxM6wuqIj61tLrc4wSX0szH/Ev+nYRRuWlolflfl" crossorigin="anonymous">
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.0.0-beta2/dist/js/bootstrap.bundle.min.js" integrity="sha384-b5kHyXgcpbZJO/tY9Ul7kGkf1S0CWuKcCD38l8YkeH8z8QjE0GmW1gYU5S9FOnJ0" crossorigin="anonymous"></script>
+  </head>
+  <body>
+  </body>
+  <script>
+
+// by Pavlo Bazilinskyy <p.bazilinskyy@tudelft.nl>
+
+// Constants
+var n_videos = 12; // number of videos
+var n_videos_per_participant = 12; // number of videos
+var n_videos_repeat = 3; // number of repeats of each condition
+var n_videos_break = 10; // number of videos between each break
+var image_pfefix = 'img/'; // prefix for images
+// var video_pfefix = 'https://multiped-crowdsourced.s3.eu-central-1.amazonaws.com/video_'; // prefix for videos
+var video_pfefix = 'videos/video_'; // prefix for videos
+var SHOW_DEBUG = false; // switch for debugging output
+var SAVE_DATA = true; // save data or not
+
+// Arrays
+var video_ids = [];
+var interactions = [];
+
+// browser info
+// https://stackoverflow.com/questions/11219582/how-to-detect-my-browser-version-and-operating-system-using-javascript
+var nVer = navigator.appVersion;
+var nAgt = navigator.userAgent;
+var br_name = navigator.appName;
+var br_full_version = '' + parseFloat(navigator.appVersion);
+var br_major_version = parseInt(navigator.appVersion, 10);
+var window_width = $(window).width();
+var window_height = $(window).height();
+var nameOffset, verOffset, ix;
+
+// In Opera, the true version is after "Opera" or after "Version"
+if ((verOffset = nAgt.indexOf("Opera")) != -1) {
+    br_name = "Opera";
+    br_full_version = nAgt.substring(verOffset + 6);
+    if ((verOffset = nAgt.indexOf("Version")) != -1)
+        br_full_version = nAgt.substring(verOffset + 8);
+}
+// In MSIE, the true version is after "MSIE" in userAgent
+else if ((verOffset = nAgt.indexOf("MSIE")) != -1) {
+    br_name = "Microsoft Internet Explorer";
+    br_full_version = nAgt.substring(verOffset + 5);
+}
+// In Chrome, the true version is after "Chrome" 
+else if ((verOffset = nAgt.indexOf("Chrome")) != -1) {
+    br_name = "Chrome";
+    br_full_version = nAgt.substring(verOffset + 7);
+}
+// In Safari, the true version is after "Safari" or after "Version" 
+else if ((verOffset = nAgt.indexOf("Safari")) != -1) {
+    br_name = "Safari";
+    br_full_version = nAgt.substring(verOffset + 7);
+    if ((verOffset = nAgt.indexOf("Version")) != -1)
+        br_full_version = nAgt.substring(verOffset + 8);
+}
+// In Firefox, the true version is after "Firefox" 
+else if ((verOffset = nAgt.indexOf("Firefox")) != -1) {
+    browserName = "Firefox";
+    br_full_version = nAgt.substring(verOffset + 8);
+}
+// In most other browsers, "name/version" is at the end of userAgent 
+else if ((nameOffset = nAgt.lastIndexOf(' ') + 1) <
+    (verOffset = nAgt.lastIndexOf('/'))) {
+    browserName = nAgt.substring(nameOffset, verOffset);
+    br_full_version = nAgt.substring(verOffset + 1);
+    if (browserName.toLowerCase() == browserName.toUpperCase()) {
+        browserName = navigator.appName;
+    }
+}
+// trim the br_full_version string at semicolon/space if present
+if ((ix = br_full_version.indexOf(";")) != -1)
+    br_full_version = br_full_version.substring(0, ix);
+if ((ix = br_full_version.indexOf(" ")) != -1)
+    br_full_version = br_full_version.substring(0, ix);
+
+br_major_version = parseInt('' + br_full_version, 10);
+if (isNaN(br_major_version)) {
+    br_full_version = '' + parseFloat(navigator.appVersion);
+    br_major_version = parseInt(navigator.appVersion, 10);
+}
+
+ /**
+ * Returns a random integer between min (inclusive) and max (inclusive).
+ * The value is no lower than min (or the next integer greater than min
+ * if min isn't an integer) and no greater than max (or the next integer
+ * lower than max if max isn't an integer).
+ * Using Math.round() will give you a non-uniform distribution!
+ */
+function getRandomInt(min, max) {
+    min = Math.ceil(min);
+    max = Math.floor(max);
+    return Math.floor(Math.random() * (max - min + 1)) + min;
+}
+
+/**
+ * Get code for the worker.
+ */
+function getWorkerCode() {
+    var timestamp = window.performance.timing.navigationStart + window.performance.now();
+    var current_time = Math.round(timestamp);
+    var random_num = getRandomInt(1, 10000);
+    worker_code = 'X6' + current_time + 'BV' + random_num + '1W';
+    return worker_code;
+}
+
+var worker_code = getWorkerCode();
+
+/**
+ * Shuffles array in place.
+ * @param {Array} a items An array containing the items.
+ */
+function shuffle(a) {
+    var j, x, i;
+    for (i = a.length - 1; i > 0; i--) {
+        j = Math.floor(Math.random() * (i + 1));
+        x = a[i];
+        a[i] = a[j];
+        a[j] = x;
+    }
+    return a;
+}
+
+function onlyUnique(value, index, self) { 
+    return self.indexOf(value) === index;
+}
+
+/**
+ * Get parameter from URL.
+ */
+var getUrlParameter = function getUrlParameter(sParam) {
+    var sPageURL = decodeURIComponent(window.location.search.substring(1)),
+        sURLVariables = sPageURL.split('&'),
+        sParameterName,
+        i;
+    for (i = 0; i < sURLVariables.length; i++) {
+        sParameterName = sURLVariables[i].split('=');
+        if (sParameterName[0] === sParam) {
+            return sParameterName[1] === undefined ? true : sParameterName[1];
+        }
+    }
+};
+
+var debug = getUrlParameter('debug');
+if (!debug) {
+    debug = SHOW_DEBUG;
+}
+
+if (debug) {
+    console.log('debug', debug);
+}
+
+var save_data = getUrlParameter('save_data');
+if (!save_data) {
+    save_data = SAVE_DATA;
+}
+
+/**
+ * Save data.
+ */
+function saveData() {
+    // check if data needs to be saved
+    if (save_data) {
+        // add worker ID and browser interactions
+        jsPsych.data.get().addToLast({
+            worker_code: worker_code,
+            interactions: interactions,
+            window_width: $(window).width(),
+            window_height: $(window).height()
+        });
+        interactions = [];  // reset interactions
+
+        if (debug) {
+            console.log('saving data', jsPsych.data.get().json());
+        }
+        $.ajax({
+                type: 'POST',
+                url: '/experiment-data',
+                data: jsPsych.data.get().json(),
+                contentType: 'application/json'
+            })
+            .done(function() {
+                jsPsych.data.reset();
+            })
+            .fail(function() {
+                alert('A problem occurred while writing to the database. Please contact the researcher for more information.')
+                window.location.href = '/';
+            })
+        if (debug) {
+            console.log('data saved');
+        }
+    }
+}
+
+if (debug) {
+    console.log('browser name', br_name);
+    console.log('browser full version', br_full_version);
+    console.log('browser major version', br_major_version);
+    console.log('browser navigator.appName', navigator.appName);
+    console.log('browser navigator.userAgent', navigator.userAgent);
+    console.log('window width initial', window_width);
+    console.log('window height initial', window_height);
+}
+
+// Arrays for storing data
+var between_blocks = []; // instructions between blocks
+var video_stimuli = []; // blocks with videos
+
+// define instructions block
+var instructions_block = {
+    type: 'html-keyboard-response',
+    stimulus: '<div class="jumbotron jumbotron-fluid" style="text-align: left;"><div class="container"><h1 class="display-4">Instructions</h1><p class="lead">You will watch ' + n_videos_per_participant * n_videos_repeat + ' videos of traffic situations involving pedestrians. Some pedestrians will cross the road and some will make eye contact. All videos are recorded within urban Toronto.</p><p class="lead">Each video starts with a black screen. As soon as you see the black screen, press \'F\' to start the video.</p><p class="lead">When you feel the situation could become risky, PRESS and HOLD \'F\' until you feel the situation is safe again. Press \'F\' for any type of risk, including very small risk. You can press and release the key as many times as you want per video. There is no audio involved.</p><p class="lead">The window of your browser should be at least 1300px wide and 800px tall.</p><hr><p>Press \'C\' to proceed to the questions.</p></div></div>',
+
+    choices: ['C'],
+    data: {
+        browser_name: br_name,
+        browser_full_version: br_full_version,
+        browser_major_version: br_major_version,
+        browser_app_name: navigator.appName,
+        browser_user_agent: navigator.userAgent,
+        video_ids: video_ids,
+        window_height_init: window_height,
+        window_width_init: window_width
+    }
+};
+
+// populate array with video IDs
+for (var i = 0; i < n_videos; i++) {
+    for (var j = 0; j < n_videos_repeat; j++) {
+        video_ids.push(i);
+    }
+}
+
+// shuffle ids
+video_ids = shuffle(video_ids);
+
+// build array with videos with stimuli
+for (var i = 0; i < n_videos_per_participant * n_videos_repeat; i++) {
+    video_stimuli.push({
+        type: 'video-keyboard-multiple-responses-release',
+        autoplay: true,
+        controls: false,
+        width: 1280,
+        height: 720,
+        choices: ['F'],
+        sources: [video_pfefix + video_ids[i] + '.mp4'],
+        prompt: '<p>PRESS \'F\' when you feel the situation could become risky. RELEASE the key when you feel safe again.</p>'
+    });
+}
+
+// black with image to be added before each video
+var image_block = {
+    type: 'html-keyboard-response',
+    stimulus: '<img src=\'' + image_pfefix + 'black_frame.png\'/><p>PRESS \'F\' when you feel the situation could become risky. RELEASE the key when you feel safe again.</p>',
+    choices: ['F'],
+};
+
+// continue before showing the image
+var continue_block = {
+    type: 'html-keyboard-response',
+    stimulus: '<p>Press \'C\' to continue to the next video.</p>',
+    choices: ['C']
+};
+
+// build between blocks
+for (var i = 1; i < n_videos_per_participant * n_videos_repeat / n_videos_break; i++) {
+    var videos_done = n_videos_break * i;
+    between_blocks.push({
+        type: 'html-keyboard-response',
+        stimulus: '<div class="alert alert-primary" role="alert" style="text-align: left;"><h4 class="alert-heading">Break</h4><p>You have now completed ' + videos_done + ' videos out of ' + n_videos_per_participant * n_videos_repeat + '.</p><hr><p class="mb-0">When ready press \'N\' to proceed to the next batch.</p></div>',
+        choices: ['N']
+    });
+}
+
+// questions after each stimulus
+var qs_video = {
+    type: 'survey-html-form-slider',
+    require_movement: true,
+    html: '<div style="position:relative; margin: 3em auto 1.5em auto; width:1000px;"><label for="slider-0" class="form-label"><strong>I found the behaviour of the pedestrian(s) to be risky.</strong><br>Provide your answer by moving the slider. You will not be able to continue before moving the slider.</label><div id="jspsych-html-slider-response-wrapper" style="margin-top: 0px; margin-bottom: 100px;"><div id="jspsych-html-slider-response-stimulus"><p></p></div><div class="jspsych-html-slider-response-container" style="position:relative; margin: 0 auto 3em auto; width:1000px;"><input type="range" value="50" min="0" max="100" step="1" style="width: 100%;" id="slider-0" name="risky_slider"><div><div style="display: inline-block; position: absolute; left:-10%; text-align: center; width: 20%;"><span style="text-align: center; font-size: 80%;">0</span></div><div style="display: inline-block; position: absolute; left:10%; text-align: center; width: 20%;"><span style="text-align: center; font-size: 80%;">20</span></div><div style="display: inline-block; position: absolute; left:30%; text-align: center; width: 20%;"><span style="text-align: center; font-size: 80%;">40</span></div><div style="display: inline-block; position: absolute; left:50%; text-align: center; width: 20%;"><span style="text-align: center; font-size: 80%;">60</span></div><div style="display: inline-block; position: absolute; left:70%; text-align: center; width: 20%;"><span style="text-align: center; font-size: 80%;">80</span></div><div style="display: inline-block; position: absolute; left:90%; text-align: center; width: 20%;"><span style="text-align: center; font-size: 80%;">100</span></div></div></div></div><div id="jspsych-survey-multi-choice-0" class="jspsych-survey-multi-choice-question" style="text-align: left"><p class="eye-contact-text survey-multi-choice"></p><div><p><strong>The pedestrian(s) made eye contact with me</strong></p></div><p></p><div id="eye-contact-option-0-0" class="eye-contact-option"><label class="eye-contact-text" for="eye-contact-response-0-0"><input type="radio" name="eye-contact" id="eye-contact-response-0-0" value="Yes" required="" style="margin-right: 1em">Yes</label></div><div id="eye-contact-option-0-1" class="eye-contact-option"><label class="eye-contact-text" for="eye-contact-response-0-1"><input type="radio" name="eye-contact" id="eye-contact-response-0-1" value="Yes but too late" required="" style="margin-right: 1em">Yes but too late</label></div><div id="eye-contact-option-0-2" class="eye-contact-option"><label class="eye-contact-text" for="eye-contact-response-0-2"><input type="radio" name="eye-contact" id="eye-contact-response-0-2" value="No" required="" style="margin-right: 1em">No</label></div><div id="eye-contact-option-0-3" class="eye-contact-option"><label class="eye-contact-text" for="eye-contact-response-0-3"><input type="radio" name="eye-contact" id="eye-contact-response-0-3" value="I don’t know" required="" style="margin-right: 1em">I don’t know</label></div></div><div>',
+    items: 1,
+    require_movement: true
+};
+
+var signs_options = ["The maximum allowed speed is 50 miles/hour", "The maximum allowed speed is 100 miles/hour", "Traffic only goes in one direction", "You have to stop and give way to all traffic", "This is a priority lane", "Pedestrians not permitted", "Pedestrian crossing area"];
+
+var qs_signs = {
+  type: 'survey-multi-choice',
+  // preamble: 'As a driver, what does it mean when you encounter these traffic signs? (*: answers to questions are required)',
+  questions: [
+    {prompt: "<div><p>As a driver, what does it mean when you encounter this traffic sign?</p></div><div class='center'><img src=\'" + image_pfefix + "sign_0.png\'/></div>", name: 'sign_0', options: signs_options, required:true}, 
+    {prompt: "<div><p>As a driver, what does it mean when you encounter this traffic sign?</p></div><div class='center'><img src=\'" + image_pfefix + "sign_1.png\'/></div>", name: 'sign_1', options: signs_options, required:true}, 
+    {prompt: "<div><p>As a driver, what does it mean when you encounter this traffic sign?</p></div><div class='center'><img src=\'" + image_pfefix + "sign_2.png\'/></div>", name: 'sign_2', options: signs_options, required:true}, 
+    {prompt: "<div><p>As a driver, what does it mean when you encounter this traffic sign?</p></div><div class='center'><img src=\'" + image_pfefix + "sign_3.png\'/></div>", name: 'sign_3', options: signs_options, required:true}
+  ],
+  randomize_question_order: true
+};
+
+// Likert
+var scale_likert = [
+  "Completely disagree", 
+  "Disagree",
+  "Neither disagree nor agree",
+  "Agree",
+  "Completely agree" 
+];
+
+// build page with questions
+var qs_end = {
+    type: 'survey-html-form-slider',
+    preamble: 'You will not be able to continue before moving all sliders.',
+    require_movement: true,
+        html: '<div id="jspsych-content" class="jspsych-content"></p><div id="jspsych-html-slider-response-wrapper" style="margin: 100px 0px;"><div><p style="width: 1000px">How important do you consider each of the following pedestrian\'s behaviours for increasing the feeling of safety for the driver?</p></div><div class="jspsych-html-slider-response-container" style="position:relative; margin: 3em auto 1.5em auto; width:1000px;"><input type="range" value="50" min="0" max="100" step="1" style="width: 100%;" id="slider-0" name="slider-0" size="5"><div><div style="display: inline-block; position: absolute; left:-44%; text-align: center; width: 100%;"><span style="text-align: center; font-size: 80%;">Very unimportant</span></div><div style="display: inline-block; position: absolute; left:45%; text-align: center; width: 100%;"><span style="text-align: center; font-size: 80%;">Very important</span></div></div></div><p style="width: 1000px"><strong>Eye contact</strong></p><div class="jspsych-html-slider-response-container" style="position:relative; margin: 3em auto 1.5em auto; width:1000px;"><input type="range" value="50" min="0" max="100" step="1" style="width: 100%;" id="slider-1" name="slider-1"><div><div style="display: inline-block; position: absolute; left:-44%; text-align: center; width: 100%;"><span style="text-align: center; font-size: 80%;">Very unimportant</span></div><div style="display: inline-block; position: absolute; left:45%; text-align: center; width: 100%;"><span style="text-align: center; font-size: 80%;">Very important</span></div></div></div><p style="width: 1000px"><strong>Hand gestures</strong></p><div id="jspsych-html-slider-response-wrapper" style="margin: 100px 0px;"><div><p style="width: 1000px">How important do you consider each of the following driver\'s behaviours for increasing the feeling of safety for the pedestrian?</p></div><div class="jspsych-html-slider-response-container" style="position:relative; margin: 3em auto 1.5em auto; width:1000px;"><input type="range" value="50" min="0" max="100" step="1" style="width: 100%;" id="slider-2" name="slider-2"><div><div style="display: inline-block; position: absolute; left:-44%; text-align: center; width: 100%;"><span style="text-align: center; font-size: 80%;">Very unimportant</span></div><div style="display: inline-block; position: absolute; left:45%; text-align: center; width: 100%;"><span style="text-align: center; font-size: 80%;">Very important</span></div></div></div><p style="width: 1000px"><strong>Eye contact</strong></p><div class="jspsych-html-slider-response-container" style="position:relative; margin: 3em auto 1.5em auto; width:1000px;"><input type="range" value="50" min="0" max="100" step="1" style="width: 100%;" id="slider-3" name="slider-3"><div><div style="display: inline-block; position: absolute; left:-44%; text-align: center; width: 100%;"><span style="text-align: center; font-size: 80%;">Very unimportant</span></div><div style="display: inline-block; position: absolute; left:45%; text-align: center; width: 100%;"><span style="text-align: center; font-size: 80%;">Very important</span></div></div></div><p style="width: 1000px"><strong>Headlight signaling</strong></p><div class="jspsych-html-slider-response-container" style="position:relative; margin: 3em auto 1.5em auto; width:1000px;"><input type="range" value="50" min="0" max="100" step="1" style="width: 100%;" id="slider-4" name="slider-4"><div><div style="display: inline-block; position: absolute; left:-44%; text-align: center; width: 100%;"><span style="text-align: center; font-size: 80%;">Very unimportant</span></div><div style="display: inline-block; position: absolute; left:45%; text-align: center; width: 100%;"><span style="text-align: center; font-size: 80%;">Very important</span></div></div></div><p style="width: 1000px"><strong>Car slowing down</strong></p>',
+    items: 4
+};
+
+// block for sending data
+var save_data_block = {
+    type: 'call-function',
+    func: function() {
+        saveData(); // save data
+    }
+}
+
+// enter full screen
+var fullscreen_enter = {
+    type: 'fullscreen',
+    fullscreen_mode: true
+}
+
+// exit full screen
+var fullscreen_exit = {
+    type: 'fullscreen',
+    fullscreen_mode: false
+}
+
+// create experiment timeline array
+var timeline = [];
+var between_blocks_count = 0;  // counter of shown between blocks
+// timeline.push(slider_block_1);
+timeline.push(fullscreen_enter);  // enter full screen
+timeline.push(instructions_block);
+timeline.push(save_data_block);
+// iterate over blocks
+for (var i = 0; i < n_videos_per_participant * n_videos_repeat; i++) {
+    timeline.push(continue_block);
+    timeline.push(image_block);  // page with an image asking to press the key
+    timeline.push(video_stimuli[i]);  // page with the stimulus
+    timeline.push(qs_video);
+    // save data
+    timeline.push(save_data_block);
+    // don't add the between block after the last trial
+    if ((i + 1) % n_videos_break == 0 && i != 0 && i != n_videos_per_participant * n_videos_repeat - 1) {
+        if (debug) {
+            console.log('added break', i, between_blocks[between_blocks_count], i % n_videos_break, i / n_videos_break);
+        }
+        timeline.push(between_blocks[between_blocks_count]);
+        between_blocks_count++;
+    } 
+}
+timeline.push(qs_end);  // questions in the end
+timeline.push(qs_signs);  // radio box questions with signs
+timeline.push(fullscreen_exit);  // exit full screen
+timeline.push(save_data_block);  // save data
+
+if (debug) {
+    console.log('timeline', timeline);
+    console.log('video_ids', video_ids);
+    console.log('video_stimuli', video_stimuli);
+    console.log('qs_video', qs_video);
+    console.log('between_blocks', between_blocks);
+}
+
+/* Start the experiment */
+jsPsych.init({
+    // auto_preload: false,
+    show_preload_progress_bar: true,
+    preload_images: [image_pfefix + 'black_frame.png', image_pfefix + 'sign_0.png', image_pfefix + 'sign_1.png', image_pfefix + 'sign_2.png', image_pfefix + 'sign_3.png'],
+    timeline: timeline,
+    max_load_time: 3000000,
+    on_finish: function() {
+        window.location.href = 'finish?work=' + worker_code;
+    },
+    on_interaction_data_update: function(data) {
+        interactions.push(data)
+    }
+});
+</script>
+</html>

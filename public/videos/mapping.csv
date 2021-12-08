@@ -1,0 +1,14 @@
+no,scenario,video_id,yielding,speed,deceleration,start_deceleration_dist,start_deceleration_time,end_deceleration_time,full_stop_dist,start_fullstop,end_fullstop,acceleration,takeoff,start_ec,end_ec,dur_ec,video_length,min_dur,max_dur
+0,yielding_noeyecontact,video_0,1,15,-1,20,12.54,16.6,13.7,16.6,21.62,1,21.62,nan,nan,nan,31000,29000,33000
+1,yielding_eyecontact_start_to_stop,video_1,1,15,-1,20,12.54,16.6,13.7,16.6,21.62,1,21.62,0,16.6,16.6,31000,29000,33000
+2,yielding_eyecontact_start_to_takeoff,video_2,1,15,-1,20,12.54,16.6,13.7,16.6,21.62,1,21.62,0,21.62,21.62,31000,29000,33000
+3,yielding_eyecontact_stop_to_takeoff,video_3,1,15,-1,20,12.54,16.6,13.7,16.6,21.62,1,21.62,16.6,21.62,5.02,31000,29000,33000
+4,yielding_eyecontact_takeoff_to_end,video_4,1,15,-1,20,12.54,16.6,13.7,16.6,21.62,1,21.62,21.62,27.3,5.68,31000,29000,33000
+5,yielding_eyecontact_start_to_end,video_5,1,15,-1,20,12.54,16.6,13.7,16.6,21.62,1,21.62,0,27.3,27.3,31000,29000,33000
+6,yielding_eyecontact_stop_to_end,video_6,1,15,-1,20,12.54,16.6,13.7,16.6,21.62,1,21.62,16.6,27.3,10.7,31000,29000,33000
+7,yielding_eyecontact_start_to_brake,video_7,1,15,-1,20,12.54,16.6,13.7,16.6,21.62,1,21.62,0,12.54,12.54,31000,29000,33000
+8,yielding_eyecontact_brake_to_stop,video_8,1,15,-1,20,12.54,16.6,13.7,16.6,21.62,1,21.62,12.54,16.6,4.06,31000,29000,33000
+9,yielding_eyecontact_brake_to_takeoff,video_9,1,15,-1,20,12.54,16.6,13.7,16.6,21.62,1,21.62,12.54,21.62,9.08,31000,29000,33000
+10,yielding_eyecontact_brake_to_end,video_10,1,15,-1,20,12.54,16.6,13.7,16.6,21.62,1,21.62,12.54,27.3,14.76,31000,29000,33000
+11,nonyielding_noeyecontact,video_11,0,15,0,nan,nan,nan,nan,nan,nan,0,nan,nan,nan,nan,21000,19000,23000
+12,nonyielding_eyecontact,video_12,0,15,0,nan,nan,nan,nan,nan,nan,0,nan,0,17.48,17.48,21000,19000,23000

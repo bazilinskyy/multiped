@@ -1,0 +1,46 @@
+<!doctype html>
+<html>
+  <head>
+    <title>Videos of animations of driving</title>
+    <script src="https://ajax.googleapis.com/ajax/libs/jquery/1.11.1/jquery.min.js"></script>
+    <script src="jsPsych/jspsych.js"></script>
+    <link href="jsPsych/css/jspsych.css" rel="stylesheet" type="text/css"></link>
+    <link href="css/experiment.css" rel="stylesheet" type="text/css"></link>
+    <link rel="icon" type="image/png" href="/img/favicon.png" />
+
+  <script>
+    var getUrlParameter = function getUrlParameter(sParam) {
+      var sPageURL = decodeURIComponent(window.location.search.substring(1)),
+          sURLVariables = sPageURL.split('&'),
+          sParameterName,
+          i;
+
+      for (i = 0; i < sURLVariables.length; i++) {
+          sParameterName = sURLVariables[i].split('=');
+
+          if (sParameterName[0] === sParam) {
+              return sParameterName[1] === undefined ? true : sParameterName[1];
+          }
+      }
+    };
+  </script>
+
+  </head>
+  <body>
+    <div class = "parent">
+      <div class = "child">
+        <div id="jspsych_target">
+        You have now completed the experiment. Thank you for your participation. Please note down or copy to your clipboard the following code:  
+        <br>
+        <strong>
+          <script>
+            document.write(getUrlParameter('work'));
+          </script>
+        </strong>
+        <br>
+          Do not forget to enter the code we gave in the Appen page in the field "Type code that you received after the end of the test." to finalise the job and receive your money. You will find this field under the link you clicked to open this tab. You may now close this tab.
+        </div>
+      </div>
+    </div>
+  </body>
+</html>
