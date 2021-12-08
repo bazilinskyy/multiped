@@ -102,3 +102,27 @@ dist
 
 # TernJS port file
 .tern-port
+
+# macOS
+**/.DS_Store
+
+# sublime text project files
+*.sublime-project
+*.sublime-workspace
+
+# Instance specific files
+config
+secret
+
+# Python files
+*/__pycache__
+*.pyc
+*.egg-info/
+
+# Ignore all files starting with an underscore.
+**/_*
+!__init__.py
+
+# Pickle files
+multiped/analysis/*.p
+multiped/*.p
