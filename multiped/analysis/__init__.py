@@ -1,4 +1,4 @@
-from analysis import Analysis
-from appen import Appen
-from heroku import Heroku
-from qa import QA
+from .analysis import Analysis  # noqa
+from .appen import Appen  # noqa
+from .heroku import Heroku  # noqa
+from .qa import QA  # noqa

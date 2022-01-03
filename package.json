@@ -1,7 +1,7 @@
 {
   "name": "multiped-crowdsourced",
-  "version": "0.0.1",
-  "description": "Experiment on eHMI stimuli with videos.",
+  "version": "0.1",
+  "description": "Crowdsourced experiment on interaction between automated vehicles and pedestrians.",
   "main": "app.js",
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1"

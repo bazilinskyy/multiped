@@ -44,7 +44,4 @@ class CustomLogger:
 from .logmod import logs  # noqa E402
 from . import common  # noqa E402
 from . import settings  # noqa E402
-from .analysis import Analysis  # noqa E402
-from .analysis import Appen  # noqa E402
-from .analysis import Heroku  # noqa E402
-from .analysis import QA  # noqa E402
+from . import analysis  # noqa E402
