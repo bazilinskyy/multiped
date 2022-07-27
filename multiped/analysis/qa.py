@@ -57,7 +57,7 @@ class QA:
             try:
                 r = requests.put(cmd_put, data=params)
             except requests.exceptions.ConnectionError:
-                logger.error('No internet connection. Could not flag user {}.', 
+                logger.error('No internet connection. Could not flag user {}.',
                              str(row['worker_id']))
                 continue
             # code 200 means success
