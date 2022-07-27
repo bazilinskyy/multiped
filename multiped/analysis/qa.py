@@ -40,13 +40,13 @@ class QA:
                       str(row['worker_id']) + \
                       '.json'
             if not pd.isna(row['worker_code']):
-                flag_text = 'User repeatidly ignored our instructions and ' \
+                flag_text = 'User repeatedly ignored our instructions and ' \
                             + 'joined job from different accounts/IP ' \
                             + 'addresses. The same code ' \
                             + str(row['worker_code']) \
                             + ' used internally in the job was reused.'
             else:
-                flag_text = 'User repeatidly ignored our instructions and ' \
+                flag_text = 'User repeatedly ignored our instructions and ' \
                             + 'joined job from different accounts/IP ' \
                             + 'addresses. No worker code used internally  ' \
                             + 'was inputted (html regex validator was ' \
@@ -54,8 +54,12 @@ class QA:
             params = {'flag': flag_text,
                       'key': mp.common.get_secrets('appen_api_key')}
             # send PUT request
-            r = requests.put(cmd_put,
-                             data=params)
+            try:
+                r = requests.put(cmd_put, data=params)
+            except requests.exceptions.ConnectionError:
+                logger.error('No internet connection. Could not flag user {}.', 
+                             str(row['worker_id']))
+                continue
             # code 200 means success
             code = r.status_code
             msg = r.content.decode()
@@ -94,13 +98,13 @@ class QA:
                       str(row['worker_id']) + \
                       '/reject.json'
             if not pd.isna(row['worker_code']):
-                reason_text = 'User repeatidly ignored our instructions and ' \
+                reason_text = 'User repeatedly ignored our instructions and ' \
                             + 'joined job from different accounts/IP ' \
                             + 'addresses. The same code ' \
                             + str(row['worker_code']) \
                             + ' used internally in the job was reused.'
             else:
-                reason_text = 'User repeatidly ignored our instructions and ' \
+                reason_text = 'User repeatedly ignored our instructions and ' \
                             + 'joined job from different accounts/IP ' \
                             + 'addresses. No worker code used internally  ' \
                             + 'was inputted (html regex validator was ' \
@@ -109,8 +113,12 @@ class QA:
                       'manual': 'true',
                       'key': mp.common.get_secrets('appen_api_key')}
             # send PUT request
-            r = requests.put(cmd_put,
-                             data=params)
+            try:
+                r = requests.put(cmd_put, data=params)
+            except requests.exceptions.ConnectionError:
+                logger.error('No internet connection. Could not reject user ' +
+                             '{}.', str(row['worker_id']))
+                continue
             # code 200 means success
             code = r.status_code
             msg = r.content.decode()
