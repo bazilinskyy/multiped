@@ -5,6 +5,22 @@ using UnityEngine.UI;
 using UnityEngine.SceneManagement;
 using System;
 using UnityEngine.XR;
+using System.IO;
+
+[System.Serializable]
+public class Trial {
+    public int no;
+    public string scenario;
+    public string video_id;
+    public int yielding;
+    public int eHMIOn;
+    public int distPed;
+    public int p1;
+    public int p2;
+    public int camera;
+    public int group;
+    public int video_length;
+}
 
 public class ConditionController : MonoBehaviour
 {
@@ -22,8 +38,11 @@ public class ConditionController : MonoBehaviour
     public int numberConditions = 10; // todo: number of conditions
 
     public int eHMIOn = 0;   // 0=no 1=slowly-pulsing light band
-    public int yielding = 0;     // 0=yes for P1 1=yes for P2 2=no
-    public int distPed = 0;      // distance between P1 and P2 distances [2 .. +2 ..  20].
+    public int yielding = 0; // 0=yes for P1 1=yes for P2 2=no
+    public int distPed = 0;  // distance between P1 and P2 distances [2 .. +2 ..  20].
+    public int p1 = 0;       // presence of Pedestrian 1
+    public int p2 = 0;       // presence of Pedestrian 1
+    public int camera = 0;   // location of camera
 
     public GameObject demoWelcomeCanvas; 
     public GameObject demoWalkCanvas;
@@ -48,8 +67,15 @@ public class ConditionController : MonoBehaviour
 
     public AudioSource buttonSound;
 
+    public Trial[] trials; // description of trials based on mapping
+
     public void Start()
-    {           
+    {
+        Debug.Log("Start");
+        // Import trial data
+        string filePath = Application.dataPath + "/../../public/videos/mapping.csv";
+        string text = File.ReadAllText(filePath);
+        trials = CSVSerializer.Deserialize<Trial>(text);
         StartCoroutine(ActivatorVR("cardboard"));
         buttonSound = GetComponent<AudioSource>();
         Start2();       
@@ -70,7 +96,6 @@ public class ConditionController : MonoBehaviour
 
     void Start2()
     {
-        Debug.Log("conditionCounter=" + conditionCounter);
         carMovementScript = GameObject.Find("CarMovement").GetComponent<CarMovement>();
         playfabScript = GameObject.Find("PlayFabController").GetComponent<PlayFabController>();
         LEDBumperObject.SetActive(true);            // Turn on LED bumper
@@ -78,34 +103,16 @@ public class ConditionController : MonoBehaviour
         progress.SetActive(false);                  // Switch off progressbar
         projection.SetActive(false);                // Switch off projection
 
-        if (conditionCounter == 0)
-        {
-            eHMIOn = 0;
-            yielding = 0;
-        }
-        if (conditionCounter == 1)
-        {
-            eHMIOn = 0;
-        }
-        if (conditionCounter == 2)
-        {
-            eHMIOn = 1;
-        }
-        if (conditionCounter == 3)
-        {
-            // tracker.SetActive(true);
-            eHMIOn = 1;
-        }
-        if (conditionCounter == 4)
-        {
-            // progress.SetActive(true);
-            eHMIOn = 1;
-        }
-        if (conditionCounter == 5)
-        {
-            // projection.SetActive(true);
-            eHMIOn = 1;
-        }
+        // set variables for trial
+        eHMIOn = trials[conditionCounter].eHMIOn;
+        yielding = trials[conditionCounter].yielding;
+        distPed = trials[conditionCounter].distPed;
+        p1 = trials[conditionCounter].p1;
+        p2 = trials[conditionCounter].p2;
+        camera = trials[conditionCounter].camera;
+
+        Debug.Log(conditionCounter +  ":: eHMIOn=" + eHMIOn +  " yielding=" + yielding +  " distPed=" + distPed +  " p1=" + p1 +  " p2=" + p2 + " camera=" + camera);
+
         TrialStart();
         // trialTitle.text = demoTitle.text;
 
@@ -118,6 +125,7 @@ public class ConditionController : MonoBehaviour
             {
                 if (conditionCounter == numberConditions) {
                     ExperimentEndCanvas.SetActive(true);
+                    trial = false;
                 }
                 Debug.Log("FixedUpdate::trial end");
                 WillingnessToCross.SetActive(false);
