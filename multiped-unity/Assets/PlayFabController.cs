@@ -65,9 +65,9 @@ public class PlayFabController : MonoBehaviour
 
     IEnumerator Warning()
     {
-        warningCanvas.SetActive(true);
-        yield return new WaitForSecondsRealtime(3.5f);
-        warningCanvas.SetActive(false);
+        // warningCanvas.SetActive(true);
+        yield return new WaitForSecondsRealtime(1f);
+        // warningCanvas.SetActive(false);
         deltaTime2 = Time.time;
         warningCounter = 0;
 
@@ -78,7 +78,7 @@ public class PlayFabController : MonoBehaviour
         string DataString = String.Join("; " , ButtonDataList);
        
 
-        if (conditionController.conditionBlock == 1)
+        if (conditionController.conditionCounter == 1)
         {
             PlayFabClientAPI.UpdateUserData(new UpdateUserDataRequest()
             {
@@ -95,7 +95,7 @@ public class PlayFabController : MonoBehaviour
             });
         }
 
-        if (conditionController.conditionBlock == 2)
+        if (conditionController.conditionCounter == 2)
         {
             PlayFabClientAPI.UpdateUserData(new UpdateUserDataRequest()
             {
@@ -112,7 +112,7 @@ public class PlayFabController : MonoBehaviour
             });
         }
 
-        if (conditionController.conditionBlock == 3)
+        if (conditionController.conditionCounter == 3)
         {
             PlayFabClientAPI.UpdateUserData(new UpdateUserDataRequest()
             {
@@ -129,7 +129,7 @@ public class PlayFabController : MonoBehaviour
             });
         }
 
-        if (conditionController.conditionBlock == 4)
+        if (conditionController.conditionCounter == 4)
         {
             PlayFabClientAPI.UpdateUserData(new UpdateUserDataRequest()
             {
@@ -146,7 +146,7 @@ public class PlayFabController : MonoBehaviour
             });
         }
 
-        if (conditionController.conditionBlock == 5)
+        if (conditionController.conditionCounter == 5)
         {
             PlayFabClientAPI.UpdateUserData(new UpdateUserDataRequest()
             {

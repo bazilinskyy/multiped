@@ -47,51 +47,51 @@ namespace Gvr.Internal
             get
             {
                 return false;
-                //#if UNITY_EDITOR
-                //                UnityEditor.XR.Daydream.SupportedHeadTracking minTrackingState
-                //                        = UnityEditor.PlayerSettings.VRDaydream.minimumSupportedHeadTracking;
-                //                UnityEditor.XR.Daydream.SupportedHeadTracking maxTrackingState
-                //                        = UnityEditor.PlayerSettings.VRDaydream.maximumSupportedHeadTracking;
+// #if UNITY_EDITOR
+//                 UnityEditor.XR.Daydream.SupportedHeadTracking minTrackingState
+//                         = UnityEditor.PlayerSettings.VRDaydream.minimumSupportedHeadTracking;
+//                 UnityEditor.XR.Daydream.SupportedHeadTracking maxTrackingState
+//                         = UnityEditor.PlayerSettings.VRDaydream.maximumSupportedHeadTracking;
 
-                //                if (minTrackingState == UnityEditor.XR.Daydream.SupportedHeadTracking.ThreeDoF
-                //                    && maxTrackingState == UnityEditor.XR.Daydream.SupportedHeadTracking.ThreeDoF)
-                //                {
-                //                    return false;
-                //                }
-                //                else if (
-                //                    minTrackingState == UnityEditor.XR.Daydream.SupportedHeadTracking.ThreeDoF
-                //                    && maxTrackingState == UnityEditor.XR.Daydream.SupportedHeadTracking.SixDoF)
-                //                {
-                //                    if (InstantPreview.IsActive
-                //                        && InstantPreview.Instance.supportsPositionalHeadTracking.isValid)
-                //                    {
-                //                        return InstantPreview.Instance.supportsPositionalHeadTracking.value;
-                //                    }
-                //                    else
-                //                    {
-                //                        return GvrHeadset.editorSupportsPositionalHeadTracking;
-                //                    }
-                //                }
-                //                else // Positional head tracking required.
-                //                {
-                //                    if (InstantPreview.IsActive
-                //                        && InstantPreview.Instance.supportsPositionalHeadTracking.isValid
-                //                        && !InstantPreview.Instance.supportsPositionalHeadTracking.value)
-                //                    {
-                //                        string err_msg = "XRSettings > Daydream > Positional Head Tracking is "
-                //                                + "'required', but the connected device only supports "
-                //                                + "orientation.";
-                //                        if (!printedErrorMessages.Contains(err_msg))
-                //                        {
-                //                            Debug.LogError(err_msg);
-                //                            printedErrorMessages.Add(err_msg);
-                //                        }
-                //                    }
-                //                    return true;
-                //                }
-                //#else // UNITY_EDITOR
-                //                return false;
-                //#endif // UNITY_EDITOR
+//                 if (minTrackingState == UnityEditor.XR.Daydream.SupportedHeadTracking.ThreeDoF
+//                     && maxTrackingState == UnityEditor.XR.Daydream.SupportedHeadTracking.ThreeDoF)
+//                 {
+//                     return false;
+//                 }
+//                 else if (
+//                     minTrackingState == UnityEditor.XR.Daydream.SupportedHeadTracking.ThreeDoF
+//                     && maxTrackingState == UnityEditor.XR.Daydream.SupportedHeadTracking.SixDoF)
+//                 {
+//                     if (InstantPreview.IsActive
+//                         && InstantPreview.Instance.supportsPositionalHeadTracking.isValid)
+//                     {
+//                         return InstantPreview.Instance.supportsPositionalHeadTracking.value;
+//                     }
+//                     else
+//                     {
+//                         return GvrHeadset.editorSupportsPositionalHeadTracking;
+//                     }
+//                 }
+//                 else // Positional head tracking required.
+//                 {
+//                     if (InstantPreview.IsActive
+//                         && InstantPreview.Instance.supportsPositionalHeadTracking.isValid
+//                         && !InstantPreview.Instance.supportsPositionalHeadTracking.value)
+//                     {
+//                         string err_msg = "XRSettings > Daydream > Positional Head Tracking is "
+//                                 + "'required', but the connected device only supports "
+//                                 + "orientation.";
+//                         if (!printedErrorMessages.Contains(err_msg))
+//                         {
+//                             Debug.LogError(err_msg);
+//                             printedErrorMessages.Add(err_msg);
+//                         }
+//                     }
+//                     return true;
+//                 }
+// #else // UNITY_EDITOR
+//                 return false;
+// #endif // UNITY_EDITOR
             }
         }
 

@@ -33,7 +33,7 @@ public class LightStripBumper : MonoBehaviour
     // Update is called once per frame
     void FixedUpdate()
     {
-        if (conditionScript.conditionBlock > 1)
+        if (conditionScript.eHMIOn == 1)
         {
             // Start HMI when block is started
             if (bumperStarted)

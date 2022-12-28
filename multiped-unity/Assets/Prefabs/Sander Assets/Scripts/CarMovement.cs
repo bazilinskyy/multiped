@@ -39,11 +39,11 @@ public class CarMovement : MonoBehaviour
     int[] yieldArrayPreview = {1};
 
     int[] yieldArray;
-    int[] yieldArrayCondition1 = { 1, 2, 0, 0, 2, 1, 0, 2, 0, 1, 1, 2, 1, 0, 2 };
-    int[] yieldArrayCondition2 = { 2, 0, 1, 2, 0, 1, 2, 1, 1, 2, 0, 2, 0, 1, 0 };
-    int[] yieldArrayCondition3 = { 0, 2, 0, 1, 2, 0, 1, 2, 1, 0, 1, 0, 2, 2, 1 };
-    int[] yieldArrayCondition4 = { 2, 1, 1, 0, 2, 2, 0, 2, 0, 1, 0, 1, 2, 1, 0 };
-    int[] yieldArrayCondition5 = { 1, 2, 0, 1, 0, 0, 2, 1, 2, 0, 2, 1, 0, 2, 1 };
+    int[] yieldArrayCondition1 = { 0 };
+    int[] yieldArrayCondition2 = { 1 };
+    int[] yieldArrayCondition3 = { 2 };
+    int[] yieldArrayCondition4 = { 0 };
+    int[] yieldArrayCondition5 = { 0 };
 
     public bool WaveStarted = false;
 
@@ -86,7 +86,7 @@ public class CarMovement : MonoBehaviour
         yieldArray = yieldArrayPreview;
         conditionScript = GameObject.Find("ConditionController").GetComponent<ConditionController>();
         StartCoroutine("Wave");
-        if (conditionScript.conditionBlock > 1)
+        if (conditionScript.eHMIOn == 1)
         {
             LEDscript = GameObject.Find("LightStrip").GetComponent<LightStripBumper>();
         }
@@ -100,27 +100,8 @@ public class CarMovement : MonoBehaviour
         string time = System.DateTime.UtcNow.AddHours(2f).ToString();
         playfabScript.ButtonDataList.Add(time);       // Add time to playfab data
                       
-        if (conditionScript.conditionBlock == 1)
-        {
-           yieldArray = yieldArrayCondition1;
-        }
-        if (conditionScript.conditionBlock == 2)
-        {
-            yieldArray = yieldArrayCondition2;
-        }
-        if (conditionScript.conditionBlock == 3)
-        {
-            yieldArray = yieldArrayCondition3;
-        }
-        if (conditionScript.conditionBlock == 4)
-        {
-            yieldArray = yieldArrayCondition4;
-        }
-        if (conditionScript.conditionBlock == 5)
-        {
-            yieldArray = yieldArrayCondition5;
-        }
-        if (conditionScript.conditionBlock > 1)
+        yieldArray = yieldArrayCondition1;
+        if (conditionScript.eHMIOn == 1)
         {
             LEDscript = GameObject.Find("LightStrip").GetComponent<LightStripBumper>();
         }
@@ -175,7 +156,7 @@ public class CarMovement : MonoBehaviour
             //If we haven't reached the maximum amount of cars yet
             if (carCount < yieldArray.Length)
             {            
-                if (conditionScript.conditionBlock == 0)
+                if (conditionScript.conditionCounter == 0)
                 {
                     Yield = Random.Range(0, 3);
                     //Debug.Log("Yield = " + Yield);
@@ -196,6 +177,7 @@ public class CarMovement : MonoBehaviour
             }
             else
             {                // END 
+                Debug.Log("car movement finished");
                 conditionFinished = true;                
                 StopCoroutine("Wave");               
             }
@@ -221,7 +203,7 @@ public class CarMovement : MonoBehaviour
             }
             
             WaveStarted = false;
-            if (conditionScript.conditionBlock > 1)
+            if (conditionScript.conditionCounter > 1)
             {
                 LEDscript.counter = 0;                  // Reset light strip
                 LEDscript.counter2 = 0;                 //
