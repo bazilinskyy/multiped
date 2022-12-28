@@ -1,0 +1,35 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 1eca7773dbc7f5b47878b382f321f62e, type: 3}
+  m_Name: GoogleDriveSettings
+  m_EditorClassIdentifier: 
+  genericClientCredentials:
+    client_id: 14635559182-3rgfv269egqnebt5vafp8elrvj8ougt6.apps.googleusercontent.com
+    project_id: first-granite-285609
+    auth_uri: https://accounts.google.com/o/oauth2/auth
+    token_uri: https://oauth2.googleapis.com/token
+    auth_provider_x509_cert_url: https://www.googleapis.com/oauth2/v1/certs
+    client_secret: o1NDjLVu7YW1z9YapaK1TJpI
+    redirect_uris:
+    - http://localhost
+  uriSchemeClientCredentials:
+    clientId: 14635559182-ca3qmo7nu6omljubg7dmdjf576a6s3m3.apps.googleusercontent.com
+    reversedClientId: com.googleusercontent.apps.14635559182-ca3qmo7nu6omljubg7dmdjf576a6s3m3
+    plistVersion: 1
+    bundleId: com.avvastenhoven.selfdrivingcars
+  accessScopes:
+  - https://www.googleapis.com/auth/drive
+  - https://www.googleapis.com/auth/drive.appdata
+  loopbackUri: http://nu.nl
+  loopbackResponseHtml: <html><h1>Please return to the app.</h1></html>
+  accessTokenPrefsKey: GoogleDriveAccessToken
+  refreshTokenPrefsKey: GoogleDriveRefreshToken
