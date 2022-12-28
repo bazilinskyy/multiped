@@ -34,8 +34,7 @@ public class ConditionController : MonoBehaviour
     CarMovement carMovementScript;
     PlayFabController playfabScript;
     public int conditionCounter = 0;
-    // todo: import conditions from csv
-    public int numberConditions = 10; // todo: number of conditions
+    public int numberConditions = 0;
 
     public int eHMIOn = 0;   // 0=no 1=slowly-pulsing light band
     public int yielding = 0; // 0=yes for P1 1=yes for P2 2=no
@@ -79,6 +78,8 @@ public class ConditionController : MonoBehaviour
         string filePath = Application.dataPath + "/../../public/videos/mapping.csv";
         string text = File.ReadAllText(filePath);
         trials = CSVSerializer.Deserialize<Trial>(text);
+        numberConditions = trials.Length; // set number of conditions
+        Debug.Log("Number of conditions: " + numberConditions);
         StartCoroutine(ActivatorVR("cardboard"));
         buttonSound = GetComponent<AudioSource>();
         Start2();       
@@ -144,9 +145,10 @@ public class ConditionController : MonoBehaviour
         if (carMovementScript != null) {
             if (carMovementScript.conditionFinished)
             {
-                if (conditionCounter == numberConditions) {
+                if (conditionCounter == numberConditions - 1) {
                     ExperimentEndCanvas.SetActive(true);
                     trial = false;
+                    Debug.Log("Experiment finished");
                 }
                 Debug.Log("FixedUpdate::trial end");
                 WillingnessToCross.SetActive(false);
