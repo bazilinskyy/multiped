@@ -41,7 +41,7 @@ public class ConditionController : MonoBehaviour
     public int yielding = 0; // 0=yes for P1 1=yes for P2 2=no
     public int distPed = 0;  // distance between P1 and P2 distances [2 .. +2 ..  20].
     public int p1 = 0;       // presence of Pedestrian 1
-    public int p2 = 0;       // presence of Pedestrian 1
+    public int p2 = 0;       // presence of Pedestrian 2
     public int camera = 0;   // location of camera
 
     public GameObject demoWelcomeCanvas; 
@@ -54,6 +54,9 @@ public class ConditionController : MonoBehaviour
     public GameObject trialStartCanvas;
     public GameObject trialEndCanvas;
     public GameObject ExperimentEndCanvas;
+
+    public GameObject p1_object;
+    public GameObject p2_object;
 
     public Text demoTitle; 
     public Text demoText;
@@ -112,6 +115,24 @@ public class ConditionController : MonoBehaviour
         camera = trials[conditionCounter].camera;
 
         Debug.Log(conditionCounter +  ":: eHMIOn=" + eHMIOn +  " yielding=" + yielding +  " distPed=" + distPed +  " p1=" + p1 +  " p2=" + p2 + " camera=" + camera);
+
+        // Make p1 present or not
+        if (p1 == 0) {
+            p1_object.SetActive(false);
+            Debug.Log("P1 disabled");
+        } else {
+            p1_object.SetActive(true);
+            Debug.Log("P1 enabled");
+        }
+
+        // Make p2 present or not
+        if (p2 == 0) {
+            p2_object.SetActive(false);
+            Debug.Log("P2 disabled");
+        } else {
+            p2_object.SetActive(true);
+            Debug.Log("P2 enabled");
+        }
 
         TrialStart();
         // trialTitle.text = demoTitle.text;
