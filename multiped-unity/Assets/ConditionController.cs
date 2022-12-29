@@ -54,8 +54,9 @@ public class ConditionController : MonoBehaviour
     public GameObject trialEndCanvas;
     public GameObject ExperimentEndCanvas;
 
-    public GameObject p1_object;
-    public GameObject p2_object;
+    public GameObject p1_object;  // object of P1
+    public GameObject p2_object;  // object of P2
+    public GameObject camera_object;  // camera object
 
     public Text demoTitle; 
     public Text demoText;
@@ -107,9 +108,8 @@ public class ConditionController : MonoBehaviour
         progress.SetActive(false);                  // Switch off progressbar
         projection.SetActive(false);                // Switch off projection
 
-        // set variables for trial
+        // Set variables for trial
         eHMIOn = trials[conditionCounter].eHMIOn;
-        // todo: yielding based on distance to pedestrian
         yielding = trials[conditionCounter].yielding;
         distPed = trials[conditionCounter].distPed;
         p1 = trials[conditionCounter].p1;
@@ -137,17 +137,40 @@ public class ConditionController : MonoBehaviour
             Debug.Log("P2 enabled");
         }
 
-        // distance between pedestrians
+        // Distance between pedestrians
         // position of P1=(21.3, -3.316, -3.98272)
-        Vector3 posP1 = p1_object.transform.position;
+        float deltaDist = 2f * distPed; // change in x coordinate
         if (distPed != 0) {
-            float deltaDist = 2f * distPed; // change in x coordinate
-            p2_object.transform.position = new Vector3(posP1.x - deltaDist, posP1.y, posP1.z);
+            
+            p2_object.transform.position = new Vector3(p1_object.transform.position.x - deltaDist, 
+                                                       p1_object.transform.position.y,
+                                                       p1_object.transform.position.z);
             Debug.Log("distance between pedestrians set to distPed=" + distPed + ": (posP1.x - " + 2 * distPed +
                 ", posP1.y, posP1.z). coordinates of P2=(" + p2_object.transform.position.x + ", " +
                 p2_object.transform.position.y + ", " + p2_object.transform.position.z + ")");
         } else {
             Debug.Log("distance between pedestrians not set (distPed=0)");
+        }
+
+        // Camera position
+        Vector3 posCameraP1 = new Vector3(105.54f, -1.59f, 3.22f);  // position of camera for P1
+        Vector3 rotationCameraP1 = new Vector3(0f, -49.995f, 0f);  // rotation of camera for P1
+        if (camera == 0) {
+            camera_object.transform.position = posCameraP1;
+            camera_object.transform.rotation = rotationCameraP1;
+            Debug.Log("Camera set to head of P1");
+        } else if (camera == 0) {
+            camera_object.transform.position = new Vector3(posCameraP1.x - deltaDist,  // take into account movement of P2
+                                                           posCameraP1.y,
+                                                           posCameraP1.z);
+            camera_object.transform.rotation = rotationCameraP1;
+            Debug.Log("Camera set to head of P2");
+        } else {
+            camera_object.transform.position = new Vector3(posCameraP1.x - deltaDist,  // take into account movement of P2
+                                                           posCameraP1.y,
+                                                           posCameraP1.z);
+            camera_object.transform.rotation = rotationCameraP1;
+            Debug.Log("Camera set to 3rd person view");
         }
 
         TrialStart();
