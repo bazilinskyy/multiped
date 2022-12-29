@@ -6,6 +6,7 @@ using UnityEngine.SceneManagement;
 using System;
 using UnityEngine.XR;
 using System.IO;
+using UnityEditor.Recorder;
 
 [System.Serializable]
 public class Trial {
@@ -54,15 +55,11 @@ public class ConditionController : MonoBehaviour
     public GameObject trialEndCanvas;
     public GameObject ExperimentEndCanvas;
 
-    public GameObject p1_object;  // object of P1
-    public GameObject p2_object;  // object of P2
-    public GameObject camera_object;  // camera object
-    public GameObject black_canvas;  // canvas to be shown as black screen
-
     public Text demoTitle; 
     public Text demoText;
     public Text trialTitle;
 
+    // todo: cleanup
     public GameObject WillingnessToCross;
     public GameObject reticle;
     public GameObject CountDown; 
@@ -72,6 +69,15 @@ public class ConditionController : MonoBehaviour
     public AudioSource buttonSound;
 
     public Trial[] trials; // description of trials based on mapping
+
+    public GameObject p1_object;  // object of P1
+    public GameObject p2_object;  // object of P2
+    public GameObject camera_object;  // camera object
+    public GameObject black_canvas;  // canvas to be shown as black screen
+
+    RecorderController recorderController; // control interface for recording video
+    RecorderControllerSettings controllerSettings;
+    MovieRecorderSettings videoRecorder;
 
     public void Start()
     {
@@ -84,7 +90,7 @@ public class ConditionController : MonoBehaviour
         Debug.Log("Number of conditions: " + numberConditions);
         StartCoroutine(ActivatorVR("cardboard"));
         buttonSound = GetComponent<AudioSource>();
-        // black_canvas.GetComponent<Image>().color  = new Color(0,0,0,0);
+
         Start2();       
     }
     public IEnumerator ActivatorVR(string YESVR)
@@ -172,10 +178,29 @@ public class ConditionController : MonoBehaviour
             camera_object.transform.eulerAngles = new Vector3(0f, -49.995f, 0f);
         }
 
+        // Make setup for recording video
+        controllerSettings = ScriptableObject.CreateInstance<RecorderControllerSettings>();
+        recorderController = new RecorderController(controllerSettings);
+        videoRecorder = ScriptableObject.CreateInstance<MovieRecorderSettings>();
+        videoRecorder.name = "Video recorder";
+        videoRecorder.Enabled = true;
+        videoRecorder.OutputFile = Application.dataPath + "/../../public/videos/video_" + conditionCounter;
+        var fiOut = new FileInfo(videoRecorder.OutputFile + ".mp4");
+        controllerSettings.AddRecorderSettings(videoRecorder);
+        controllerSettings.SetRecordModeToManual(); // will stop when closing
+        controllerSettings.FrameRate = 60;
+        RecorderOptions.VerboseMode = false;
+        recorderController.PrepareRecording();
+        recorderController.StartRecording();
+       
+        Debug.Log($"Started recording video to file '{fiOut.FullName}'");
+
         // Show black screen for 1 s
         StartCoroutine(BlackScreen(1f));
         // Start trial
         TrialStart();
+        // End recording video
+
     }
 
     // Show black screen for 1 second
@@ -191,6 +216,10 @@ public class ConditionController : MonoBehaviour
         if (carMovementScript != null) {
             if (carMovementScript.conditionFinished)
             {
+                // stop recording of video
+                recorderController.StopRecording();
+                Debug.Log("Stopped video recording");
+                // Experiment is finished
                 if (conditionCounter == numberConditions - 1) {
                     ExperimentEndCanvas.SetActive(true);
                     trial = false;
