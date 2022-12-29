@@ -101,9 +101,29 @@ public class CarMovement : MonoBehaviour
         playfabScript.ButtonDataList.Add(time);       // Add time to playfab data
                       
         yieldArray = yieldArrayCondition1;
+
+        // Trigger eHMI
         if (conditionScript.eHMIOn == 1)
         {
+            Debug.Log("eHMI enabled");
             LEDscript = GameObject.Find("LightStrip").GetComponent<LightStripBumper>();
+        } else {
+            Debug.Log("eHMI disabled");
+            LEDscript = GameObject.Find("LightStrip").GetComponent<LightStripBumper>();
+            GameObject.Find("LightStrip").SetActive(false);
+        }
+
+        // Trigger yielding
+        if (conditionScript.yielding == 1)
+        {
+            Debug.Log("Yielding ON for P1");
+            Yield = 1;
+        } else if (conditionScript.yielding == 2) {
+            Debug.Log("Yielding ON for P2");
+            Yield = 2;
+        } else {
+            Debug.Log("Yielding OFF");
+            Yield = 0;
         }
         StartCoroutine("Wave");
     }
@@ -111,12 +131,14 @@ public class CarMovement : MonoBehaviour
     public void FixedUpdate()
     {      
         fixedDeltaTime = Time.time - startTime;
-        pedestrian1_distance = Vector3.Distance(distance_cube.transform.position, pedestrian1.transform.position);
-        pedestrian2_distance = Vector3.Distance(distance_cube.transform.position, pedestrian2.transform.position);
+        pedestrian1_distance = Vector3.Distance(distance_cube.transform.position, conditionScript.p1_object.transform.position);
+        pedestrian2_distance = Vector3.Distance(distance_cube.transform.position, conditionScript.p2_object.transform.position);
         carDistance = Vector3.Distance(measuringPoint.transform.position, distance_cube.transform.position);
 
         StartCoroutine(SpeedCalculator()); 
 
+        // Debug.Log("pedestrian1_distance= " + pedestrian1_distance + " pedestrian2_distance=" + pedestrian2_distance);
+        // todo:  43 m?
         if (pedestrian1_distance < 43 && Yield == 1)
         {
             counter += 1; 
@@ -156,15 +178,15 @@ public class CarMovement : MonoBehaviour
             //If we haven't reached the maximum amount of cars yet
             if (carCount < yieldArray.Length)
             {            
-                if (conditionScript.conditionCounter == 0)
-                {
-                    Yield = Random.Range(0, 3);
-                    //Debug.Log("Yield = " + Yield);
-                }
-                else
-                {
-                    Yield = yieldArray[carCount]; //Check the array to see if the car should yield
-                }           
+                // if (conditionScript.conditionCounter == 0)
+                // {
+                //     Yield = Random.Range(0, 3);
+                //     //Debug.Log("Yield = " + Yield);
+                // }
+                // else
+                // {
+                //     Yield = yieldArray[carCount]; //Check the array to see if the car should yield
+                // }           
 
                 startTime = Time.time; // Start time of car route
                 

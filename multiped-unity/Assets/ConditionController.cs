@@ -109,13 +109,15 @@ public class ConditionController : MonoBehaviour
 
         // set variables for trial
         eHMIOn = trials[conditionCounter].eHMIOn;
+        // todo: yielding based on distance to pedestrian
         yielding = trials[conditionCounter].yielding;
         distPed = trials[conditionCounter].distPed;
         p1 = trials[conditionCounter].p1;
         p2 = trials[conditionCounter].p2;
         camera = trials[conditionCounter].camera;
 
-        Debug.Log(conditionCounter +  ":: eHMIOn=" + eHMIOn +  " yielding=" + yielding +  " distPed=" + distPed +  " p1=" + p1 +  " p2=" + p2 + " camera=" + camera);
+        Debug.Log(conditionCounter +  ":: eHMIOn=" + eHMIOn +  " yielding=" + yielding +  " distPed=" + distPed +
+          " p1=" + p1 +  " p2=" + p2 + " camera=" + camera);
 
         // Make p1 present or not
         if (p1 == 0) {
@@ -141,7 +143,9 @@ public class ConditionController : MonoBehaviour
         if (distPed != 0) {
             float deltaDist = 2f * distPed; // change in x coordinate
             p2_object.transform.position = new Vector3(posP1.x - deltaDist, posP1.y, posP1.z);
-            Debug.Log("distance between pedestrians set to distPed=" + distPed + ": (posP1.x - " + 2 * distPed + ", posP1.y, posP1.z). coordinates of P2=(" + p2_object.transform.position.x + ", " + p2_object.transform.position.y + ", " + p2_object.transform.position.z + ")");
+            Debug.Log("distance between pedestrians set to distPed=" + distPed + ": (posP1.x - " + 2 * distPed +
+                ", posP1.y, posP1.z). coordinates of P2=(" + p2_object.transform.position.x + ", " +
+                p2_object.transform.position.y + ", " + p2_object.transform.position.z + ")");
         } else {
             Debug.Log("distance between pedestrians not set (distPed=0)");
         }
