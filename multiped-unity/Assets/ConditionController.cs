@@ -135,6 +135,17 @@ public class ConditionController : MonoBehaviour
             Debug.Log("P2 enabled");
         }
 
+        // distance between pedestrians
+        // position of P1=(21.3, -3.316, -3.98272)
+        Vector3 posP1 = p1_object.transform.position;
+        if (distPed != 0) {
+            float deltaDist = 2f * distPed; // change in x coordinate
+            p2_object.transform.position = new Vector3(posP1.x - deltaDist, posP1.y, posP1.z);
+            Debug.Log("distance between pedestrians set to distPed=" + distPed + ": (posP1.x - " + 2 * distPed + ", posP1.y, posP1.z). coordinates of P2=(" + p2_object.transform.position.x + ", " + p2_object.transform.position.y + ", " + p2_object.transform.position.z + ")");
+        } else {
+            Debug.Log("distance between pedestrians not set (distPed=0)");
+        }
+
         TrialStart();
         // trialTitle.text = demoTitle.text;
 
