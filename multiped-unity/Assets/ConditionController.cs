@@ -57,6 +57,7 @@ public class ConditionController : MonoBehaviour
     public GameObject p1_object;  // object of P1
     public GameObject p2_object;  // object of P2
     public GameObject camera_object;  // camera object
+    public GameObject black_canvas;  // canvas to be shown as black screen
 
     public Text demoTitle; 
     public Text demoText;
@@ -83,6 +84,7 @@ public class ConditionController : MonoBehaviour
         Debug.Log("Number of conditions: " + numberConditions);
         StartCoroutine(ActivatorVR("cardboard"));
         buttonSound = GetComponent<AudioSource>();
+        // black_canvas.GetComponent<Image>().color  = new Color(0,0,0,0);
         Start2();       
     }
     public IEnumerator ActivatorVR(string YESVR)
@@ -170,13 +172,22 @@ public class ConditionController : MonoBehaviour
             camera_object.transform.eulerAngles = new Vector3(0f, -49.995f, 0f);
         }
 
+        // Show black screen for 1 s
+        StartCoroutine(BlackScreen(1f));
+        // Start trial
         TrialStart();
-        // trialTitle.text = demoTitle.text;
-
     }
+
+    // Show black screen for 1 second
+    IEnumerator BlackScreen(float t)
+    {
+        black_canvas.GetComponent<Image>().color = new Color(0, 0, 0, 255);
+        yield return new WaitForSeconds(t);
+        black_canvas.GetComponent<Image>().color = new Color(0, 0, 0, 0);
+    }
+
     private void FixedUpdate()
     {
-        // Debug.Log("carMovementScript.conditionFinished=" + carMovementScript.conditionFinished + " conditionBlock=" + conditionBlock + " conditionCounter=" + conditionCounter + " carMovementScript.conditionFinished=" + carMovementScript.conditionFinished + " trial=" + trial );
         if (carMovementScript != null) {
             if (carMovementScript.conditionFinished)
             {
@@ -188,57 +199,12 @@ public class ConditionController : MonoBehaviour
                 Debug.Log("FixedUpdate::trial end");
                 WillingnessToCross.SetActive(false);
                 reticle.SetActive(true);
-                // trialEndCanvas.SetActive(true);
                 carMovementScript.conditionFinished = false;
                 trial = false;
                 conditionCounter = conditionCounter + 1;
                 trialEndCanvas.SetActive(false);
                 StartCoroutine(ActivatorVR("none"));
-                // SceneManaxger.LoadScene("Environment");
                 Start2();
-                // TrialCanvas4();
-                // if (conditionBlock == 0)
-                // {
-                //     Debug.Log("FixedUpdate::demo end");
-                //     // enable last canvas
-                //     WillingnessToCross.SetActive(false);
-                //     reticle.SetActive(true);
-                //     demoInfoCanvas2.SetActive(true);
-                //     carMovementScript.conditionFinished = false;             
-                // }
-                // if (conditionBlock > 0)
-                // {
-                //     if (preview)
-                //     {
-                //         Debug.Log("FixedUpdate::preview end");
-                //         WillingnessToCross.SetActive(false);
-                //         reticle.SetActive(true);
-                //         trialStartCanvas.SetActive(true);
-                //         carMovementScript.conditionFinished = false;
-                //         preview = false;
-                //     }
-                //     if (trial)
-                //     {
-                //         if (conditionCounter < 5)
-                //         {
-                //             Debug.Log("FixedUpdate::trial end");
-                //             WillingnessToCross.SetActive(false);
-                //             reticle.SetActive(true);
-                //             trialEndCanvas.SetActive(true);
-                //             carMovementScript.conditionFinished = false;
-                //             trial = false;
-                //             // TrialCanvas4();
-                //         }
-                //         else
-                //         {
-                //             Debug.Log("FixedUpdate::experiment end");
-                //             WillingnessToCross.SetActive(false);
-                //             carMovementScript.conditionFinished = false;
-                //             trial = false;
-                //             // ExperimentEndCanvas.SetActive(true);
-                //         }
-                //     }
-                // }
             }
         }
     }
