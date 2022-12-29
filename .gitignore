@@ -102,3 +102,6 @@ secret
 # Pickle files
 multiped/analysis/*.p
 multiped/*.p
+
+# video recordings
+/Recordings
