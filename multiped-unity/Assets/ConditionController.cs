@@ -157,20 +157,17 @@ public class ConditionController : MonoBehaviour
         Vector3 rotationCameraP1 = new Vector3(0f, -49.995f, 0f);  // rotation of camera for P1
         if (camera == 0) {
             camera_object.transform.position = posCameraP1;
-            camera_object.transform.rotation = rotationCameraP1;
+            camera_object.transform.eulerAngles = rotationCameraP1;
             Debug.Log("Camera set to head of P1");
-        } else if (camera == 0) {
+        } else if (camera == 1) {
             camera_object.transform.position = new Vector3(posCameraP1.x - deltaDist,  // take into account movement of P2
                                                            posCameraP1.y,
                                                            posCameraP1.z);
-            camera_object.transform.rotation = rotationCameraP1;
+            camera_object.transform.eulerAngles = rotationCameraP1;
             Debug.Log("Camera set to head of P2");
         } else {
-            camera_object.transform.position = new Vector3(posCameraP1.x - deltaDist,  // take into account movement of P2
-                                                           posCameraP1.y,
-                                                           posCameraP1.z);
-            camera_object.transform.rotation = rotationCameraP1;
-            Debug.Log("Camera set to 3rd person view");
+            camera_object.transform.position = new Vector3(108.53f, -0.47f, -2.68f);
+            camera_object.transform.eulerAngles = new Vector3(0f, -49.995f, 0f);
         }
 
         TrialStart();
