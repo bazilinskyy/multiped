@@ -7,6 +7,7 @@ using System;
 using UnityEngine.XR;
 using System.IO;
 using UnityEditor.Recorder;
+using UnityEditor.Recorder.Input;
 
 [System.Serializable]
 public class Trial {
@@ -184,12 +185,19 @@ public class ConditionController : MonoBehaviour
         videoRecorder = ScriptableObject.CreateInstance<MovieRecorderSettings>();
         videoRecorder.name = "Video recorder";
         videoRecorder.Enabled = true;
-        videoRecorder.OutputFile = Application.dataPath + "/../../public/videos/video_" + conditionCounter;
+        videoRecorder.OutputFile = Application.dataPath + "/../../public/videos/" + trials[conditionCounter].video_id;
         var fiOut = new FileInfo(videoRecorder.OutputFile + ".mp4");
         controllerSettings.AddRecorderSettings(videoRecorder);
-        controllerSettings.SetRecordModeToManual(); // will stop when closing
-        controllerSettings.FrameRate = 60;
+        // controllerSettings.SetRecordModeToManual(); // will stop when closing
         RecorderOptions.VerboseMode = false;
+        videoRecorder.ImageInputSettings = new GameViewInputSettings()
+        {
+            OutputWidth = 3840,
+            OutputHeight = 2160
+        };
+        videoRecorder.AudioInputSettings.PreserveAudio = true;
+        controllerSettings.AddRecorderSettings(videoRecorder);
+        controllerSettings.FrameRate = 60;
         recorderController.PrepareRecording();
         recorderController.StartRecording();
        
@@ -221,9 +229,8 @@ public class ConditionController : MonoBehaviour
                 Debug.Log("Stopped video recording");
                 // Experiment is finished
                 if (conditionCounter == numberConditions - 1) {
-                    ExperimentEndCanvas.SetActive(true);
-                    trial = false;
                     Debug.Log("Experiment finished");
+                    Application.Quit(); // quit
                 }
                 Debug.Log("FixedUpdate::trial end");
                 WillingnessToCross.SetActive(false);

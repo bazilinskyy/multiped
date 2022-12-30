@@ -105,3 +105,6 @@ multiped/*.p
 
 # video recordings
 **/Recordings
+
+# ignore stimuli for now
+/public/videos/*.mp4
