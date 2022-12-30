@@ -7815,7 +7815,7 @@ MonoBehaviour:
   m_FallbackScreenDPI: 96
   m_DefaultSpriteDPI: 96
   m_DynamicPixelsPerUnit: 1
-  m_PresetInfoIsWorld: 0
+  m_PresetInfoIsWorld: 1
 --- !u!223 &440646493
 Canvas:
   m_ObjectHideFlags: 0
@@ -7998,10 +7998,6 @@ MonoBehaviour:
   trialStartCanvas: {fileID: 1014319519}
   trialEndCanvas: {fileID: 139203709}
   ExperimentEndCanvas: {fileID: 2074547156}
-  p1_object: {fileID: 5135186679817865459}
-  p2_object: {fileID: 1705505149}
-  camera_object: {fileID: 245021855}
-  black_canvas: {fileID: 1489324233}
   demoTitle: {fileID: 1078475139}
   demoText: {fileID: 1428542378}
   trialTitle: {fileID: 1411803058}
@@ -8012,6 +8008,10 @@ MonoBehaviour:
   trial: 0
   buttonSound: {fileID: 0}
   trials: []
+  p1_object: {fileID: 5135186679817865459}
+  p2_object: {fileID: 1705505149}
+  camera_object: {fileID: 245021855}
+  black_canvas: {fileID: 1489324233}
 --- !u!82 &447006218
 AudioSource:
   m_ObjectHideFlags: 0
@@ -25409,7 +25409,7 @@ MonoBehaviour:
   m_FallbackScreenDPI: 96
   m_DefaultSpriteDPI: 96
   m_DynamicPixelsPerUnit: 1
-  m_PresetInfoIsWorld: 0
+  m_PresetInfoIsWorld: 1
 --- !u!223 &1586725272
 Canvas:
   m_ObjectHideFlags: 0
@@ -26176,7 +26176,7 @@ MonoBehaviour:
   m_FallbackScreenDPI: 96
   m_DefaultSpriteDPI: 96
   m_DynamicPixelsPerUnit: 1
-  m_PresetInfoIsWorld: 0
+  m_PresetInfoIsWorld: 1
 --- !u!223 &1669130040
 Canvas:
   m_ObjectHideFlags: 0
@@ -42937,7 +42937,7 @@ MonoBehaviour:
   m_FallbackScreenDPI: 96
   m_DefaultSpriteDPI: 96
   m_DynamicPixelsPerUnit: 1
-  m_PresetInfoIsWorld: 0
+  m_PresetInfoIsWorld: 1
 --- !u!223 &3932412298891655941
 Canvas:
   m_ObjectHideFlags: 0
