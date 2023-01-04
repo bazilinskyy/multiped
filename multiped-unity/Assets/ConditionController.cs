@@ -150,7 +150,6 @@ public class ConditionController : MonoBehaviour
         // position of P1=(21.3, -3.316, -3.98272)
         float deltaDist = 2f * distPed; // change in x coordinate
         if (distPed != 0) {
-            
             p2_object.transform.position = new Vector3(p1_object.transform.position.x - deltaDist, 
                                                        p1_object.transform.position.y,
                                                        p1_object.transform.position.z);

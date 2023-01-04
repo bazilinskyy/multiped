@@ -24,7 +24,6 @@
 **/.vs/
 **/.vscode/
 
-
 # Unity3D generated meta files
 **/*.pidb.meta
 
@@ -107,4 +106,7 @@ multiped/*.p
 **/Recordings
 
 # ignore stimuli for now
-/public/videos/*.mp4
+# /public/videos/*.mp4
+
+# node.js modules
+/node_modules

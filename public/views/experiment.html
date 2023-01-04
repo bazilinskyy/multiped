@@ -23,21 +23,26 @@
   </body>
   <script>
 
-// by Pavlo Bazilinskyy <p.bazilinskyy@tudelft.nl>
+// by Pavlo Bazilinskyy <p.bazilinskyy@tue.nl>
 
 // Constants
-var n_videos = 12; // number of videos
-var n_videos_per_participant = 12; // number of videos
-var n_videos_repeat = 3; // number of repeats of each condition
+var n_videos_gr0 = 4;  // number of videos in group 0
+var n_videos_gr1 = 60; // number of videos in group 1
+var n_videos_gr2 = 60; // number of videos in group 2
+var n_videos_per_participant = 124; // number of videos
+var n_videos_repeat = 1; // number of repeats of each condition
 var n_videos_break = 10; // number of videos between each break
 var image_pfefix = 'img/'; // prefix for images
 // var video_pfefix = 'https://multiped-crowdsourced.s3.eu-central-1.amazonaws.com/video_'; // prefix for videos
-var video_pfefix = 'videos/video_'; // prefix for videos
+var video_pfefix = 'videos/video_merged_'; // prefix for videos
 var SHOW_DEBUG = false; // switch for debugging output
 var SAVE_DATA = true; // save data or not
 
 // Arrays
 var video_ids = [];
+var video_ids_gr0 = [];
+var video_ids_gr1 = [];
+var video_ids_gr2 = [];
 var interactions = [];
 
 // browser info
@@ -230,7 +235,7 @@ var video_stimuli = []; // blocks with videos
 // define instructions block
 var instructions_block = {
     type: 'html-keyboard-response',
-    stimulus: '<div class="jumbotron jumbotron-fluid" style="text-align: left;"><div class="container"><h1 class="display-4">Instructions</h1><p class="lead">You will watch ' + n_videos_per_participant * n_videos_repeat + ' videos of traffic situations involving pedestrians. Some pedestrians will cross the road and some will make eye contact. All videos are recorded within urban Toronto.</p><p class="lead">Each video starts with a black screen. As soon as you see the black screen, press \'F\' to start the video.</p><p class="lead">When you feel the situation could become risky, PRESS and HOLD \'F\' until you feel the situation is safe again. Press \'F\' for any type of risk, including very small risk. You can press and release the key as many times as you want per video. There is no audio involved.</p><p class="lead">The window of your browser should be at least 1300px wide and 800px tall.</p><hr><p>Press \'C\' to proceed to the questions.</p></div></div>',
+    stimulus: '<div class="jumbotron jumbotron-fluid" style="text-align: left;"><div class="container"><h1 class="display-4">Instructions</h1><p class="lead">You will watch ' + n_videos_per_participant * n_videos_repeat + ' videos of traffic situations involving pedestrians. You will see videos of an automated car approaching one or two pedestrians. You will see the situations from two perspectives: (1) Camera placed at the head level of one of the pedestrians. (2) Camera places behind the pedestrians to allow you to see the situation from the 3rd person perspective.</p><p class="lead">Each video starts with a black screen. As soon as you see the black screen, press \'F\' to start the video.</p><p class="lead">When you feel that it is safe for the pedestrian to cross the road, PRESS and HOLD \'F\' until you feel that is not safe to cross the road. You can press and release the key as many times as you want per video. There is no audio involved.</p><p class="lead">The window of your browser should be at least 1300px wide and 800px tall.</p><hr><p>Press \'C\' to proceed to the questions.</p></div></div>',
 
     choices: ['C'],
     data: {
@@ -239,21 +244,45 @@ var instructions_block = {
         browser_major_version: br_major_version,
         browser_app_name: navigator.appName,
         browser_user_agent: navigator.userAgent,
-        video_ids: video_ids,
+        video_ids_gr0: video_ids_gr0,
+        video_ids_gr1: video_ids_gr1,
+        video_ids_gr2: video_ids_gr2,
         window_height_init: window_height,
         window_width_init: window_width
     }
 };
 
-// populate array with video IDs
-for (var i = 0; i < n_videos; i++) {
+// populate array with video IDs for group 0
+for (var i = 0; i < n_videos_gr0; i++) {
     for (var j = 0; j < n_videos_repeat; j++) {
-        video_ids.push(i);
+        video_ids_gr0.push(i);
     }
 }
+video_ids_gr0 = shuffle(video_ids_gr0);  // shuffle ids
 
-// shuffle ids
-video_ids = shuffle(video_ids);
+// populate array with video IDs for group 1
+for (var i = n_videos_gr0; i < n_videos_gr0 + n_videos_gr1; i++) {
+    for (var j = 0; j < n_videos_repeat; j++) {
+        video_ids_gr1.push(i);
+    }
+}
+video_ids_gr1 = shuffle(video_ids_gr1);  // shuffle ids
+
+// populate array with video IDs for group 2
+for (var i = n_videos_gr0 + n_videos_gr1; i < n_videos_gr0 + n_videos_gr1 + n_videos_gr2; i++) {
+    for (var j = 0; j < n_videos_repeat; j++) {
+        video_ids_gr2.push(i);
+    }
+}
+video_ids_gr2 = shuffle(video_ids_gr2);  // shuffle ids
+
+// merge arrays with IDs with randomising order of groups 1 and 2
+var random_num = getRandomInt(0, 1);
+if (random_num) {
+    video_ids = video_ids_gr0.concat(video_ids_gr1, video_ids_gr2);
+} else {
+    video_ids = video_ids_gr0.concat(video_ids_gr2, video_ids_gr1);
+}
 
 // build array with videos with stimuli
 for (var i = 0; i < n_videos_per_participant * n_videos_repeat; i++) {
@@ -262,7 +291,7 @@ for (var i = 0; i < n_videos_per_participant * n_videos_repeat; i++) {
         autoplay: true,
         controls: false,
         width: 1280,
-        height: 720,
+        // height: 720,
         choices: ['F'],
         sources: [video_pfefix + video_ids[i] + '.mp4'],
         prompt: '<p>PRESS \'F\' when you feel the situation could become risky. RELEASE the key when you feel safe again.</p>'
@@ -272,7 +301,7 @@ for (var i = 0; i < n_videos_per_participant * n_videos_repeat; i++) {
 // black with image to be added before each video
 var image_block = {
     type: 'html-keyboard-response',
-    stimulus: '<img src=\'' + image_pfefix + 'black_frame.png\'/><p>PRESS \'F\' when you feel the situation could become risky. RELEASE the key when you feel safe again.</p>',
+    stimulus: '<img src=\'' + image_pfefix + 'black_frame.png\'/ style="width: 1280px"><p>PRESS \'F\' when you feel the situation could become risky. RELEASE the key when you feel safe again.</p>',
     choices: ['F'],
 };
 
@@ -297,23 +326,9 @@ for (var i = 1; i < n_videos_per_participant * n_videos_repeat / n_videos_break;
 var qs_video = {
     type: 'survey-html-form-slider',
     require_movement: true,
-    html: '<div style="position:relative; margin: 3em auto 1.5em auto; width:1000px;"><label for="slider-0" class="form-label"><strong>I found the behaviour of the pedestrian(s) to be risky.</strong><br>Provide your answer by moving the slider. You will not be able to continue before moving the slider.</label><div id="jspsych-html-slider-response-wrapper" style="margin-top: 0px; margin-bottom: 100px;"><div id="jspsych-html-slider-response-stimulus"><p></p></div><div class="jspsych-html-slider-response-container" style="position:relative; margin: 0 auto 3em auto; width:1000px;"><input type="range" value="50" min="0" max="100" step="1" style="width: 100%;" id="slider-0" name="risky_slider"><div><div style="display: inline-block; position: absolute; left:-10%; text-align: center; width: 20%;"><span style="text-align: center; font-size: 80%;">0</span></div><div style="display: inline-block; position: absolute; left:10%; text-align: center; width: 20%;"><span style="text-align: center; font-size: 80%;">20</span></div><div style="display: inline-block; position: absolute; left:30%; text-align: center; width: 20%;"><span style="text-align: center; font-size: 80%;">40</span></div><div style="display: inline-block; position: absolute; left:50%; text-align: center; width: 20%;"><span style="text-align: center; font-size: 80%;">60</span></div><div style="display: inline-block; position: absolute; left:70%; text-align: center; width: 20%;"><span style="text-align: center; font-size: 80%;">80</span></div><div style="display: inline-block; position: absolute; left:90%; text-align: center; width: 20%;"><span style="text-align: center; font-size: 80%;">100</span></div></div></div></div><div id="jspsych-survey-multi-choice-0" class="jspsych-survey-multi-choice-question" style="text-align: left"><p class="eye-contact-text survey-multi-choice"></p><div><p><strong>The pedestrian(s) made eye contact with me</strong></p></div><p></p><div id="eye-contact-option-0-0" class="eye-contact-option"><label class="eye-contact-text" for="eye-contact-response-0-0"><input type="radio" name="eye-contact" id="eye-contact-response-0-0" value="Yes" required="" style="margin-right: 1em">Yes</label></div><div id="eye-contact-option-0-1" class="eye-contact-option"><label class="eye-contact-text" for="eye-contact-response-0-1"><input type="radio" name="eye-contact" id="eye-contact-response-0-1" value="Yes but too late" required="" style="margin-right: 1em">Yes but too late</label></div><div id="eye-contact-option-0-2" class="eye-contact-option"><label class="eye-contact-text" for="eye-contact-response-0-2"><input type="radio" name="eye-contact" id="eye-contact-response-0-2" value="No" required="" style="margin-right: 1em">No</label></div><div id="eye-contact-option-0-3" class="eye-contact-option"><label class="eye-contact-text" for="eye-contact-response-0-3"><input type="radio" name="eye-contact" id="eye-contact-response-0-3" value="I don’t know" required="" style="margin-right: 1em">I don’t know</label></div></div><div>',
+    html: '<div style="position:relative; margin: 3em auto 1.5em auto; width:1000px;"><label for="slider-0" class="form-label"><strong>I found the behaviour of the automated car understandable.</strong><br>Provide your answer by moving the slider. You will not be able to continue before moving the slider.</label><div id="jspsych-html-slider-response-wrapper" style="margin-top: 0px; margin-bottom: 100px;"><div id="jspsych-html-slider-response-stimulus"><p></p></div><div class="jspsych-html-slider-response-container" style="position:relative; margin: 0 auto 3em auto; width:1000px;"><input type="range" value="50" min="0" max="100" step="1" style="width: 100%;" id="slider-0" name="risky_slider"><div><div style="display: inline-block; position: absolute; left:-10%; text-align: center; width: 20%;"><span style="text-align: center; font-size: 80%;">0</span></div><div style="display: inline-block; position: absolute; left:10%; text-align: center; width: 20%;"><span style="text-align: center; font-size: 80%;">20</span></div><div style="display: inline-block; position: absolute; left:30%; text-align: center; width: 20%;"><span style="text-align: center; font-size: 80%;">40</span></div><div style="display: inline-block; position: absolute; left:50%; text-align: center; width: 20%;"><span style="text-align: center; font-size: 80%;">60</span></div><div style="display: inline-block; position: absolute; left:70%; text-align: center; width: 20%;"><span style="text-align: center; font-size: 80%;">80</span></div><div style="display: inline-block; position: absolute; left:90%; text-align: center; width: 20%;"><span style="text-align: center; font-size: 80%;">100</span></div></div></div></div><div>',
     items: 1,
     require_movement: true
-};
-
-var signs_options = ["The maximum allowed speed is 50 miles/hour", "The maximum allowed speed is 100 miles/hour", "Traffic only goes in one direction", "You have to stop and give way to all traffic", "This is a priority lane", "Pedestrians not permitted", "Pedestrian crossing area"];
-
-var qs_signs = {
-  type: 'survey-multi-choice',
-  // preamble: 'As a driver, what does it mean when you encounter these traffic signs? (*: answers to questions are required)',
-  questions: [
-    {prompt: "<div><p>As a driver, what does it mean when you encounter this traffic sign?</p></div><div class='center'><img src=\'" + image_pfefix + "sign_0.png\'/></div>", name: 'sign_0', options: signs_options, required:true}, 
-    {prompt: "<div><p>As a driver, what does it mean when you encounter this traffic sign?</p></div><div class='center'><img src=\'" + image_pfefix + "sign_1.png\'/></div>", name: 'sign_1', options: signs_options, required:true}, 
-    {prompt: "<div><p>As a driver, what does it mean when you encounter this traffic sign?</p></div><div class='center'><img src=\'" + image_pfefix + "sign_2.png\'/></div>", name: 'sign_2', options: signs_options, required:true}, 
-    {prompt: "<div><p>As a driver, what does it mean when you encounter this traffic sign?</p></div><div class='center'><img src=\'" + image_pfefix + "sign_3.png\'/></div>", name: 'sign_3', options: signs_options, required:true}
-  ],
-  randomize_question_order: true
 };
 
 // Likert
@@ -379,12 +394,14 @@ for (var i = 0; i < n_videos_per_participant * n_videos_repeat; i++) {
     } 
 }
 timeline.push(qs_end);  // questions in the end
-timeline.push(qs_signs);  // radio box questions with signs
 timeline.push(fullscreen_exit);  // exit full screen
 timeline.push(save_data_block);  // save data
 
 if (debug) {
     console.log('timeline', timeline);
+    console.log('video_id0', video_ids_gr0);
+    console.log('video_id1', video_ids_gr1);
+    console.log('video_id2', video_ids_gr2);
     console.log('video_ids', video_ids);
     console.log('video_stimuli', video_stimuli);
     console.log('qs_video', qs_video);
@@ -395,7 +412,7 @@ if (debug) {
 jsPsych.init({
     // auto_preload: false,
     show_preload_progress_bar: true,
-    preload_images: [image_pfefix + 'black_frame.png', image_pfefix + 'sign_0.png', image_pfefix + 'sign_1.png', image_pfefix + 'sign_2.png', image_pfefix + 'sign_3.png'],
+    preload_images: [image_pfefix + 'black_frame.png'],
     timeline: timeline,
     max_load_time: 3000000,
     on_finish: function() {
