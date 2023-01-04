@@ -12,10 +12,10 @@ for x in range(0, 124):
     w = 640  # width of video
     h = 360  # height of video
     # compress and resize video 1
-    cmd = "ffmpeg -y -i " + f1 + " -s " + w + "x" + h + " -vcodec h264 -b:v 1000k -acodec mp2 " + f1_compressed
+    cmd = "ffmpeg -y -i " + f1 + " -s " + str(w) + "x" + str(h) + " -vcodec h264 -b:v 1000k -acodec mp2 " + f1_compressed
     os.system(cmd)
     # compress and resize video 2
-    cmd = "ffmpeg -y -i " + f2 + " -s " + w + "x" + h + " -vcodec h264 -b:v 1000k -acodec mp2 " + f2_compressed
+    cmd = "ffmpeg -y -i " + f2 + " -s " + str(w) + "x" + str(h) + " -vcodec h264 -b:v 1000k -acodec mp2 " + f2_compressed
     os.system(cmd)
     # merge and remove sound
     cmd = "ffmpeg -y -i " + f1_compressed + " -i " + f2_compressed + " -an -r 60 -filter_complex hstack " + out
