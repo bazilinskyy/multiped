@@ -19,7 +19,7 @@ var Entry = mongoose.model('Entry', emptySchema);
 
 // --- STATIC MIDDLEWARE 
 app.use(express.static(__dirname + '/public'));
-app.use('/jsPsych', express.static(__dirname + "/jsPsych"));
+app.use('/jspsych', express.static(__dirname + "/jspsych"));
 
 // --- BODY PARSING MIDDLEWARE
 app.use(body_parser.json()); // to support JSON-encoded bodies
