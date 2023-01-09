@@ -13,15 +13,12 @@
     <script src="jspsych/plugin-survey-html-form-slider.js"></script>
     <script src="jspsych/plugin-preload.js"></script>
     <script src="jspsych/plugin-video-keyboard-multiple-responses-release.js"></script>
-
-<!--     <script src='jspsych/plugins/jspsych-html-keyboard-response.js'></script>
-    <script src='jspsych/plugins/jspsych-call-function.js'></script>
-    <script src='jspsych/plugins/jspsych-survey-html-form.js'></script>
-    <script src='jspsych/plugins/jspsych-survey-multi-choice.js'></script>
-    <script src='jspsych/plugins/jspsych-survey-html-form-slider.js'></script>
-    <script src='jspsych/plugins/jspsych-html-slider-response.js'></script>
-    <script src='jspsych/plugins/jspsych-fullscreen.js'></script> -->
-    <!-- <script src='jspsych/plugins/jspsych-video-keyboard-multiple-responses-release.js'></script> -->
+    <!-- jspsych version of webgazer -->
+    <script src="jspsych/webgazer/webgazer.js"></script>
+    <script src="jspsych/extension-webgazer.js"></script>
+    <script src="jspsych/plugin-webgazer-init-camera.js"></script>
+    <script src="jspsych/plugin-webgazer-calibrate.js"></script>
+    <script src="jspsych/plugin-webgazer-validate.js"></script>
     <!-- bootstrap -->
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.0.0-beta2/dist/css/bootstrap.min.css" rel="stylesheet" integrity="sha384-BmbxuPwQa2lc/FVzBcNJ7UAyJxM6wuqIj61tLrc4wSX0szH/Ev+nYRRuWlolflfl" crossorigin="anonymous">
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.0.0-beta2/dist/js/bootstrap.bundle.min.js" integrity="sha384-b5kHyXgcpbZJO/tY9Ul7kGkf1S0CWuKcCD38l8YkeH8z8QjE0GmW1gYU5S9FOnJ0" crossorigin="anonymous"></script>
@@ -199,7 +196,10 @@ var jsPsych = initJsPsych({
     },
     on_interaction_data_update: function(data) {
         interactions.push(data)
-    }
+    },
+    extensions: [
+        {type: jsPsychExtensionWebgazer}
+    ]
 });
 
 /**
@@ -257,7 +257,6 @@ var video_stimuli = []; // blocks with videos
 var instructions_block = {
     type: jsPsychHtmlKeyboardResponse,
     stimulus: '<div class="jumbotron jumbotron-fluid" style="text-align: left;"><div class="container"><h1 class="display-4">Instructions</h1><p class="lead">You will watch ' + n_videos_per_participant * n_videos_repeat + ' videos of traffic situations involving pedestrians. You will see videos of an automated car approaching one or two pedestrians. You will see the situations from two perspectives: (1) Camera placed at the head level of one of the pedestrians. (2) Camera places behind the pedestrians to allow you to see the situation from the 3rd person perspective.</p><p class="lead">Each video starts with a black screen. As soon as you see the black screen, press \'F\' to start the video.</p><p class="lead">When you feel that it is safe for the pedestrian to cross the road, PRESS and HOLD \'F\' until you feel that is not safe to cross the road. You can press and release the key as many times as you want per video. There is no audio involved.</p><p class="lead">The window of your browser should be at least 1300px wide and 800px tall.</p><hr><p>Press \'C\' to proceed to the questions.</p></div></div>',
-
     choices: ['C'],
     data: {
         browser_name: br_name,
@@ -318,14 +317,20 @@ for (var i = 0; i < n_videos_per_participant * n_videos_repeat; i++) {
         // height: 720,
         choices: ['F'],
         stimulus: [video_pfefix + video_ids[i] + '.mp4'],
-        prompt: '<p>PRESS \'F\' when you feel the situation could become risky. RELEASE the key when you feel safe again.</p>'
+        prompt: '<p>PRESS \'F\' when you feel that you can cross the road in front of the car. RELEASE the key when you feel that you cannot cross.</p>',
+        extensions: [
+          {
+            type: jsPsychExtensionWebgazer, 
+            params: {targets: ['#jspsych-image-keyboard-response-stimulus']}
+          }
+        ]
     });
 }
 
 // black with image to be added before each video
 var image_block = {
     type: jsPsychHtmlKeyboardResponse,
-    stimulus: '<img src=\'' + image_pfefix + 'black_frame.png\'/ style="width: 1280px"><p>PRESS \'F\' when you feel the situation could become risky. RELEASE the key when you feel safe again.</p>',
+    stimulus: '<img src=\'' + image_pfefix + 'black_frame.png\'/ style="width: 1280px"><p>PRESS \'F\' when you feel that you can cross the road in front of the car. RELEASE the key when you feel that you cannot cross.</p>',
     choices: ['F'],
 };
 
@@ -372,6 +377,87 @@ var qs_end = {
     items: 4
 };
 
+var camera_instructions = {
+    type: jsPsychHtmlKeyboardResponse,
+    stimulus: `
+    <div class="jumbotron jumbotron-fluid" style="text-align: left;"><div class="container"><h1 class="display-4">Configuration of camera</h1><p class="lead">In order to participate you must allow the experiment to use your camera. You will be prompted to do this on the next screen. If you do not wish to allow use of your camera, you cannot participate in this experiment. It may take up to 30 seconds for the camera to initialize after you give permission. No video recording from your camera will be saved. Only information about where you looked at the screen will be saved.<hr><p>Press \'C\' to proceed.</p></div></div>
+    `,
+    choices: ['C'],
+}
+
+var init_camera = {
+    type: jsPsychWebgazerInitCamera
+}
+
+var calibration_instructions = {
+    type: jsPsychHtmlKeyboardResponse,
+    stimulus: `
+      <div class="jumbotron jumbotron-fluid" style="text-align: left;"><div class="container"><h1 class="display-4">Calibration of eye tracker</h1><p class="lead">Now you will calibrate the eye tracking, so that the software can use the image of your eyes to predict where you are looking. You will see a series of dots appear on the screen. Look at each dot and click on it.<hr><p>Press \'C\' to proceed.</p></div></div>
+    `,
+    choices: ['C'],
+}
+
+var calibration = {
+    type: jsPsychWebgazerCalibrate,
+    calibration_points: [
+      [25,25],[75,25],[50,50],[25,75],[75,75]
+    ],
+    repetitions_per_point: 2,
+    randomize_calibration_order: true
+}
+
+var validation_instructions = {
+    type: jsPsychHtmlKeyboardResponse,
+    stimulus: `
+      <div class="jumbotron jumbotron-fluid" style="text-align: left;"><div class="container"><h1 class="display-4">Accuracy of the calibration</h1><p class="lead">Now we will measure the accuracy of the calibration. Look at each dot as it appears on the screen. <p style="font-weight: bold;">You do not need to click on the dots this time.<hr><p>Press \'C\' to proceed.</p></div></div>
+    `,
+    choices: ['C'],
+    post_trial_gap: 1000
+}
+
+var validation = {
+    type: jsPsychWebgazerValidate,
+    validation_points: [
+        [25,25],[75,25],[50,50],[25,75],[75,75]
+    ],
+    roi_radius: 200,
+    time_to_saccade: 1000,
+    validation_duration: 2000,
+    data: {
+        task: 'validate'
+    }
+}
+
+var recalibrate_instructions = {
+    type: jsPsychHtmlKeyboardResponse,
+    stimulus: `
+        <div class="jumbotron jumbotron-fluid" style="text-align: left;"><div class="container"><h1 class="display-4">Insufficient accuracy of calibration</h1><p class="lead">The accuracy of the calibration is a lower than we would like. Let's try calibrating one more time. On the next screen, look at the dots and click on them.<hr><p>Press \'C\' to proceed.</p></div></div>
+    `,
+    choices: ['C'],
+}
+
+var recalibrate = {
+    timeline: [recalibrate_instructions, calibration, validation_instructions, validation],
+    conditional_function: function(){
+        var validation_data = jsPsych.data.get().filter({task: 'validate'}).values()[0];
+        return validation_data.percent_in_roi.some(function(x){
+            var minimum_percent_acceptable = 50;
+            return x < minimum_percent_acceptable;
+        });
+    },
+    data: {
+        phase: 'recalibration'
+    }
+}
+
+var calibration_done = {
+    type: jsPsychHtmlKeyboardResponse,
+    stimulus: `
+        <div class="jumbotron jumbotron-fluid" style="text-align: left;"><div class="container"><h1 class="display-4">Calibration completed</h1><p class="lead">Calibration of eye tracking is complete, thank you for your patience. <hr><p>Press \'C\' to proceed to the instructions for the experiment.</p>
+    `,
+    choices: ['C'],
+}
+
 // block for sending data
 var save_data_block = {
     type: jsPsychCallFunction,
@@ -410,8 +496,15 @@ console.log('finished with preloading');
 var between_blocks_count = 0;  // counter of shown between blocks
 // timeline.push(slider_block_1);
 timeline.push(fullscreen_enter);  // enter full screen
+timeline.push(camera_instructions); 
+timeline.push(init_camera); 
+timeline.push(calibration_instructions); 
+timeline.push(calibration); 
+timeline.push(validation_instructions); 
+timeline.push(validation); 
+timeline.push(recalibrate);
+timeline.push(calibration_done);
 timeline.push(instructions_block);
-timeline.push(save_data_block);
 // iterate over blocks
 for (var i = 0; i < n_videos_per_participant * n_videos_repeat; i++) {
     timeline.push(continue_block);
