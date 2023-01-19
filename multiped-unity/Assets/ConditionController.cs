@@ -162,20 +162,45 @@ public class ConditionController : MonoBehaviour
 
         // Camera position
         Vector3 posCameraP1 = new Vector3(105.54f, -1.59f, 3.22f);  // position of camera for P1
-        Vector3 rotationCameraP1 = new Vector3(0f, -49.995f, 0f);  // rotation of camera for P1
+        Vector3 rotCameraP1 = new Vector3(0f, -49.995f, 0f);   // rotation of camera for P1
+        Vector3 rotCameraP2 = new Vector3(0f, -49.995f, 0f);   // rotation of camera for P2
+        Vector3 posCamera3rd = new Vector3(108.53f, -0.47f, -2.68f);  // position of camera for 3rd person view
+        Vector3 rotCamera3rd = new Vector3(0f, -49.995f, 0f);   // rotation of camera for 3rd person view
+        Vector3 targetCameraPos = new Vector3();  // target for moving camera
+        float transitionDuration = 0.0f;;  // duration of movement of camera
         if (camera == 0) {
             camera_object.transform.position = posCameraP1;
-            camera_object.transform.eulerAngles = rotationCameraP1;
-            Debug.Log("Camera set to head of P1");
+            camera_object.transform.eulerAngles = rotCameraP1;
+            Debug.Log("Camera set to head of P1.");
         } else if (camera == 1) {
             camera_object.transform.position = new Vector3(posCameraP1.x - deltaDist,  // take into account movement of P2
                                                            posCameraP1.y,
                                                            posCameraP1.z);
-            camera_object.transform.eulerAngles = rotationCameraP1;
-            Debug.Log("Camera set to head of P2");
+            camera_object.transform.eulerAngles = rotCameraP1;
+            Debug.Log("Camera set to head of P2.");
+        } else if (camera == 2) {
+            camera_object.transform.position = posCamera3rd;
+            camera_object.transform.eulerAngles = rotCameraP2;
+            Debug.Log("Camera set to 3rd person view.");
+        } else if (camera == 3) {
+            camera_object.transform.position = new Vector3(posCameraP1.x - deltaDist,  // take into account movement of P2
+                                                           posCameraP1.y,
+                                                           posCameraP1.z);
+            camera_object.transform.eulerAngles = rotCameraP2;
+            targetCameraPos = posCameraP1;
+            // todo: dynamic value for time
+            transitionDuration = 0.5f * deltaDist;
+            Debug.Log("Camera set to P1 with going away from P2.");
+        } else if (camera == 4) {
+            camera_object.transform.position = posCameraP1;
+            camera_object.transform.eulerAngles = rotCameraP1;
+            targetCameraPos = new Vector3(posCameraP1.x - deltaDist,  // take into account movement of P2
+                                          posCameraP1.y,
+                                          posCameraP1.z);
+            transitionDuration = 0.5f * deltaDist;  // no camera movement needed
+            Debug.Log("Camera set to P2 with going away from P1.");
         } else {
-            camera_object.transform.position = new Vector3(108.53f, -0.47f, -2.68f);
-            camera_object.transform.eulerAngles = new Vector3(0f, -49.995f, 0f);
+            Debug.Log("Wrong value for camera given.");
         }
 
         // Make setup for recording video
@@ -205,7 +230,7 @@ public class ConditionController : MonoBehaviour
         // Show black screen for 1 s
         StartCoroutine(BlackScreen(1f));
         // Start trial
-        TrialStart();
+        TrialStart(targetCameraPos, transitionDuration);
         // End recording video
 
     }
@@ -299,10 +324,10 @@ public class ConditionController : MonoBehaviour
     }
 
     // UI TRIALS
-    void TrialStart()
+    void TrialStart(Vector3 targetCameraPos, float transitionDuration)
     {
         Debug.Log("TrialStart");
-        TrialCanvas3();
+        TrialCanvas3(targetCameraPos, transitionDuration);
         //trialWalkCanvas.SetActive(true);
     }
     public void TrialCanvas1()
@@ -332,14 +357,36 @@ public class ConditionController : MonoBehaviour
         carMovementScript.StartCarPreview();
         WillingnessToCross.SetActive(true);
     }
-    public void TrialCanvas3()                  // Start trial
+    public void TrialCanvas3(Vector3 targetCameraPos, float transitionDuration)                  // Start trial
     {
         Debug.Log("TrialCanvas3");
         // trialStartCanvas.SetActive(false);
         carMovementScript.AudioBeep.Play();
+        // move camera
+        if (transitionDuration > 0) {
+            StartCoroutine(MoveCamera(targetCameraPos, transitionDuration));
+        }
         trial = true;
         carMovementScript.StartCar();
         // StartCoroutine(CountDownTrial());
+    }
+
+    // move camera between two points
+    IEnumerator MoveCamera(Vector3 targetCameraPos, float transitionDuration) {
+        Debug.Log("Moving camera");
+        yield return new WaitForSeconds(1f);
+        Debug.Log(camera_object.transform.position);
+        Debug.Log(targetCameraPos);
+        float t = 0.0f;
+        while (t < 1.0f)
+        {
+            t += Time.deltaTime * (Time.timeScale/transitionDuration);
+            camera_object.transform.position = Vector3.Lerp(camera_object.transform.position, // move from
+                                                            targetCameraPos,  // move to
+                                                            t);  // in amount of time
+            Debug.Log(t);
+            yield return 0;
+        }
     }
 
     IEnumerator CountDownTrial()
