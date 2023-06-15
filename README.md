@@ -6,3 +6,8 @@ This project defines a framework for the analysis of crossing behaviour in the i
 Tested with Python 3.8.5. To setup the environment run these two commands in a parent folder of the downloaded repository (replace `/` with `\` and possibly add `--user` if on Windows:
 - `pip install -e multiped-crowdsourced` will setup the project as a package accessible in the environment.
 - `pip install -r multiped-crowdsourced/requirements.txt` will install required packages.
+
+## Troubleshooting
+### Troubleshooting setup
+#### ERROR: multiped-crowdsourced is not a valid editable requirement
+Check that you are indeed in the parent folder for running command `pip install -e multiped-crowdsourced`. This command will not work from inside of the folder containing the repo.
