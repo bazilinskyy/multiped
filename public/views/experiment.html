@@ -175,18 +175,32 @@ var getUrlParameter = function getUrlParameter(sParam) {
     }
 };
 
+// fetch from the URL param
 var debug = getUrlParameter('debug');
-if (!debug) {
+// if not provided, use CONST
+if (debug == undefined) {
     debug = SHOW_DEBUG;
+} else {
+    // convert from string to bool
+    debug = /^true$/i.test(debug);
 }
 
 if (debug) {
     console.log('debug', debug);
 }
 
+// fetch from the URL param
 var save_data = getUrlParameter('save_data');
-if (!save_data) {
+// if not provided, use CONST
+if (save_data == undefined) {
     save_data = SAVE_DATA;
+} else {
+    // convert from string to bool
+    save_data = /^true$/i.test(save_data);
+}
+
+if (debug) {
+    console.log('save_data', save_data);
 }
 
 /* initialize jsPsych */
@@ -268,7 +282,8 @@ var instructions_block = {
         video_ids_gr1: video_ids_gr1,
         video_ids_gr2: video_ids_gr2,
         window_height_init: window_height,
-        window_width_init: window_width
+        window_width_init: window_width,
+        worker_code: worker_code
     }
 };
 
