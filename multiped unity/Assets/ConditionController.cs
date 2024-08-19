@@ -190,7 +190,8 @@ public class ConditionController : MonoBehaviour
         }
 
         // Camera position
-        Vector3 posCameraP1 = new Vector3(105.54f, -1.717f, 4.271f);  // position of camera for P1
+        // Vector3 posCameraP1 = new Vector3(105.54f, -1.717f, 4.271f);  // position of camera for P1
+        Vector3 posCameraP1 = new Vector3(105.54f, -1.717f, 3.6f);  // position of camera for P1
         Vector3 rotCameraP1 = new Vector3(0f, -49.995f, 0f);   // rotation of camera for P1
         Vector3 rotCameraP2 = new Vector3(0f, -49.995f, 0f);   // rotation of camera for P2
         Vector3 posCamera3rd = new Vector3(108.53f, -0.47f, -2.68f);  // position of camera for 3rd person view
@@ -464,7 +465,7 @@ public class ConditionController : MonoBehaviour
 
         Debug.Log("----------file writing triggered");
                 TextWriter tw = new StreamWriter(writeFilePath, false);
-                tw.WriteLine("Video ID, Answer1, Answer2, Answer3, Answer4");        //headings
+                tw.WriteLine("Video ID, Answer1, Answer2, Answer3");        //headings
                 tw.Close();
             
 
@@ -476,10 +477,11 @@ public class ConditionController : MonoBehaviour
     }
 
     public int answer_element = 0;
-    public GameObject Q1, Q2, Q3, Q4;       // the panels
-    public GameObject stop1;
+    public GameObject Q1, Q2, Q3;       // the panels
+    public GameObject stop1, start_study;
     public Slider slider1;       // the first Q slider 
-    public Slider slider2;       // the second Q slider 
+    public Slider slider2;       // the second Q slider
+    public Slider slider3;       // the second Q slider 
     public bool startNextStage = false;
     public void Question1()     //call this after the end of every frame
     {
@@ -512,52 +514,38 @@ public class ConditionController : MonoBehaviour
         Debug.Log("Question THREE triggered--------------");
 
     }
-    public ToggleGroup toggleGroup, toggleGroup1;
-    private Toggle toggle, toggle1;
-    public List<string> mainData = new List<string>();
-    public void LastQuestion()
+    public void Question4() //call this on the press of next button on q2
     {
 
-        Debug.Log("Question Four triggered--------------");
-
-        toggle = toggleGroup.ActiveToggles().FirstOrDefault();
+        string mainLine = $"{trials[conditionCounter].video_id},{slider1.value},{slider2.value},{slider3.value}";
+        mainData.Add(mainLine);
 
         Q3.SetActive(false);
 
-        Q4.SetActive(true);
-
-    }
-
-    public void Question4()
-    {
-        Debug.Log("Question LASSTTTT triggered--------------");
-
-        toggle1 = toggleGroup1.ActiveToggles().FirstOrDefault();
-
-        string mainLine = $"{trials[conditionCounter].video_id},{slider1.value},{slider2.value},{toggle.GetComponentInChildren<Text>().text},{toggle1.GetComponentInChildren<Text>().text}";
-
-        mainData.Add(mainLine);
-
-        Q4.SetActive(false);
-        
         if (((conditionCounter + 1) == 22) || ((conditionCounter + 1) == 42))
         {
             stop1.SetActive(true);
+        }
+        else if ((conditionCounter + 1) == 2)
+        {
+            start_study.SetActive(true);
         }
         else{
             //resetting values
             slider1.value = 0;
             slider2.value = 0;
-
-            //Time.timeScale = 1f; // Play the game by setting time scale to 1
+            slider3.value = 0;
 
             startNextStage = true;
 
             writeCSV();
         }
-        
-        
+
     }
+    public ToggleGroup toggleGroup, toggleGroup1;
+    private Toggle toggle, toggle1;
+    public List<string> mainData = new List<string>();
+
     public void stop_screen1()
     {
         Debug.Log("Waiting time initialised.............");
@@ -566,6 +554,7 @@ public class ConditionController : MonoBehaviour
         //resetting values
         slider1.value = 0;
         slider2.value = 0;
+        slider3.value = 0;
 
         //Time.timeScale = 1f; // Play the game by setting time scale to 1
 
@@ -574,7 +563,23 @@ public class ConditionController : MonoBehaviour
         writeCSV();
 
     }
+    public void stop_screen2()
+    {
+        Debug.Log("Waiting time initialised.............");
 
+        start_study.SetActive(false);
+        //resetting values
+        slider1.value = 0;
+        slider2.value = 0;
+        slider3.value = 0;
+
+        //Time.timeScale = 1f; // Play the game by setting time scale to 1
+
+        startNextStage = true;
+
+        writeCSV();
+
+    }
     private InputData _inputData;
     private float _leftMaxScore = 0f;
     private float _rightMaxScore = 0f;
