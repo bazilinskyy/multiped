@@ -114,8 +114,6 @@ public class ConditionController : MonoBehaviour
 
         Start2();
 
-
-
     }
     public IEnumerator ActivatorVR(string YESVR)
     {
