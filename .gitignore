@@ -112,3 +112,6 @@ multiped/*.p
 
 # node.js modules
 /node_modules
+
+# reading files
+multiped/readings
