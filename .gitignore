@@ -115,3 +115,6 @@ multiped/*.p
 
 # reading files
 multiped/readings
+
+# Zip files
+multiped/readings.zip
