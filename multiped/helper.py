@@ -166,4 +166,3 @@ class HMD_helper:
 
             # Show the figure for the current group
             fig.show()
-
