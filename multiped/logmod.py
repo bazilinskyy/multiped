@@ -8,13 +8,13 @@ import common
 
 
 def logs(
-        show_level: Optional[Union[int, str]] = None,
-        save_level: Optional[Union[int, str]] = None,
-        program_name: Optional[str] = None,
-        path: Optional[str] = None,
-        threads: bool = False,
-        multiproc: bool = False,
-        show_color: bool = True
+    show_level: Optional[Union[int, str]] = None,
+    save_level: Optional[Union[int, str]] = None,
+    program_name: Optional[str] = None,
+    path: Optional[str] = None,
+    threads: bool = False,
+    multiproc: bool = False,
+    show_color: bool = True,
 ) -> None:
     """
     Initialize the logger.
@@ -45,13 +45,15 @@ def logs(
     1.
     """
     logger_root = logging.getLogger()
-    fmt_items = ('%(asctime)s',
-                 '%(levelname)-8s',
-                 '%(threadName)s' if threads else None,
-                 '%(processName)s' if multiproc else None,
-                 '%(name)s',
-                 '%(message)s')
-    fmt = ' - '.join((item for item in fmt_items if item is not None))
+    fmt_items = (
+        "%(asctime)s",
+        "%(levelname)-8s",
+        "%(threadName)s" if threads else None,
+        "%(processName)s" if multiproc else None,
+        "%(name)s",
+        "%(message)s",
+    )
+    fmt = " - ".join((item for item in fmt_items if item is not None))
     formatter = logging.Formatter(fmt)
     logging.addLevelName(5, "VERBOSE")
     logger_root.setLevel(5)
@@ -62,9 +64,9 @@ def logs(
         except ImportError:
             show_color = False
         else:
-            coloredlogs.install(fmt=fmt,
-                                level=_convert_logging_level(show_level),
-                                stream=sys.stdout)
+            coloredlogs.install(
+                fmt=fmt, level=_convert_logging_level(show_level), stream=sys.stdout
+            )
     if show_level and not show_color:
         stream_handler = logging.StreamHandler()
         stream_handler.setLevel(_convert_logging_level(show_level))
@@ -72,13 +74,12 @@ def logs(
         logger_root.addHandler(stream_handler)
     if save_level:
         if program_name is None:
-            program_name = 'noname'
-        date_str = dt.datetime.utcnow().strftime('%Y-%m-%d_%H-%M-%S')
-        log_filename = 'log_{}_{}.log'.format(program_name, date_str)
+            program_name = "noname"
+        date_str = dt.datetime.utcnow().strftime("%Y-%m-%d_%H-%M-%S")
+        log_filename = "log_{}_{}.log".format(program_name, date_str)
         if path is None:
             path = common.log_dir
-        file_handler = logging.FileHandler(filename=os.path.join(path,
-                                                                 log_filename))
+        file_handler = logging.FileHandler(filename=os.path.join(path, log_filename))
         file_handler.setFormatter(formatter)
         file_handler.setLevel(_convert_logging_level(save_level))
         logger_root.addHandler(file_handler)
@@ -89,16 +90,21 @@ def _logging_level_threshold():
     """
     Set the level threshold for a couple of internal and external modules.
     """
-    for mod_name in ['requests', 'matplotlib', 'numexpr.utils',
-                     'urllib3.connectionpool', 'PIL.TiffImagePlugin']:
+    for mod_name in [
+        "requests",
+        "matplotlib",
+        "numexpr.utils",
+        "urllib3.connectionpool",
+        "PIL.TiffImagePlugin",
+    ]:
         logging.getLogger(mod_name).setLevel(logging.WARNING)
 
 
 def _convert_logging_level(level: Union[int, str]) -> int:
     """Convert the user-provided level to a logging level integer."""
     if isinstance(level, int):
-        assert 0 < level <= 50, 'Logging level must be between 0 and 50.'
+        assert 0 < level <= 50, "Logging level must be between 0 and 50."
         return level
     if not hasattr(logging, level.upper()):
-        raise ValueError('Unknown logging level name: {}.'.format(level))
+        raise ValueError("Unknown logging level name: {}.".format(level))
     return getattr(logging, level.upper())

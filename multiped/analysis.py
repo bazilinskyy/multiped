@@ -6,9 +6,9 @@ import pandas as pd
 from tqdm import tqdm
 
 
-logs(show_level='info', show_color=True)
+logs(show_level="info", show_color=True)
 logger = CustomLogger(__name__)  # use custom logger
-template = common.get_configs('plotly_template')
+template = common.get_configs("plotly_template")
 asset_folder = common.get_configs("data")
 readings_folder = common.get_configs("readings")
 

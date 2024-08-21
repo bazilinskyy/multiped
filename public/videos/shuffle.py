@@ -1,8 +1,7 @@
 import pandas as pd
-import random
 
 # Load the CSV file
-file_path = 'mapping.csv'
+file_path = "mapping.csv"
 df = pd.read_csv(file_path)
 
 # Separate the first two rows

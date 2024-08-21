@@ -105,7 +105,7 @@ multiped/*.p
 # video recordings
 **/Recordings
 
-# ignore raw stimuli 
+# ignore raw stimuli
 /public/videos/video3rd_*.mp4
 /public/videos/video_*.mp4
 !/public/videos/video_merged_*.mp4
@@ -118,3 +118,5 @@ multiped/readings
 
 # Zip files
 multiped/readings.zip
+
+.mypy_cache
