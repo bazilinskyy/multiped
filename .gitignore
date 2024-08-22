@@ -115,8 +115,10 @@ multiped/*.p
 
 # reading files
 multiped/readings
+multiped/outputs
 
 # Zip files
 multiped/readings.zip
 
 .mypy_cache
+.mypi.ini
