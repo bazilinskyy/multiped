@@ -520,7 +520,7 @@ public class ConditionController : MonoBehaviour
 
         Q3.SetActive(false);
 
-        if (((conditionCounter + 1) == 22) || ((conditionCounter + 1) == 42))
+        if (((conditionCounter + 1) == 16) || ((conditionCounter + 1) == 28))
         {
             stop1.SetActive(true);
         }
