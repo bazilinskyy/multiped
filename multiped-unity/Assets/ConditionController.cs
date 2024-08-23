@@ -31,21 +31,20 @@ public class ConditionController : MonoBehaviour
 {
 
 
-    
+
     public string writeFileName = "a";       //write the name of the file for storing the data into----------a for standard
     public string writeFilePath = "";           //where the file will be saved
 
     //------------for writing
 
-
-
+    private float initialHeight;
     public bool conditionFinished = false;
     LightStripBumper lightStripBumper;      // script
     public GameObject LEDBumperObject;
     public GameObject tracker;
-    public GameObject progress; 
-    public GameObject projection; 
-    
+    public GameObject progress;
+    public GameObject projection;
+
     CarMovement carMovementScript;
     PlayFabController playfabScript;
     public int conditionCounter = 0;
@@ -59,7 +58,7 @@ public class ConditionController : MonoBehaviour
     public int camera = 0;   // location of camera
     public int duration = 0;
 
-    public GameObject demoWelcomeCanvas; 
+    public GameObject demoWelcomeCanvas;
     public GameObject demoWalkCanvas;
     public GameObject demoInfoCanvas1;
     public GameObject demoInfoCanvas2;
@@ -70,15 +69,15 @@ public class ConditionController : MonoBehaviour
     public GameObject trialEndCanvas;
     public GameObject ExperimentEndCanvas;
 
-    public Text demoTitle; 
+    public Text demoTitle;
     public Text demoText;
     public Text trialTitle;
 
     // todo: cleanup
     public GameObject WillingnessToCross;
     public GameObject reticle;
-    public GameObject CountDown; 
-    public bool preview = false; 
+    public GameObject CountDown;
+    public bool preview = false;
     public bool trial = false;
 
     public AudioSource buttonSound;
@@ -117,7 +116,7 @@ public class ConditionController : MonoBehaviour
     }
     public IEnumerator ActivatorVR(string YESVR)
     {
-        
+
        // XRSettings.LoadDeviceByName(YESVR);
         yield return null;
         //XRSettings.enabled = true;
@@ -126,7 +125,7 @@ public class ConditionController : MonoBehaviour
     {
       //  XRSettings.LoadDeviceByName(NOVR);
         yield return null;
-       // XRSettings.enabled = false;       
+       // XRSettings.enabled = false;
     }
 
     public float time1, time2 = 0f;
@@ -138,7 +137,7 @@ public class ConditionController : MonoBehaviour
         carMovementScript = GameObject.Find("CarMovement").GetComponent<CarMovement>();
         playfabScript = GameObject.Find("PlayFabController").GetComponent<PlayFabController>();
         LEDBumperObject.SetActive(true);            // Turn on LED bumper
-        tracker.SetActive(false);                   // Switch off tracker   
+        tracker.SetActive(false);                   // Switch off tracker
         progress.SetActive(false);                  // Switch off progressbar
         projection.SetActive(false);                // Switch off projection
 
@@ -177,7 +176,7 @@ public class ConditionController : MonoBehaviour
         // position of P1=(21.3, -3.316, -3.98272)
         float deltaDist = 2f * distPed; // change in x coordinate
         if (distPed != 0) {
-            p2_object.transform.position = new Vector3(p1_object.transform.position.x - deltaDist, 
+            p2_object.transform.position = new Vector3(p1_object.transform.position.x - deltaDist,
                                                        p1_object.transform.position.y,
                                                        p1_object.transform.position.z);
             Debug.Log("distance between pedestrians set to distPed=" + distPed + ": (posP1.x - " + 2 * distPed +
@@ -240,6 +239,7 @@ public class ConditionController : MonoBehaviour
         startNextStage = false;                             //-------next stage stops and waits for the input
 
         StartCoroutine(UI_duration(duration));
+        initialHeight = Camera.main.transform.position.y;
         // Question1();
     }
 
@@ -259,7 +259,14 @@ public class ConditionController : MonoBehaviour
 
     private void FixedUpdate()
     {
-                             
+        Vector3 currentPosition = Camera.main.transform.position;
+        if (Mathf.Abs(currentPosition.y - initialHeight) > 0.01f)  // Adjust the threshold as needed
+        {
+            currentPosition.y = initialHeight;
+            Camera.main.transform.position = currentPosition;
+        }
+
+
                                     if (startNextStage == true)//writes and saves a file and starts the new cycle of data input
                                         { write_data = true; }
         // Update input data display
@@ -278,12 +285,12 @@ public class ConditionController : MonoBehaviour
                 WillingnessToCross.SetActive(false);
                 reticle.SetActive(true);
                 carMovementScript.conditionFinished = false;
-                trial = false;                                                                                      
-                                                                               
+                trial = false;
+
                 conditionCounter = conditionCounter + 1;
                 trialEndCanvas.SetActive(false);
                 StartCoroutine(ActivatorVR("none"));
-                if (startNextStage == true)          
+                if (startNextStage == true)
                 Start2();
                                                                                             //Question1();
             }
@@ -318,7 +325,7 @@ public class ConditionController : MonoBehaviour
     public void DemoCanvas4()
     {
         Debug.Log("DemoCanvas4");
-        demoInfoCanvas2.SetActive(false);      
+        demoInfoCanvas2.SetActive(false);
         StartCoroutine(ActivatorVR("none"));
         SceneManager.LoadScene("Environment");
     }
@@ -389,7 +396,7 @@ public class ConditionController : MonoBehaviour
         }
         trial = true;
         carMovementScript.StartCar();
-        
+
         // StartCoroutine(CountDownTrial());
     }
 
@@ -416,7 +423,7 @@ public class ConditionController : MonoBehaviour
         Debug.Log("CountDownTrial");
         reticle.SetActive(false);
         CountDown.SetActive(true);
-        carMovementScript.CountSound.Play(); 
+        carMovementScript.CountSound.Play();
         yield return new WaitForSecondsRealtime(3f);
         carMovementScript.AudioBeep.Play();
         yield return new WaitForSecondsRealtime(1f);
@@ -429,7 +436,7 @@ public class ConditionController : MonoBehaviour
     public void TrialCanvas4()
     {
         Debug.Log("TrialCanvas4");
-        // Set next condition        
+        // Set next condition
         // PlayerPrefs.SetInt("Condition Counter", conditionCounter + 1);
         trialEndCanvas.SetActive(false);
         StartCoroutine(ActivatorVR("none"));
@@ -465,10 +472,10 @@ public class ConditionController : MonoBehaviour
                 TextWriter tw = new StreamWriter(writeFilePath, false);
                 tw.WriteLine("Video ID, Answer1, Answer2, Answer3");        //headings
                 tw.Close();
-            
+
 
         File.WriteAllLines(writeFilePath, mainData);
-        
+
         //mainData.Clear();            //emoptyy the file
 
         tw.Close();
@@ -477,9 +484,9 @@ public class ConditionController : MonoBehaviour
     public int answer_element = 0;
     public GameObject Q1, Q2, Q3;       // the panels
     public GameObject stop1, start_study;
-    public Slider slider1;       // the first Q slider 
+    public Slider slider1;       // the first Q slider
     public Slider slider2;       // the second Q slider
-    public Slider slider3;       // the second Q slider 
+    public Slider slider3;       // the second Q slider
     public bool startNextStage = false;
     public void Question1()     //call this after the end of every frame
     {
@@ -489,12 +496,12 @@ public class ConditionController : MonoBehaviour
         Debug.Log("Question 1 triggered--------------");
         //take the experiment number and put it as an array number
         answer_element = conditionCounter;
- 
+
     }
 
     public void Question2()     //call this on the press of next button on q1
     {
-        
+
         Q1.SetActive(false);
 
         Q2.SetActive(true);
@@ -504,7 +511,7 @@ public class ConditionController : MonoBehaviour
     }
     public void Question3() //call this on the press of next button on q2
     {
-        
+
         Q2.SetActive(false);
 
         Q3.SetActive(true);
