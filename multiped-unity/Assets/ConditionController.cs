@@ -25,12 +25,8 @@ public class Trial {
     public int video_length;
 }
 
-
-
 public class ConditionController : MonoBehaviour
 {
-
-
 
     public string writeFileName = "a";       //write the name of the file for storing the data into----------a for standard
     public string writeFilePath = "";           //where the file will be saved
@@ -57,6 +53,7 @@ public class ConditionController : MonoBehaviour
     public int p2 = 0;       // presence of Pedestrian 2
     public int camera = 0;   // location of camera
     public int duration = 0;
+    private float cumulativeAdjustment = 0;
 
     public GameObject demoWelcomeCanvas;
     public GameObject demoWalkCanvas;
@@ -129,10 +126,18 @@ public class ConditionController : MonoBehaviour
     }
 
     public float time1, time2 = 0f;
+    Vector3 initialPositionP1 = new Vector3(105.792694f,-3.31599998f,3.44000006f);
+    Vector3 initialPositionP2 = new Vector3(104.082703f,-3.31599998f,3.44000006f);
+    void ResetPositions() {
+        p1_object.transform.position = initialPositionP1;
+        p2_object.transform.position = initialPositionP2;
+    }
 
     public GameObject player1, player2;
     void Start2()
     {
+        // ApplyCumulativeAdjustment();
+        ResetPositions();
         time1 = Time.time;
         carMovementScript = GameObject.Find("CarMovement").GetComponent<CarMovement>();
         playfabScript = GameObject.Find("PlayFabController").GetComponent<PlayFabController>();
@@ -174,23 +179,38 @@ public class ConditionController : MonoBehaviour
 
         // Distance between pedestrians
         // position of P1=(21.3, -3.316, -3.98272)
+        Debug.Log("Case start - P1: " + p1_object.transform.position + ", P2: " + p2_object.transform.position);
         float deltaDist = 2f * distPed; // change in x coordinate
+        float adjustment = (5.0f - distPed) * 2;
         if (distPed != 0) {
             p2_object.transform.position = new Vector3(p1_object.transform.position.x - deltaDist,
                                                        p1_object.transform.position.y,
                                                        p1_object.transform.position.z);
+
+            Debug.Log("adjustment" + adjustment);
+            p1_object.transform.position = new Vector3(p1_object.transform.position.x - adjustment,
+                                                       p1_object.transform.position.y,
+                                                       p1_object.transform.position.z);
+
+            p2_object.transform.position = new Vector3(p2_object.transform.position.x - adjustment,
+                                                       p2_object.transform.position.y,
+                                                       p2_object.transform.position.z);
+
             Debug.Log("distance between pedestrians set to distPed=" + distPed + ": (posP1.x - " + 2 * distPed +
                 ", posP1.y, posP1.z). coordinates of P2=(" + p2_object.transform.position.x + ", " +
                 p2_object.transform.position.y + ", " + p2_object.transform.position.z + ")");
         } else {
             Debug.Log("distance between pedestrians not set (distPed=0)");
         }
+        cumulativeAdjustment = adjustment;
 
         // Camera position
         // Vector3 posCameraP1 = new Vector3(105.54f, -1.717f, 4.271f);  // position of camera for P1
         Vector3 posCameraP1 = new Vector3(105.54f, -1.717f, 3.6f);  // position of camera for P1
-        Vector3 rotCameraP1 = new Vector3(0f, -49.995f, 0f);   // rotation of camera for P1
-        Vector3 rotCameraP2 = new Vector3(0f, -49.995f, 0f);   // rotation of camera for P2
+        // Vector3 rotCameraP1 = new Vector3(0f, -49.995f, 0f);   // rotation of camera for P1
+        // Vector3 rotCameraP2 = new Vector3(0f, -49.995f, 0f);   // rotation of camera for P2
+        Vector3 rotCameraP1 = new Vector3(0f, 0f, 0f);   // rotation of camera for P1
+        Vector3 rotCameraP2 = new Vector3(0f, 0f, 0f);   // rotation of camera for P2
         Vector3 posCamera3rd = new Vector3(108.53f, -0.47f, -2.68f);  // position of camera for 3rd person view
         Vector3 rotCamera3rd = new Vector3(0f, -49.995f, 0f);   // rotation of camera for 3rd person view
         Vector3 targetCameraPos = new Vector3();  // target for moving camera
@@ -198,13 +218,29 @@ public class ConditionController : MonoBehaviour
         if (camera == 0) {
             camera_object.transform.position = posCameraP1;
             camera_object.transform.eulerAngles = rotCameraP1;
-            Debug.Log("Camera set to head of P1.");
-        } else if (camera == 1) {
-            camera_object.transform.position = new Vector3(posCameraP1.x - deltaDist,  // take into account movement of P2
+            camera_object.transform.position = new Vector3(posCameraP1.x - ((5.0f - (distPed))*2),  // take into account movement of P2
                                                            posCameraP1.y,
                                                            posCameraP1.z);
+            Debug.Log("Camera set to head of P1.");
+        } else if (camera == 1) {
+            // First update: Intermediate position considering deltaDist
+            Vector3 intermediateCameraPos = new Vector3(posCameraP1.x - deltaDist, 
+                                                posCameraP1.y,
+                                                posCameraP1.z);
+
+            // Apply the first update
+            camera_object.transform.position = intermediateCameraPos;
             camera_object.transform.eulerAngles = rotCameraP1;
+
+            // Second update: Further adjust the camera position
+            Vector3 finalCameraPos = new Vector3(posCameraP1.x - 10.0f, 
+                                            posCameraP1.y,
+                                            posCameraP1.z);
+
+            // Apply the second update
+            camera_object.transform.position = finalCameraPos;
             Debug.Log("Camera set to head of P2.");
+
         } else if (camera == 2) {
             camera_object.transform.position = posCamera3rd;
             camera_object.transform.eulerAngles = rotCameraP2;
@@ -242,6 +278,23 @@ public class ConditionController : MonoBehaviour
         initialHeight = Camera.main.transform.position.y;
         // Question1();
     }
+
+    private void ApplyCumulativeAdjustment()
+    {
+        p1_object.transform.position = new Vector3(
+        p1_object.transform.position.x + cumulativeAdjustment,
+        p1_object.transform.position.y,
+        p1_object.transform.position.z
+    );
+    Debug.Log("I am here");
+    p2_object.transform.position = new Vector3(
+        p2_object.transform.position.x + cumulativeAdjustment,
+        p2_object.transform.position.y,
+        p2_object.transform.position.z
+    );
+
+    Debug.Log("Objects positions reset by adjustment - P1: " + p1_object.transform.position + ", P2: " + p2_object.transform.position);
+}
 
     IEnumerator UI_duration(int time_duration)
     {

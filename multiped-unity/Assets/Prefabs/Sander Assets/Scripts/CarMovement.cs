@@ -52,6 +52,8 @@ public class CarMovement : MonoBehaviour
     public GameObject pedestrian2;
     public float pedestrian1_distance;      // For calculating moment to start animation pedestrian 1
     public float pedestrian2_distance;      // For calculating moment to start animation pedestrian 2
+    public float pedestrian1_distance_x;
+    public float pedestrian2_distance_x;
     public float speed;
     int counter;
     public bool yielding; 
@@ -133,27 +135,32 @@ public class CarMovement : MonoBehaviour
         fixedDeltaTime = Time.time - startTime;
         pedestrian1_distance = Vector3.Distance(distance_cube.transform.position, conditionScript.p1_object.transform.position);
         pedestrian2_distance = Vector3.Distance(distance_cube.transform.position, conditionScript.p2_object.transform.position);
+        pedestrian1_distance_x = Mathf.Abs(distance_cube.transform.position.x - conditionScript.p1_object.transform.position.x);
+        pedestrian2_distance_x = Mathf.Abs(distance_cube.transform.position.x - conditionScript.p2_object.transform.position.x);
         carDistance = Vector3.Distance(measuringPoint.transform.position, distance_cube.transform.position);
 
         StartCoroutine(SpeedCalculator()); 
 
-        // Debug.Log("pedestrian1_distance= " + pedestrian1_distance + " pedestrian2_distance=" + pedestrian2_distance);
-        // todo:  43 m?
-        if (pedestrian1_distance < 43 && Yield == 1)
+        Debug.Log("continous_pedestrian1_distance= " + pedestrian1_distance_x + " pedestrian2_distance=" + pedestrian2_distance_x);
+        if (pedestrian2_distance < 43 && Yield == 1)
         {
             counter += 1; 
             if (counter == 1)
             {
                 yielding = true;
-                //Debug.Log("Start yielding at: " + fixedDeltaTime + "; Distance: " + carDistance); 
+                Debug.Log("Start yielding at: " + fixedDeltaTime + "; Distance: " + carDistance);
+                Debug.Log("distance cube: " + distance_cube.transform.position + "P1_distance: " + conditionScript.p1_object.transform.position + "P2_distance: " + conditionScript.p2_object.transform.position);
+                Debug.Log("pedestrian1_distance= " + pedestrian1_distance + " pedestrian2_distance=" + pedestrian2_distance);
             }
             
-            if (pedestrian1_distance < 3)
+            if (pedestrian2_distance < 3)
             {
-                yielding = false; 
+                yielding = false;
+                Debug.Log("2nd_distance cube: " + distance_cube.transform.position + "P1_distance: " + conditionScript.p1_object.transform.position + "P2_distance: " + conditionScript.p2_object.transform.position);
+                Debug.Log("pedestrian1_distance= " + pedestrian1_distance + " pedestrian2_distance=" + pedestrian2_distance);
             }
         }
-        if (pedestrian2_distance < 43 && Yield == 2)
+        if (pedestrian1_distance < 43 && Yield == 2)
         {
             counter += 1;
             if (counter == 1)
@@ -162,7 +169,7 @@ public class CarMovement : MonoBehaviour
                 //Debug.Log("Start yielding at: " + fixedDeltaTime + "; Distance: " + carDistance);
             }
 
-            if (pedestrian2_distance < 3)
+            if (pedestrian1_distance < 3)
             {
                 yielding = false;
             }
