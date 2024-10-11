@@ -59,5 +59,5 @@ legend_labels = [
 # HMD.plot_mean_hmd_yaw(readings_folder, mapping, output_folder=directory_path,
 # group_titles=group_titles, legend_labels=legend_labels)
 # HMD.plot_video_averages(readings_folder)
-HMD.plot_combined(readings_folder, mapping, output_folder=directory_path,
-                  group_titles=group_titles, legend_labels=legend_labels)
+HMD.plot_combined(readings_folder, mapping, output_folder=directory_path, group_titles=group_titles,
+                  legend_labels=legend_labels)
