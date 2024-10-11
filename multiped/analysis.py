@@ -1,3 +1,5 @@
+# by Shadab Alam <shaadalam.5u@gmail.com> and Pavlo Bazilinskyy <pavlo.bazilinskyy@gmail.com>
+
 from helper import HMD_helper
 from custom_logger import CustomLogger
 from logmod import logs
