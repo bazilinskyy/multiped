@@ -1,0 +1,35 @@
+# This file may be used to create an environment using:==
+# $ conda create --name <env> --file <this file>==
+# platform: osx-arm64==
+ca-certificates==2024.7.2
+flake8==7.1.1
+kaleido==0.2.1
+libcxx==14.0.6
+libffi==3.4.4
+mccabe==0.7.0
+ncurses==6.4
+numpy==2.0.1
+openssl==1.1.1w
+packaging==24.1
+pandas==2.2.2
+pandas-stubs==2.2.2.240807
+pip==24.2
+plotly==5.23.0
+pycodestyle==2.12.1
+pyflakes==3.2.0
+python==3.9.11
+python-dateutil==2.9.0.post0
+pytz==2024.1
+readline==8.2
+setuptools==72.1.0
+six==1.16.0
+sqlite==3.45.3
+tenacity==9.0.0
+tk==8.6.14
+tqdm==4.66.5
+types-pytz==2024.1.0.20240417
+types-tqdm==4.66.0.20240417
+tzdata==2024.1
+wheel==0.43.0
+xz==5.4.6
+zlib==1.2.13
