@@ -53,7 +53,6 @@ public class ConditionController : MonoBehaviour
     public int p2 = 0;       // presence of Pedestrian 2
     public int camera = 0;   // location of camera
     public int duration = 0;
-    private float cumulativeAdjustment = 0;
 
     public GameObject demoWelcomeCanvas;
     public GameObject demoWalkCanvas;
@@ -136,7 +135,6 @@ public class ConditionController : MonoBehaviour
     public GameObject player1, player2;
     void Start2()
     {
-        // ApplyCumulativeAdjustment();
         ResetPositions();
         time1 = Time.time;
         carMovementScript = GameObject.Find("CarMovement").GetComponent<CarMovement>();
@@ -202,7 +200,6 @@ public class ConditionController : MonoBehaviour
         } else {
             Debug.Log("distance between pedestrians not set (distPed=0)");
         }
-        cumulativeAdjustment = adjustment;
 
         // Camera position
         // Vector3 posCameraP1 = new Vector3(105.54f, -1.717f, 4.271f);  // position of camera for P1
@@ -278,23 +275,6 @@ public class ConditionController : MonoBehaviour
         initialHeight = Camera.main.transform.position.y;
         // Question1();
     }
-
-    private void ApplyCumulativeAdjustment()
-    {
-        p1_object.transform.position = new Vector3(
-        p1_object.transform.position.x + cumulativeAdjustment,
-        p1_object.transform.position.y,
-        p1_object.transform.position.z
-    );
-    Debug.Log("I am here");
-    p2_object.transform.position = new Vector3(
-        p2_object.transform.position.x + cumulativeAdjustment,
-        p2_object.transform.position.y,
-        p2_object.transform.position.z
-    );
-
-    Debug.Log("Objects positions reset by adjustment - P1: " + p1_object.transform.position + ", P2: " + p2_object.transform.position);
-}
 
     IEnumerator UI_duration(int time_duration)
     {
