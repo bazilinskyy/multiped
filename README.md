@@ -1,9 +1,8 @@
-# Analysing crossing behaviour of a pedestrian with an automated car and other pedestrian in the traffic scence
-
-This project defines a framework for the analysis of crossing behaviour in the interaction between multiple pedestrians and an automated vehicle, from the perspective of one of the pedestrians using a crowdsourcing approach. The jsPsych framework is used to for the frontend. In the description below, it is assumed that the repo is stored in the folder multiped. Terminal commands lower assume macOS.
+# Multi-pedestrian interaction with automated vehicle
+Framework for the analysis of crossing behaviour in the interaction between multiple pedestrians and an automated vehicle, from the perspective of one of the pedestrians using a crowdsourcing approach.
 
 ## Setup
-Tested with Python 3.9.11. To setup the environment run these two commands in a parent folder of the downloaded repository (replace `/` with `\` and possibly add `--user` if on Windows:
+Tested with Python 3.9.11. To setup the environment run these two commands in a parent folder of the downloaded repository (replace `/` with `\` and possibly add `--user` if on Windows):
 
 **Step 1:**  
 
@@ -29,11 +28,6 @@ Run the code:
 ```command line
 python3 analysis.py
 ```
-
-## Troubleshooting
-### Troubleshooting setup
-#### ERROR: multiped is not a valid editable requirement
-Check that you are indeed in the parent folder for running command `pip install -e multiped`. This command will not work from inside of the folder containing the repo.
 
 
 ## Results
@@ -65,28 +59,34 @@ Trigger press when car is not yielding, the other pedestrian is in back and car 
 
 
 Yaw angle when car is yielding, the other pedestrian is in front and car has no eHMI
-[![Yaw angle when car is yielding, the other pedestrian is in front and car has no eHMI](figures/yaw_group_1.png)](https://htmlpreview.github.io/?https://github.com/bazilinskyy/multiped/blob/main/figures/group_1.html)
+[![Yaw angle when car is yielding, the other pedestrian is in front and car has no eHMI](figures/yaw_group_1.png)](https://htmlpreview.github.io/?https://github.com/bazilinskyy/multiped/blob/main/figures/yaw_group_1.html)
 
 Yaw angle when car is yielding, the other pedestrian is in back and car has no eHMI
-[![Yaw angle when car is yielding, the other pedestrian is in back and car has no eHMI](figures/yaw_group_2.png)](https://htmlpreview.github.io/?https://github.com/bazilinskyy/multiped/blob/main/figures/group_2.html)
+[![Yaw angle when car is yielding, the other pedestrian is in back and car has no eHMI](figures/yaw_group_2.png)](https://htmlpreview.github.io/?https://github.com/bazilinskyy/multiped/blob/main/figures/yaw_group_2.html)
 
 Yaw angle when car is yielding, the other pedestrian is in front and car has eHMI
-[![Yaw angle when car is yielding, the other pedestrian is in front and car has eHMI](figures/yaw_group_3.png)](https://htmlpreview.github.io/?https://github.com/bazilinskyy/multiped/blob/main/figures/group_3.html)
+[![Yaw angle when car is yielding, the other pedestrian is in front and car has eHMI](figures/yaw_group_3.png)](https://htmlpreview.github.io/?https://github.com/bazilinskyy/multiped/blob/main/figures/yaw_group_3.html)
 
 Yaw angle when car is yielding, the other pedestrian is in back and car has eHMI
-[![Yaw angle when car is yielding, the other pedestrian is in back and car has eHMI](figures/yaw_group_4.png)](https://htmlpreview.github.io/?https://github.com/bazilinskyy/multiped/blob/main/figures/group_4.html)
+[![Yaw angle when car is yielding, the other pedestrian is in back and car has eHMI](figures/yaw_group_4.png)](https://htmlpreview.github.io/?https://github.com/bazilinskyy/multiped/blob/main/figures/yaw_group_4.html)
 
 Yaw angle when car is not yielding, the other pedestrian is in front and car has eHMI
-[![Yaw angle when car is not yielding, the other pedestrian is in front and car has eHMI](figures/yaw_group_5.png)](https://htmlpreview.github.io/?https://github.com/bazilinskyy/multiped/blob/main/figures/group_5.html)
+[![Yaw angle when car is not yielding, the other pedestrian is in front and car has eHMI](figures/yaw_group_5.png)](https://htmlpreview.github.io/?https://github.com/bazilinskyy/multiped/blob/main/figures/yaw_group_5.html)
 
 Yaw angle when car is not yielding, the other pedestrian is in back and car has eHMI
-[![Yaw angle when car is not yielding, the other pedestrian is in back and car has eHMI](figures/yaw_group_6.png)](https://htmlpreview.github.io/?https://github.com/bazilinskyy/multiped/blob/main/figures/group_6.html)
+[![Yaw angle when car is not yielding, the other pedestrian is in back and car has eHMI](figures/yaw_group_6.png)](https://htmlpreview.github.io/?https://github.com/bazilinskyy/multiped/blob/main/figures/yaw_group_6.html)
 
 Yaw angle when car is not yielding, the other pedestrian is in front and car has no eHMI
-[![Yaw angle when car is not yielding, the other pedestrian is in front and car has no eHMI](figures/yaw_group_7.png)](https://htmlpreview.github.io/?https://github.com/bazilinskyy/multiped/blob/main/figures/group_7.html)
+[![Yaw angle when car is not yielding, the other pedestrian is in front and car has no eHMI](figures/yaw_group_7.png)](https://htmlpreview.github.io/?https://github.com/bazilinskyy/multiped/blob/main/figures/yaw_group_7.html)
 
 Yaw angle when car is not yielding, the other pedestrian is in back and car has no eHMI
-[![Yaw angle when car is not yielding, the other pedestrian is in back and car has no eHMI](figures/yaw_group_8.png)](https://htmlpreview.github.io/?https://github.com/bazilinskyy/multiped/blob/main/figures/group_8.html)
+[![Yaw angle when car is not yielding, the other pedestrian is in back and car has no eHMI](figures/yaw_group_8.png)](https://htmlpreview.github.io/?https://github.com/bazilinskyy/multiped/blob/main/figures/yaw_group_8.html)
+
+## Troubleshooting
+### Troubleshooting setup
+#### ERROR: multiped is not a valid editable requirement
+Check that you are indeed in the parent folder for running command `pip install -e multiped`. This command will not work from inside of the folder containing the repo.
+
 
 ## Contact
 If you have any questions or suggestions, feel free to reach out to md_shadab_alam@outlook.com

@@ -45,23 +45,6 @@ class HMD_helper:
 
         return roll, pitch, yaw
 
-    @staticmethod
-    def check_participant_file_exists(directory_path):
-        # Construct the search pattern
-        search_pattern = os.path.join(directory_path, "Participant*.csv")
-        matching_files = glob.glob(search_pattern)
-
-        if matching_files:
-            print(f"Files found: {matching_files}")
-            participant_file = matching_files[0]
-            # Extract the file name without the extension
-            full_file_name = os.path.splitext(os.path.basename(participant_file))[0]
-            # Remove the timestamp
-            participant_no = full_file_name[:-15]
-            return participant_no
-        else:
-            print("No file starting with 'participant' found.")
-
     def move_csv_files(self, participant_no, mapping):
         # Get the readings directory and create a folder inside it named after the participant_no
         readings_folder = common.get_configs("readings")

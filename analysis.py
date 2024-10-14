@@ -13,8 +13,7 @@ logger = CustomLogger(__name__)  # use custom logger
 HMD = HMD_helper()
 
 template = common.get_configs("plotly_template")
-asset_folder = common.get_configs("data")  # initial csv file location
-readings_folder = common.get_configs("readings")  # new location of the csv file with participant id
+readings_folder = common.get_configs("data")  # new location of the csv file with participant id
 mapping = pd.read_csv(common.get_configs("mapping"))  # mapping file
 directory_path = common.get_configs("output")
 first_csv = common.get_configs("input_csv")   # Intake questionairre
@@ -29,11 +28,6 @@ try:
 except Exception as e:
     print(f"Error occurred while creating directory: {e}")
 
-participant_no = HMD.check_participant_file_exists(asset_folder)
-
-if participant_no:
-    HMD.move_csv_files(participant_no, mapping)
-    HMD.delete_unnecessary_meta_files(participant_no, mapping)
 
 group_titles = [
     "Yielding, Front and no eHMI",
