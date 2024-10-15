@@ -487,7 +487,7 @@ class HMD_helper:
                 legend=dict(x=0.113, y=0.986, traceorder="normal", font=dict(size=24)))
 
             # Save the plot
-            base_filename = f"yaw_group_{plot_index + 1}_trigger"
+            base_filename = f"yaw_group_{plot_index + 1}"
             fig.write_image(os.path.join(output_folder, base_filename + ".eps"), width=1600, height=900, scale=3)
             fig.write_image(os.path.join(output_folder, base_filename + ".png"), width=1600, height=900, scale=3)
             fig.write_html(os.path.join(output_folder, base_filename + ".html"))
