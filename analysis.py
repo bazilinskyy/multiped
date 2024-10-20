@@ -47,3 +47,6 @@ HMD.plot_mean_trigger_value_right(readings_folder, mapping, output_folder=direct
 HMD.plot_yaw_movement(readings_folder, mapping, output_folder=directory_path,
                       group_titles=group_titles, legend_labels=legend_labels)
 HMD.radar_plot(readings_folder, mapping, output_folder=directory_path)
+HMD.gender_distribution(first_csv, directory_path)
+HMD.age_distribution(first_csv, directory_path)
+HMD.demographic_distribution(first_csv, directory_path)

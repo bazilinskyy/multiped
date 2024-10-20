@@ -32,6 +32,15 @@ python3 analysis.py
 
 ## Results
 
+Demographic Distribution of the participants
+[![Demographic Distribution of the participants](figures/demographic.png)](https://htmlpreview.github.io/?https://github.com/bazilinskyy/multiped/blob/main/figures/demographic.html)
+
+Age Distribution of the participants
+[![Age Distribution of the participants](figures/age.png)](https://htmlpreview.github.io/?https://github.com/bazilinskyy/multiped/blob/main/figures/age.html)
+
+Gender Distribution of the participants
+[![Gender Distribution of the participants](gender.png)](https://htmlpreview.github.io/?https://github.com/bazilinskyy/multiped/blob/main/figures/gender.html)
+
 Trigger press when car is yielding, the other pedestrian is in front and car has no eHMI
 [![Trigger press when car is yielding, the other pedestrian is in front and car has no eHMI](figures/group_1_trigger.png)](https://htmlpreview.github.io/?https://github.com/bazilinskyy/multiped/blob/main/figures/group_1_trigger.html)
 
