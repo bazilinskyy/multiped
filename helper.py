@@ -353,7 +353,7 @@ class HMD_helper:
             polar=dict(
                 radialaxis=dict(
                     visible=True,
-                    range=[0, 80]  # Adjust based on the metric values, or set dynamically if needed
+                    range=[0, 100]  # Adjust based on the metric values, or set dynamically if needed
                 )
             ),
             showlegend=True,
@@ -604,6 +604,7 @@ class HMD_helper:
             "Indian": "India",
             "indian": "India",
             "italian": "Italy",
+            "Italian": "Italy",
             "Chinese": "China",
             "Austrian": "Austria",
             "Maltese": "Malta",
