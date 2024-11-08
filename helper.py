@@ -610,7 +610,10 @@ class HMD_helper:
             "Maltese": "Malta",
             "Indonesian": "Indonesia",
             "Portuguese": "Portugal",
-            "Romanian": "Romania"
+            "Romanian": "Romania",
+            "Moroccan": "Morocco",
+            "Iranian": "Iran",
+            "Canadian": "Canada"
 
         }
 
@@ -670,7 +673,7 @@ class HMD_helper:
         ])
 
         # Calculate width of each bar for full image fill
-        bar_width = (1.0 / len(demo)) * 8.8  # Assuming evenly spaced bars
+        bar_width = (1.0 / len(demo)) * 11.8  # Assuming evenly spaced bars
 
         # Add flag images as overlays for each country
         for i, country in enumerate(demo):
