@@ -1,21 +1,25 @@
 import pandas as pd
 import os
 import plotly.graph_objects as go
-import plotly.io as pio  # noqa:F401
-import plotly.express as px  # noqa:F401
-from plotly.subplots import make_subplots
+import plotly.io as pio
+import pycountry
 import math
 import glob
 import shutil  # Added for moving files
 import common
 from custom_logger import CustomLogger
 import re
-import numpy as np
+from PIL import Image
+import requests
+from io import BytesIO
+import base64
 
 logger = CustomLogger(__name__)  # use custom logger
 template = common.get_configs("plotly_template")
 
 
+# Todo: Mark the time when the car has started to become visible, started to yield,
+# stopped, started to accelerate and taking a turn finally
 class HMD_helper:
     def __init__(self):
         pass
@@ -46,21 +50,15 @@ class HMD_helper:
         return roll, pitch, yaw
 
     @staticmethod
-    def check_participant_file_exists(directory_path):
-        # Construct the search pattern
-        search_pattern = os.path.join(directory_path, "Participant*.csv")
-        matching_files = glob.glob(search_pattern)
-
-        if matching_files:
-            print(f"Files found: {matching_files}")
-            participant_file = matching_files[0]
-            # Extract the file name without the extension
-            full_file_name = os.path.splitext(os.path.basename(participant_file))[0]
-            # Remove the timestamp
-            participant_no = full_file_name[:-15]
-            return participant_no
-        else:
-            print("No file starting with 'participant' found.")
+    def get_flag_image_url(country_name):
+        """Fetches the flag image URL for a given country using ISO alpha-2 country codes."""
+        try:
+            # Convert country name to ISO alpha-2 country code
+            country = pycountry.countries.lookup(country_name)
+            # Use a flag API service that generates flags based on the country code
+            return f"https://flagcdn.com/w320/{country.alpha_2.lower()}.png"  # Example API from flagcdn.com
+        except LookupError:
+            return None  # Return None if country not found
 
     def move_csv_files(self, participant_no, mapping):
         # Get the readings directory and create a folder inside it named after the participant_no
@@ -355,7 +353,7 @@ class HMD_helper:
             polar=dict(
                 radialaxis=dict(
                     visible=True,
-                    range=[0, 80]  # Adjust based on the metric values, or set dynamically if needed
+                    range=[0, 100]  # Adjust based on the metric values, or set dynamically if needed
                 )
             ),
             showlegend=True,
@@ -504,7 +502,7 @@ class HMD_helper:
                 legend=dict(x=0.113, y=0.986, traceorder="normal", font=dict(size=24)))
 
             # Save the plot
-            base_filename = f"yaw_group_{plot_index + 1}_trigger"
+            base_filename = f"yaw_group_{plot_index + 1}"
             fig.write_image(os.path.join(output_folder, base_filename + ".eps"), width=1600, height=900, scale=3)
             fig.write_image(os.path.join(output_folder, base_filename + ".png"), width=1600, height=900, scale=3)
             fig.write_html(os.path.join(output_folder, base_filename + ".html"))
@@ -513,3 +511,200 @@ class HMD_helper:
 
             # Show the plot
             fig.show()
+
+    @staticmethod
+    def gender_distribution(df, output_folder):
+        # Check if df is a string (file path), and read it as a DataFrame if necessary
+        if isinstance(df, str):
+            df = pd.read_csv(df)
+        # Count the occurrences of each gender
+        gender_counts = df.groupby('What is your gender?').size().reset_index(name='count')
+
+        # Drop any NaN values that may arise from invalid gender entries
+        gender_counts = gender_counts.dropna(subset=['What is your gender?'])
+
+        # Extract data for plotting
+        genders = gender_counts['What is your gender?'].tolist()
+        counts = gender_counts['count'].tolist()
+
+        # Create the pie chart
+        fig = go.Figure(data=[
+            go.Pie(labels=genders, values=counts, hole=0.0, marker=dict(colors=['red', 'blue', 'green']),
+                   showlegend=True)
+        ])
+
+        # Update layout
+        fig.update_layout(
+            legend_title_text="Gender"
+        )
+
+        # Save the figure in different formats
+        base_filename = "gender"
+        fig.write_image(os.path.join(output_folder, base_filename + ".png"), width=1600, height=900, scale=3)
+        fig.write_image(os.path.join(output_folder, base_filename + ".eps"), width=1600, height=900, scale=3)
+        pio.write_html(fig, file=os.path.join(output_folder, base_filename + ".html"), auto_open=True)
+
+    @staticmethod
+    def age_distribution(df, output_folder):
+        # Check if df is a string (file path), and read it as a DataFrame if necessary
+        if isinstance(df, str):
+            df = pd.read_csv(df)
+
+        # Count the occurrences of each age
+        age_counts = df.groupby('What is your age (in years)?').size().reset_index(name='count')
+
+        # Convert the 'What is your age (in years)?' column to numeric (ignoring errors for non-numeric values)
+        age_counts['What is your age (in years)?'] = pd.to_numeric(age_counts['What is your age (in years)?'],
+                                                                   errors='coerce')
+
+        # Drop any NaN values that may arise from invalid age entries
+        age_counts = age_counts.dropna(subset=['What is your age (in years)?'])
+
+        # Sort the DataFrame by age in ascending order
+        age_counts = age_counts.sort_values(by='What is your age (in years)?')
+
+        # Extract data for plotting
+        age = age_counts['What is your age (in years)?'].tolist()
+        counts = age_counts['count'].tolist()
+
+        # Add ' years' to each age label
+        age_labels = [f"{int(a)} years" for a in age]  # Convert age values back to integers
+
+        # Create the pie chart
+        fig = go.Figure(data=[
+            go.Pie(labels=age_labels, values=counts, hole=0.0, showlegend=True, sort=False)
+        ])
+
+        # Update layout
+        fig.update_layout(
+            legend_title_text="Age"
+        )
+
+        # Save the figure in different formats
+        base_filename = "age"
+        fig.write_image(os.path.join(output_folder, base_filename + ".png"), width=1600, height=900, scale=3)
+        fig.write_image(os.path.join(output_folder, base_filename + ".eps"), width=1600, height=900, scale=3)
+        fig.write_image(os.path.join(output_folder, base_filename + ".svg"),
+                        width=1600, height=900, scale=3, format="svg")
+        pio.write_html(fig, file=os.path.join(output_folder, base_filename + ".html"), auto_open=True)
+
+    @staticmethod
+    def replace_nationality_variations(df):
+        # Define a dictionary mapping variations of nationality names to consistent values
+        nationality_replacements = {
+            "NL": "Netherlands",
+            "The Netherlands": "Netherlands",
+            "netherlands": "Netherlands",
+            "Netherlands ": "Netherlands",
+            "Nederlandse": "Netherlands",
+            "Dutch": "Netherlands",
+            "Bulgarian": "Bulgaria",
+            "bulgarian": "Bulgaria",
+            "INDIA": "India",
+            "Indian": "India",
+            "indian": "India",
+            "italian": "Italy",
+            "Italian": "Italy",
+            "Chinese": "China",
+            "Austrian": "Austria",
+            "Maltese": "Malta",
+            "Indonesian": "Indonesia",
+            "Portuguese": "Portugal",
+            "Romanian": "Romania",
+            "Moroccan": "Morocco",
+            "Iranian": "Iran",
+            "Canadian": "Canada"
+
+        }
+
+        # Replace all variations of nationality with the consistent values using a dictionary
+        df['What is your nationality?'] = df['What is your nationality?'].replace(nationality_replacements, regex=True)
+
+        return df
+
+    @staticmethod
+    def rotate_image_90_degrees(image_url):
+        """Rotates an image from the URL by 90 degrees and converts it to base64."""
+        response = requests.get(image_url)
+        img = Image.open(BytesIO(response.content))
+        rotated_img = img.rotate(90, expand=True)  # Rotate the image by 90 degrees
+        # Save the rotated image to a BytesIO object
+        rotated_image_io = BytesIO()
+        rotated_img.save(rotated_image_io, format="PNG")
+        rotated_image_io.seek(0)
+
+        # Convert the rotated image to base64
+        base64_image = base64.b64encode(rotated_image_io.read()).decode('utf-8')
+        return f"data:image/png;base64,{base64_image}"
+
+    @staticmethod
+    def demographic_distribution(df, output_folder):
+        # Check if df is a string (file path), and read it as a DataFrame if necessary
+        if isinstance(df, str):
+            df = pd.read_csv(df)
+
+        df = HMD_helper.replace_nationality_variations(df)
+
+        # Count the occurrences of each age
+        demo_counts = df.groupby('What is your nationality?').size().reset_index(name='count')
+
+        # Convert the 'What is your age (in years)?' column to numeric (ignoring errors for non-numeric values)
+        demo_counts['What is your nationality??'] = pd.to_numeric(demo_counts['What is your nationality?'],
+                                                                  errors='coerce')
+
+        # Drop any NaN values that may arise from invalid age entries
+        demo_counts = demo_counts.dropna(subset=['What is your nationality?'])
+
+        # Extract data for plotting
+        demo = demo_counts['What is your nationality?'].tolist()
+        counts = demo_counts['count'].tolist()
+
+        # Fetch flag image URLs and rotate images based on nationality
+        flag_images = {}
+        for country in demo:
+            flag_url = HMD_helper.get_flag_image_url(country)
+            if flag_url:
+                rotated_image_base64 = HMD_helper.rotate_image_90_degrees(flag_url)  # Rotate the image by 90 degrees
+                flag_images[country] = rotated_image_base64  # Store the base64-encoded rotated image
+
+        # Create the bar chart (basic bars without filling)
+        fig = go.Figure(data=[
+            go.Bar(name='Country', x=demo, y=counts, marker=dict(color='white', line=dict(color='black', width=1)))
+        ])
+
+        # Calculate width of each bar for full image fill
+        bar_width = (1.0 / len(demo)) * 11.8  # Assuming evenly spaced bars
+
+        # Add flag images as overlays for each country
+        for i, country in enumerate(demo):
+            if country in flag_images:
+                fig.add_layout_image(
+                    dict(
+                        source=flag_images[country],  # Embed the base64-encoded rotated image
+                        xref="x",
+                        yref="y",
+                        x=country,  # Position the image on the x-axis at the correct bar
+                        y=counts[i],  # Position the image at the top of the bar
+                        sizex=bar_width,  # Adjust the width of the flag image
+                        sizey=counts[i],  # Adjust the height of the flag to fit the bar height
+                        xanchor="center",
+                        yanchor="top",
+                        sizing="stretch"
+                    )
+                )
+
+        # Update layout
+        fig.update_layout(
+            xaxis_title='Country',
+            yaxis_title='Number of participant',
+            xaxis=dict(tickmode='array', tickvals=demo, ticktext=demo),
+            margin=dict(l=40, r=40, t=40, b=40)
+        )
+
+        # Save the figure in different formats
+        base_filename = "demographic"
+        fig.write_image(os.path.join(output_folder, base_filename + ".png"), width=1600, height=900, scale=3)
+        fig.write_image(os.path.join(output_folder, base_filename + ".eps"), width=1600, height=900, scale=3)
+        fig.write_image(os.path.join(output_folder, base_filename + ".svg"),
+                        width=1600, height=900, scale=3, format="svg")
+        pio.write_html(fig, file=os.path.join(output_folder, base_filename + ".html"), auto_open=True)

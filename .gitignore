@@ -126,5 +126,7 @@ multiped/readings.zip
 # Blocker for data in Assets
 multiped-unity/Assets/*.csv
 
-
-readings
+# Saved files
+/output
+/data
+/figures
