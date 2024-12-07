@@ -89,6 +89,8 @@ public class ConditionController : MonoBehaviour
 
     public void Start()
     {
+        ShuffleCSVFile();
+
         writeFilePath = Application.dataPath +"/" +  writeFileName + DateTime.Now.ToString("yyyyMMdd_HHmmss") +  ".csv";            //the patth to stroe the files with the given filename---------------------change it for unique files
 
         if (File.Exists(writeFilePath))
@@ -109,6 +111,43 @@ public class ConditionController : MonoBehaviour
 
         Start2();
 
+    }
+
+        public void ShuffleCSVFile()
+    {
+        string filePath = Application.dataPath + "/../../public/videos/mapping.csv";
+
+        if (!File.Exists(filePath))
+        {
+            Debug.LogError("CSV file not found at: " + filePath);
+            return;
+        }
+
+        // Read the CSV lines into a list
+        var lines = File.ReadAllLines(filePath).ToList();
+
+        if (lines.Count <= 3)
+        {
+            Debug.LogError("The CSV file does not have enough rows to shuffle.");
+            return;
+        }
+
+        // Separate the header (first line) and the data rows
+        var firstThreeRows = lines.Take(3).ToList();
+
+        var data = lines.Skip(3).ToList();  // All rows after the first three rows
+
+        // Shuffle the remaining rows using System.Random (explicitly qualified)
+        System.Random rand = new System.Random(42);  // Set seed for reproducibility
+        var shuffledData = data.OrderBy(x => rand.Next()).ToList();
+
+        // Concatenate the header, first row, and shuffled data
+        var result = firstThreeRows.Concat(shuffledData).ToList();
+
+        // Save the shuffled result back to the CSV file
+        File.WriteAllLines(filePath, result);
+
+        Debug.Log("CSV rows have been shuffled and saved to: " + filePath);
     }
     public IEnumerator ActivatorVR(string YESVR)
     {
