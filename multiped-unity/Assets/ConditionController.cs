@@ -350,6 +350,7 @@ public class ConditionController : MonoBehaviour
                 // Experiment is finished
                 if (conditionCounter == numberConditions - 1) {
                     Debug.Log("Experiment finished");
+                    SaveAllCSVFiles();
                     SceneManager.LoadScene("EndMenu");
                     Application.Quit(); // quit
                 }
@@ -365,6 +366,42 @@ public class ConditionController : MonoBehaviour
                 if (startNextStage == true)
                 Start2();
                                                                                             //Question1();
+            }
+        }
+    }
+
+        private void SaveAllCSVFiles()
+    {
+        // Define the target folder path
+        string targetFolderPath = Path.Combine(Application.dataPath, "../../data/" + writeFileName);
+
+        // Check if the folder exists, and create it if it doesn't
+        if (!Directory.Exists(targetFolderPath))
+        {
+            Directory.CreateDirectory(targetFolderPath);
+            Debug.Log("Created folder: " + targetFolderPath);
+        }
+
+        // Get all CSV files in the Application.dataPath
+        string[] csvFiles = Directory.GetFiles(Application.dataPath, "*.csv");
+
+        foreach (string filePath in csvFiles)
+        {
+            try
+            {
+                // Extract the file name from the full path
+                string fileName = Path.GetFileName(filePath);
+
+                // Define the destination path for the file
+                string destinationPath = Path.Combine(targetFolderPath, fileName);
+
+                // Copy the file to the new folder
+                File.Move(filePath, destinationPath); // true allows overwriting if the file already exists
+                Debug.Log("Copied file: " + fileName + " to " + targetFolderPath);
+            }
+            catch (Exception e)
+            {
+                Debug.LogError("Failed to copy file: " + filePath + ". Error: " + e.Message);
             }
         }
     }
