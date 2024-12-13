@@ -89,9 +89,23 @@ public class ConditionController : MonoBehaviour
 
     public void Start()
     {
+        string filePath = Application.dataPath + "/../../mapping.csv";
         ShuffleCSVFile();
+        // Define the path for saving the CSV copy
+        string mappingFilePath = Application.dataPath + "/" + writeFileName + "_mapping.csv";
 
-        writeFilePath = Application.dataPath +"/" +  writeFileName + DateTime.Now.ToString("yyyyMMdd_HHmmss") +  ".csv";            //the patth to stroe the files with the given filename---------------------change it for unique files
+        try
+        {
+            // Copy the original CSV file to the new location
+            File.Copy(filePath, mappingFilePath, true); // true allows overwriting if the file already exists
+            Debug.Log("CSV file copied successfully to: " + mappingFilePath);
+        }
+        catch (Exception e)
+        {
+            Debug.LogError("Failed to copy the CSV file: " + e.Message);
+        }
+
+        writeFilePath = Application.dataPath +"/" +  writeFileName + "_" +DateTime.Now.ToString("yyyyMMdd_HHmmss") +  ".csv";            //the patth to stroe the files with the given filename---------------------change it for unique files
 
         if (File.Exists(writeFilePath))
         {
@@ -99,9 +113,9 @@ public class ConditionController : MonoBehaviour
             File.Delete(writeFilePath);
         }
 
+
         Debug.Log("Start");
         // Import trial data
-        string filePath = Application.dataPath + "/../../public/videos/mapping.csv";
         string text = File.ReadAllText(filePath);
         trials = CSVSerializer.Deserialize<Trial>(text);
         numberConditions = trials.Length; // set number of conditions
@@ -138,7 +152,7 @@ public class ConditionController : MonoBehaviour
         var data = lines.Skip(3).ToList();  // All rows after the first three rows
 
         // Shuffle the remaining rows using System.Random (explicitly qualified)
-        System.Random rand = new System.Random(42);  // Set seed for reproducibility
+        System.Random rand = new System.Random();  // Set seed for reproducibility
         var shuffledData = data.OrderBy(x => rand.Next()).ToList();
 
         // Concatenate the header, first row, and shuffled data
