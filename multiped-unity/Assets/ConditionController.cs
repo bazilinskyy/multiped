@@ -89,7 +89,21 @@ public class ConditionController : MonoBehaviour
 
     public void Start()
     {
+        string filePath = Application.dataPath + "/../../mapping.csv";
         ShuffleCSVFile();
+        // Define the path for saving the CSV copy
+        string mappingFilePath = Application.dataPath + "/" + writeFileName + "_mapping.csv";
+
+        try
+        {
+            // Copy the original CSV file to the new location
+            File.Copy(filePath, mappingFilePath, true); // true allows overwriting if the file already exists
+            Debug.Log("CSV file copied successfully to: " + mappingFilePath);
+        }
+        catch (Exception e)
+        {
+            Debug.LogError("Failed to copy the CSV file: " + e.Message);
+        }
 
         writeFilePath = Application.dataPath +"/" +  writeFileName + DateTime.Now.ToString("yyyyMMdd_HHmmss") +  ".csv";            //the patth to stroe the files with the given filename---------------------change it for unique files
 
