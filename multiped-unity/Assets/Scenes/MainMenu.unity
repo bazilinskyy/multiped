@@ -1718,8 +1718,8 @@ MonoBehaviour:
       m_Calls: []
   m_text: 'Hello!
 
-    You need to press the trigger button only when you feel it''s
-    NOT SAFE to cross the road.
+    You need to press the trigger button only when you feel it
+    is NOT SAFE to cross the road.
 
     Please click to start.'
   m_isRightToLeft: 0
