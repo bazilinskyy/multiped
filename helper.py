@@ -6,6 +6,8 @@ import pycountry
 import math
 import glob
 import shutil  # Added for moving files
+# For OneEuroFilter, see https://github.com/casiez/OneEuroFilter
+from OneEuroFilter import OneEuroFilter
 import common
 from custom_logger import CustomLogger
 import re
@@ -13,9 +15,13 @@ from PIL import Image
 import requests
 from io import BytesIO
 import base64
+import pickle
+from scipy.stats import ttest_ind
 
 logger = CustomLogger(__name__)  # use custom logger
 template = common.get_configs("plotly_template")
+
+pickle_file_path = 'analysis_results.pkl'
 
 
 # Todo: Mark the time when the car has started to become visible, started to yield,
@@ -60,49 +66,199 @@ class HMD_helper:
         except LookupError:
             return None  # Return None if country not found
 
-    def move_csv_files(self, participant_no, mapping):
-        # Get the readings directory and create a folder inside it named after the participant_no
-        readings_folder = common.get_configs("readings")
-        participant_folder = os.path.join(readings_folder, str(participant_no))
+    @staticmethod
+    def gender_distribution(df, output_folder):
+        # Check if df is a string (file path), and read it as a DataFrame if necessary
+        if isinstance(df, str):
+            df = pd.read_csv(df)
+        # Count the occurrences of each gender
+        gender_counts = df.groupby('What is your gender?').size().reset_index(name='count')
 
-        # Check if the participant folder exists; if not, create it
-        if not os.path.exists(participant_folder):
-            os.makedirs(
-                participant_folder
-            )  # Use makedirs to ensure all directories are created
-            print(f"Folder '{participant_folder}' created.")
-        else:
-            print(f"Folder '{participant_folder}' already exists.")
+        # Drop any NaN values that may arise from invalid gender entries
+        gender_counts = gender_counts.dropna(subset=['What is your gender?'])
 
-        # Data folder where CSV files are originally located
-        data_folder_path = common.get_configs("data")
+        # Extract data for plotting
+        genders = gender_counts['What is your gender?'].tolist()
+        counts = gender_counts['count'].tolist()
 
-        # Move the specific "participants...csv" file
-        participant_file_pattern = os.path.join(
-            data_folder_path, f"{participant_no}*.csv"
+        # Create the pie chart
+        fig = go.Figure(data=[
+            go.Pie(labels=genders, values=counts, hole=0.0, marker=dict(colors=['red', 'blue', 'green']),
+                   showlegend=True)
+        ])
+
+        # Update layout
+        fig.update_layout(
+            legend_title_text="Gender"
         )
-        participant_files = glob.glob(participant_file_pattern)
 
-        if participant_files:
-            for participant_file in participant_files:
-                dest_file = os.path.join(
-                    participant_folder, os.path.basename(participant_file)
+        # Save the figure in different formats
+        base_filename = "gender"
+        fig.write_image(os.path.join(output_folder, base_filename + ".png"), width=1600, height=900, scale=3)
+        fig.write_image(os.path.join(output_folder, base_filename + ".eps"), width=1600, height=900, scale=3)
+        pio.write_html(fig, file=os.path.join(output_folder, base_filename + ".html"), auto_open=True)
+
+    @staticmethod
+    def age_distribution(df, output_folder):
+        # Check if df is a string (file path), and read it as a DataFrame if necessary
+        if isinstance(df, str):
+            df = pd.read_csv(df)
+
+        # Count the occurrences of each age
+        age_counts = df.groupby('What is your age (in years)?').size().reset_index(name='count')
+
+        # Convert the 'What is your age (in years)?' column to numeric (ignoring errors for non-numeric values)
+        age_counts['What is your age (in years)?'] = pd.to_numeric(age_counts['What is your age (in years)?'],
+                                                                   errors='coerce')
+
+        # Drop any NaN values that may arise from invalid age entries
+        age_counts = age_counts.dropna(subset=['What is your age (in years)?'])
+
+        # Sort the DataFrame by age in ascending order
+        age_counts = age_counts.sort_values(by='What is your age (in years)?')
+
+        # Extract data for plotting
+        age = age_counts['What is your age (in years)?'].tolist()
+        counts = age_counts['count'].tolist()
+
+        # Add ' years' to each age label
+        age_labels = [f"{int(a)} years" for a in age]  # Convert age values back to integers
+
+        # Create the pie chart
+        fig = go.Figure(data=[
+            go.Pie(labels=age_labels, values=counts, hole=0.0, showlegend=True, sort=False)
+        ])
+
+        # Update layout
+        fig.update_layout(
+            legend_title_text="Age"
+        )
+
+        # Save the figure in different formats
+        base_filename = "age"
+        fig.write_image(os.path.join(output_folder, base_filename + ".png"), width=1600, height=900, scale=3)
+        fig.write_image(os.path.join(output_folder, base_filename + ".eps"), width=1600, height=900, scale=3)
+        fig.write_image(os.path.join(output_folder, base_filename + ".svg"),
+                        width=1600, height=900, scale=3, format="svg")
+        pio.write_html(fig, file=os.path.join(output_folder, base_filename + ".html"), auto_open=True)
+
+    @staticmethod
+    def replace_nationality_variations(df):
+        # Define a dictionary mapping variations of nationality names to consistent values
+        nationality_replacements = {
+            "NL": "Netherlands",
+            "The Netherlands": "Netherlands",
+            "netherlands": "Netherlands",
+            "Netherlands ": "Netherlands",
+            "Nederlandse": "Netherlands",
+            "Dutch": "Netherlands",
+            "Bulgarian": "Bulgaria",
+            "bulgarian": "Bulgaria",
+            "INDIA": "India",
+            "Indian": "India",
+            "indian": "India",
+            "italian": "Italy",
+            "Italian": "Italy",
+            "Chinese": "China",
+            "Austrian": "Austria",
+            "Maltese": "Malta",
+            "Indonesian": "Indonesia",
+            "Portuguese": "Portugal",
+            "Romanian": "Romania"
+
+        }
+
+        # Replace all variations of nationality with the consistent values using a dictionary
+        df['What is your nationality?'] = df['What is your nationality?'].replace(nationality_replacements, regex=True)
+
+        return df
+
+    @staticmethod
+    def rotate_image_90_degrees(image_url):
+        """Rotates an image from the URL by 90 degrees and converts it to base64."""
+        response = requests.get(image_url)
+        img = Image.open(BytesIO(response.content))
+        rotated_img = img.rotate(90, expand=True)  # Rotate the image by 90 degrees
+        # Save the rotated image to a BytesIO object
+        rotated_image_io = BytesIO()
+        rotated_img.save(rotated_image_io, format="PNG")
+        rotated_image_io.seek(0)
+
+        # Convert the rotated image to base64
+        base64_image = base64.b64encode(rotated_image_io.read()).decode('utf-8')
+        return f"data:image/png;base64,{base64_image}"
+
+    @staticmethod
+    def demographic_distribution(df, output_folder):
+        # Check if df is a string (file path), and read it as a DataFrame if necessary
+        if isinstance(df, str):
+            df = pd.read_csv(df)
+
+        df = HMD_helper.replace_nationality_variations(df)
+
+        # Count the occurrences of each age
+        demo_counts = df.groupby('What is your nationality?').size().reset_index(name='count')
+
+        # Convert the 'What is your age (in years)?' column to numeric (ignoring errors for non-numeric values)
+        demo_counts['What is your nationality??'] = pd.to_numeric(demo_counts['What is your nationality?'],
+                                                                  errors='coerce')
+
+        # Drop any NaN values that may arise from invalid age entries
+        demo_counts = demo_counts.dropna(subset=['What is your nationality?'])
+
+        # Extract data for plotting
+        demo = demo_counts['What is your nationality?'].tolist()
+        counts = demo_counts['count'].tolist()
+
+        # Fetch flag image URLs and rotate images based on nationality
+        flag_images = {}
+        for country in demo:
+            flag_url = HMD_helper.get_flag_image_url(country)
+            if flag_url:
+                rotated_image_base64 = HMD_helper.rotate_image_90_degrees(flag_url)  # Rotate the image by 90 degrees
+                flag_images[country] = rotated_image_base64  # Store the base64-encoded rotated image
+
+        # Create the bar chart (basic bars without filling)
+        fig = go.Figure(data=[
+            go.Bar(name='Country', x=demo, y=counts, marker=dict(color='white', line=dict(color='black', width=1)))
+        ])
+
+        # Calculate width of each bar for full image fill
+        bar_width = (1.0 / len(demo)) * 8.8  # Assuming evenly spaced bars
+
+        # Add flag images as overlays for each country
+        for i, country in enumerate(demo):
+            if country in flag_images:
+                fig.add_layout_image(
+                    dict(
+                        source=flag_images[country],  # Embed the base64-encoded rotated image
+                        xref="x",
+                        yref="y",
+                        x=country,  # Position the image on the x-axis at the correct bar
+                        y=counts[i],  # Position the image at the top of the bar
+                        sizex=bar_width,  # Adjust the width of the flag image
+                        sizey=counts[i],  # Adjust the height of the flag to fit the bar height
+                        xanchor="center",
+                        yanchor="top",
+                        sizing="stretch"
+                    )
                 )
-                shutil.move(participant_file, dest_file)
-                print(f"Moved '{participant_file}' to '{dest_file}'.")
-        else:
-            print(f"No file matching '{participant_no}*.csv' found.")
 
-        # Iterate over video IDs in the mapping to move corresponding CSV files
-        for video_id in mapping["video_id"]:
-            src_file = os.path.join(data_folder_path, f"{video_id}.csv")
-            dest_file = os.path.join(participant_folder, f"{video_id}.csv")
+        # Update layout
+        fig.update_layout(
+            xaxis_title='Country',
+            yaxis_title='Number of participant',
+            xaxis=dict(tickmode='array', tickvals=demo, ticktext=demo),
+            margin=dict(l=40, r=40, t=40, b=40)
+        )
 
-            if os.path.exists(src_file):
-                shutil.move(src_file, dest_file)
-                print(f"Moved '{src_file}' to '{dest_file}'.")
-            else:
-                print(f"File '{src_file}' does not exist.")
+        # Save the figure in different formats
+        base_filename = "demographic"
+        fig.write_image(os.path.join(output_folder, base_filename + ".png"), width=1600, height=900, scale=3)
+        fig.write_image(os.path.join(output_folder, base_filename + ".eps"), width=1600, height=900, scale=3)
+        fig.write_image(os.path.join(output_folder, base_filename + ".svg"),
+                        width=1600, height=900, scale=3, format="svg")
+        pio.write_html(fig, file=os.path.join(output_folder, base_filename + ".html"), auto_open=True)
 
     @staticmethod
     def plot_mean_trigger_value_right(readings_folder, mapping, output_folder, group_titles=None, legend_labels=None):
@@ -154,21 +310,22 @@ class HMD_helper:
 
                     # Get the corresponding video_length from the mapping
                     video_length = mapping.loc[mapping["video_id"] == csv_file_.rstrip('.csv'),
-                                               "video_length"].values[0]
+                                           "video_length"].values[0]
                     video_length = video_length / 1000
 
                     # Filter the DataFrame to only include rows where Timestamp >= 0 and <= video_length
                     df = df[(df["Timestamp"] >= 0) & (df["Timestamp"] <= video_length)]
 
-                    # Add the DataFrame to the dictionary; create a list if it doesn't exist
-                    if csv_file_ in dataframes_dict:
-                        dataframes_dict[csv_file_].append(df)
+                    # Use video_id (without .csv) as the key in the dictionary
+                    video_id = csv_file_.rstrip('.csv')
+                    if video_id in dataframes_dict:
+                        dataframes_dict[video_id].append(df)
                     else:
-                        dataframes_dict[csv_file_] = [df]
+                        dataframes_dict[video_id] = [df]
 
         # Merge DataFrames and calculate the average if needed
         merged_dataframes = {}
-        for csv_file_, df_list in dataframes_dict.items():
+        for video_id, df_list in dataframes_dict.items():
             if len(df_list) > 1:
                 # Concatenate and then average if there are multiple DataFrames
                 merged_df = pd.concat(df_list).groupby(level=0).mean()
@@ -176,7 +333,8 @@ class HMD_helper:
                 # If there's only one DataFrame, use it directly
                 merged_df = df_list[0]
 
-            merged_dataframes[csv_file_] = merged_df
+            # Use video_id as the key instead of csv_file_
+            merged_dataframes[video_id] = merged_df
 
         # Get the total number of plots needed (each containing 5 curves)
         num_plots = len(merged_dataframes) // 5 + (1 if len(merged_dataframes) % 5 != 0 else 0)
@@ -191,7 +349,7 @@ class HMD_helper:
             end_idx = min(start_idx + 5, len(merged_dataframes))
 
             # Add traces for this group
-            for i, (csv_file_, merged_df) in enumerate(list(merged_dataframes.items())[start_idx:end_idx]):
+            for i, (video_id, merged_df) in enumerate(list(merged_dataframes.items())[start_idx:end_idx]):
                 fig.add_trace(
                     go.Scatter(
                         x=merged_df["Timestamp"],
@@ -231,7 +389,8 @@ class HMD_helper:
                             width=1600, height=900, scale=3, format="svg")
 
             # Show the plot
-            fig.show()
+            # fig.show()
+        return merged_dataframes
 
     @staticmethod
     def sort_and_group_videos(grouped_videos):
@@ -513,195 +672,176 @@ class HMD_helper:
             fig.show()
 
     @staticmethod
-    def gender_distribution(df, output_folder):
-        # Check if df is a string (file path), and read it as a DataFrame if necessary
-        if isinstance(df, str):
-            df = pd.read_csv(df)
-        # Count the occurrences of each gender
-        gender_counts = df.groupby('What is your gender?').size().reset_index(name='count')
+    def ttest(readings_folder, mapping, directory_path, group_titles,  legend_labels):
+        trigger_values = HMD_helper.plot_mean_trigger_value_right(readings_folder, mapping,
+                                                                  output_folder=directory_path,
+                                                                  group_titles=group_titles,
+                                                                  legend_labels=legend_labels)
+        eHMI_off = mapping[(mapping["yielding"] == 0) & (mapping["camera"] == 0) & (mapping["eHMIOn"] == 0)]
+        eHMI_on = mapping[(mapping["yielding"] == 0) & (mapping["camera"] == 0) & (mapping["eHMIOn"] == 1)]
 
-        # Drop any NaN values that may arise from invalid gender entries
-        gender_counts = gender_counts.dropna(subset=['What is your gender?'])
+        # Get the video_ids from eHMI
+        video_ids_off = eHMI_off["video_id"].unique()
+        video_ids_on = eHMI_on["video_id"].unique()
 
-        # Extract data for plotting
-        genders = gender_counts['What is your gender?'].tolist()
-        counts = gender_counts['count'].tolist()
+        # Filter trigger values based on the video_ids
+        filtered_trigger_values_off = {video_id: data for video_id,
+                                       data in trigger_values.items() if video_id in video_ids_off}
+        filtered_trigger_values_on = {video_id: data for video_id,
+                                      data in trigger_values.items() if video_id in video_ids_on}
 
-        # Create the pie chart
-        fig = go.Figure(data=[
-            go.Pie(labels=genders, values=counts, hole=0.0, marker=dict(colors=['red', 'blue', 'green']),
-                   showlegend=True)
-        ])
+        # Combine all DataFrames, aligning them on 'Timestamp'
+        combined_df_off = pd.concat(filtered_trigger_values_off.values())
+        combined_df_on = pd.concat(filtered_trigger_values_on.values())
 
-        # Update layout
-        fig.update_layout(
-            legend_title_text="Gender"
+        # Group by 'Timestamp' and calculate the mean of 'TriggerValueRight'
+        average_per_timestamp_off = combined_df_off.groupby('Timestamp')['TriggerValueRight'].mean()
+        average_per_timestamp_on = combined_df_on.groupby('Timestamp')['TriggerValueRight'].mean()
+
+        # Convert result to a DataFrame for easier viewing
+        average_per_timestamp_df_off = average_per_timestamp_off.reset_index()
+        average_per_timestamp_df_on = average_per_timestamp_on.reset_index()
+
+        # Step 1: Align timestamps
+        aligned_df = pd.merge(
+            average_per_timestamp_df_off, average_per_timestamp_df_on, on='Timestamp',
+            suffixes=('_off', '_on')
         )
 
-        # Save the figure in different formats
-        base_filename = "gender"
-        fig.write_image(os.path.join(output_folder, base_filename + ".png"), width=1600, height=900, scale=3)
-        fig.write_image(os.path.join(output_folder, base_filename + ".eps"), width=1600, height=900, scale=3)
-        pio.write_html(fig, file=os.path.join(output_folder, base_filename + ".html"), auto_open=True)
+        # Step 2: Extract values for the test
+        values_off = aligned_df['TriggerValueRight_off']
+        values_on = aligned_df['TriggerValueRight_on']
 
-    @staticmethod
-    def age_distribution(df, output_folder):
-        # Check if df is a string (file path), and read it as a DataFrame if necessary
-        if isinstance(df, str):
-            df = pd.read_csv(df)
+        # Step 3: Perform the t-test
+        t_stat, p_value = ttest_ind(values_off, values_on)
 
-        # Count the occurrences of each age
-        age_counts = df.groupby('What is your age (in years)?').size().reset_index(name='count')
+        # Display the results
+        print(f"T-statistic: {t_stat}")
+        print(f"P-value: {p_value}")
 
-        # Convert the 'What is your age (in years)?' column to numeric (ignoring errors for non-numeric values)
-        age_counts['What is your age (in years)?'] = pd.to_numeric(age_counts['What is your age (in years)?'],
-                                                                   errors='coerce')
+    def smoothen_filter(self, signal, type_flter='OneEuroFilter'):
+        """Smoothen list with a filter.
 
-        # Drop any NaN values that may arise from invalid age entries
-        age_counts = age_counts.dropna(subset=['What is your age (in years)?'])
+        Args:
+            signal (list): input signal to smoothen
+            type_flter (str, optional): type_flter of filter to use.
 
-        # Sort the DataFrame by age in ascending order
-        age_counts = age_counts.sort_values(by='What is your age (in years)?')
+        Returns:
+            list: list with smoothened data.
+        """
+        if type_flter == 'OneEuroFilter':
+            filter_kp = OneEuroFilter(freq=tr.common.get_configs('freq'),            # frequency
+                                      mincutoff=tr.common.get_configs('mincutoff'),  # minimum cutoff frequency
+                                      beta=tr.common.get_configs('beta'))            # beta value
+            return [filter_kp(value) for value in signal]
+        else:
+            logger.error('Specified filter {} not implemented.', type_flter)
+            return -1
 
-        # Extract data for plotting
-        age = age_counts['What is your age (in years)?'].tolist()
-        counts = age_counts['count'].tolist()
+    def ttest(self, signal_1, signal_2, type='two-sided', paired=True):
+        """
+        Perform a t-test on two signals, computing p-values and significance.
 
-        # Add ' years' to each age label
-        age_labels = [f"{int(a)} years" for a in age]  # Convert age values back to integers
+        Args:
+            signal_1 (list): First signal, a list of numeric values.
+            signal_2 (list): Second signal, a list of numeric values.
+            type (str, optional): Type of t-test to perform. Options are "two-sided",
+                                  "greater", or "less". Defaults to "two-sided".
+            paired (bool, optional): Indicates whether to perform a paired t-test
+                                     (`ttest_rel`) or an independent t-test (`ttest_ind`).
+                                     Defaults to True (paired).
 
-        # Create the pie chart
-        fig = go.Figure(data=[
-            go.Pie(labels=age_labels, values=counts, hole=0.0, showlegend=True, sort=False)
-        ])
+        Returns:
+            list: A list containing two elements:
+                  - p_values (list): Raw p-values for each bin.
+                  - significance (list): Binary flags (0 or 1) indicating whether
+                    the p-value for each bin is below the threshold configured in
+                    `tr.common.get_configs('p_value')`.
+        """
+        # Check if the lengths of the two signals are the same
+        if len(signal_1) != len(signal_2):
+            logger.error('The lengths of signal_1 and signal_2 must be the same.')
+            return -1
+        # convert to numpy arrays if signal_1 and signal_2 are lists
+        signal_1 = np.asarray(signal_1)
+        signal_2 = np.asarray(signal_2)
+        p_values = []  # record raw p value for each bin
+        significance = []  # record binary flag (0 or 1) if p value < tr.common.get_configs('p_value'))
+        # perform t-test for each value (treated as an independent bin)
+        for i in range(len(signal_1)):
+            if paired:
+                t_stat, p_value = ttest_rel([signal_1[i]], [signal_2[i]], axis=-1, alternative=type)
+            else:
+                t_stat, p_value = ttest_ind([signal_1[i]], [signal_2[i]], axis=-1, alternative=type, equal_var=False)
+            # record raw p value
+            p_values.append(p_value)
+            # determine significance for this value
+            significance.append(int(p_value < tr.common.get_configs('p_value')))
+        # return raw p values and binary flags for significance for output
+        return [p_values, significance]
 
-        # Update layout
-        fig.update_layout(
-            legend_title_text="Age"
-        )
+    def anova(self, signals):
+        """
+        Perform an ANOVA test on three signals, computing p-values and significance.
 
-        # Save the figure in different formats
-        base_filename = "age"
-        fig.write_image(os.path.join(output_folder, base_filename + ".png"), width=1600, height=900, scale=3)
-        fig.write_image(os.path.join(output_folder, base_filename + ".eps"), width=1600, height=900, scale=3)
-        fig.write_image(os.path.join(output_folder, base_filename + ".svg"),
-                        width=1600, height=900, scale=3, format="svg")
-        pio.write_html(fig, file=os.path.join(output_folder, base_filename + ".html"), auto_open=True)
+        Args:
+            signal_1 (list): First signal, a list of numeric values.
+            signal_2 (list): Second signal, a list of numeric values.
+            signal_3 (list): Third signal, a list of numeric values.
 
-    @staticmethod
-    def replace_nationality_variations(df):
-        # Define a dictionary mapping variations of nationality names to consistent values
-        nationality_replacements = {
-            "NL": "Netherlands",
-            "The Netherlands": "Netherlands",
-            "netherlands": "Netherlands",
-            "Netherlands ": "Netherlands",
-            "Nederlandse": "Netherlands",
-            "Dutch": "Netherlands",
-            "Bulgarian": "Bulgaria",
-            "bulgarian": "Bulgaria",
-            "INDIA": "India",
-            "Indian": "India",
-            "indian": "India",
-            "italian": "Italy",
-            "Italian": "Italy",
-            "Chinese": "China",
-            "Austrian": "Austria",
-            "Maltese": "Malta",
-            "Indonesian": "Indonesia",
-            "Portuguese": "Portugal",
-            "Romanian": "Romania"
+        Returns:
+            list: A list containing two elements:
+                  - p_values (list): Raw p-values for each bin.
+                  - significance (list): Binary flags (0 or 1) indicating whether
+                    the p-value for each bin is below the threshold configured in
+                    `tr.common.get_configs('p_value')`.
+        """
+        # check if the lengths of the three signals are the same
+        # convert signals to numpy arrays if they are lists
+        p_values = []  # record raw p-values for each bin
+        significance = []  # record binary flags (0 or 1) if p-value < tr.common.get_configs('p_value')
+        # perform ANOVA test for each value (treated as an independent bin)
+        transposed_data = list(zip(*signals['signals']))
+        for i in range(len(transposed_data)):
+            f_stat, p_value = f_oneway(*transposed_data[i])
+            # record raw p-value
+            p_values.append(p_value)
+            # determine significance for this value
+            significance.append(int(p_value < tr.common.get_configs('p_value')))
+        # return raw p-values and binary flags for significance for output
+        return [p_values, significance]
 
-        }
+    def twoway_anova_kp(self, signal1, signal2, signal3, output_console=True, label_str=None):
+        """Perform twoway ANOVA on 2 independent variables and 1 dependent variable (as list of lists).
 
-        # Replace all variations of nationality with the consistent values using a dictionary
-        df['What is your nationality?'] = df['What is your nationality?'].replace(nationality_replacements, regex=True)
+        Args:
+            signal1 (list): independent variable 1.
+            signal2 (list): independent variable 2.
+            signal3 (list of lists): dependent variable 1 (keypress data).
+            output_console (bool, optional): whether to print results to console.
+            label_str (str, optional): label to add before console output.
 
-        return df
-
-    @staticmethod
-    def rotate_image_90_degrees(image_url):
-        """Rotates an image from the URL by 90 degrees and converts it to base64."""
-        response = requests.get(image_url)
-        img = Image.open(BytesIO(response.content))
-        rotated_img = img.rotate(90, expand=True)  # Rotate the image by 90 degrees
-        # Save the rotated image to a BytesIO object
-        rotated_image_io = BytesIO()
-        rotated_img.save(rotated_image_io, format="PNG")
-        rotated_image_io.seek(0)
-
-        # Convert the rotated image to base64
-        base64_image = base64.b64encode(rotated_image_io.read()).decode('utf-8')
-        return f"data:image/png;base64,{base64_image}"
-
-    @staticmethod
-    def demographic_distribution(df, output_folder):
-        # Check if df is a string (file path), and read it as a DataFrame if necessary
-        if isinstance(df, str):
-            df = pd.read_csv(df)
-
-        df = HMD_helper.replace_nationality_variations(df)
-
-        # Count the occurrences of each age
-        demo_counts = df.groupby('What is your nationality?').size().reset_index(name='count')
-
-        # Convert the 'What is your age (in years)?' column to numeric (ignoring errors for non-numeric values)
-        demo_counts['What is your nationality??'] = pd.to_numeric(demo_counts['What is your nationality?'],
-                                                                  errors='coerce')
-
-        # Drop any NaN values that may arise from invalid age entries
-        demo_counts = demo_counts.dropna(subset=['What is your nationality?'])
-
-        # Extract data for plotting
-        demo = demo_counts['What is your nationality?'].tolist()
-        counts = demo_counts['count'].tolist()
-
-        # Fetch flag image URLs and rotate images based on nationality
-        flag_images = {}
-        for country in demo:
-            flag_url = HMD_helper.get_flag_image_url(country)
-            if flag_url:
-                rotated_image_base64 = HMD_helper.rotate_image_90_degrees(flag_url)  # Rotate the image by 90 degrees
-                flag_images[country] = rotated_image_base64  # Store the base64-encoded rotated image
-
-        # Create the bar chart (basic bars without filling)
-        fig = go.Figure(data=[
-            go.Bar(name='Country', x=demo, y=counts, marker=dict(color='white', line=dict(color='black', width=1)))
-        ])
-
-        # Calculate width of each bar for full image fill
-        bar_width = (1.0 / len(demo)) * 8.8  # Assuming evenly spaced bars
-
-        # Add flag images as overlays for each country
-        for i, country in enumerate(demo):
-            if country in flag_images:
-                fig.add_layout_image(
-                    dict(
-                        source=flag_images[country],  # Embed the base64-encoded rotated image
-                        xref="x",
-                        yref="y",
-                        x=country,  # Position the image on the x-axis at the correct bar
-                        y=counts[i],  # Position the image at the top of the bar
-                        sizex=bar_width,  # Adjust the width of the flag image
-                        sizey=counts[i],  # Adjust the height of the flag to fit the bar height
-                        xanchor="center",
-                        yanchor="top",
-                        sizing="stretch"
-                    )
-                )
-
-        # Update layout
-        fig.update_layout(
-            xaxis_title='Country',
-            yaxis_title='Number of participant',
-            xaxis=dict(tickmode='array', tickvals=demo, ticktext=demo),
-            margin=dict(l=40, r=40, t=40, b=40)
-        )
-
-        # Save the figure in different formats
-        base_filename = "demographic"
-        fig.write_image(os.path.join(output_folder, base_filename + ".png"), width=1600, height=900, scale=3)
-        fig.write_image(os.path.join(output_folder, base_filename + ".eps"), width=1600, height=900, scale=3)
-        fig.write_image(os.path.join(output_folder, base_filename + ".svg"),
-                        width=1600, height=900, scale=3, format="svg")
-        pio.write_html(fig, file=os.path.join(output_folder, base_filename + ".html"), auto_open=True)
+        Returns:
+            df: results of ANOVA
+        """
+        # prepare signal1 and signal2 to be of the same dimensions as signal3
+        signal3_flat = [value for sublist in signal3 for value in sublist]
+        # number of observations in the dependent variable
+        n_observations = len(signal3_flat)
+        # repeat signal1 and signal2 to match the length of signal3_flat
+        signal1_expanded = np.tile(signal1, n_observations // len(signal1))
+        signal2_expanded = np.tile(signal2, n_observations // len(signal2))
+        # create a datafarme with data
+        data = pd.DataFrame({'signal1': signal1_expanded,
+                             'signal2': signal2_expanded,
+                             'dependent': signal3_flat
+                             })
+        # perform two-way ANOVA
+        model = ols('dependent ~ C(signal1) + C(signal2) + C(signal1):C(signal2)', data=data).fit()
+        anova_results = anova_lm(model)
+        # print results to console
+        if output_console and not label_str:
+            print('Results for two-way ANOVA:\n', anova_results.to_string())
+        if output_console and label_str:
+            print('Results for two-way ANOVA for ' + label_str + ':\n', anova_results.to_string())
+        return anova_results

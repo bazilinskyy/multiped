@@ -1,4 +1,4 @@
-# by Shadab Alam <shaadalam.5u@gmail.com> and Pavlo Bazilinskyy <pavlo.bazilinskyy@gmail.com>
+# by Shadab Alam <md_shadab_alam@outlook.com> and Pavlo Bazilinskyy <pavlo.bazilinskyy@gmail.com>
 
 from helper import HMD_helper
 from custom_logger import CustomLogger
@@ -14,10 +14,19 @@ HMD = HMD_helper()
 
 template = common.get_configs("plotly_template")
 readings_folder = common.get_configs("data")  # new location of the csv file with participant id
-mapping = pd.read_csv(common.get_configs("mapping"))  # mapping file
+
+# Read the mapping file
+mapping = pd.read_csv(common.get_configs("mapping"))
+# Remove rows where 'video_id' is 'baseline_1' or 'baseline_2'
+mapping = mapping[~mapping['video_id'].isin(['baseline_1', 'baseline_2'])]
+
 directory_path = common.get_configs("output")
-first_csv = common.get_configs("input_csv")   # Intake questionairre
-last_csv = common.get_configs("post_input_csv")  # Post-experiment questionairre
+
+# Intake questionairre
+first_csv = common.get_configs("input_csv")
+
+# Post-experiment questionairre
+last_csv = common.get_configs("post_input_csv")
 
 try:
     # Check if the directory already exists
@@ -42,11 +51,13 @@ group_titles = [
 
 legend_labels = ["1m", "2m", "3m", "4m", "5m"]
 
-HMD.plot_mean_trigger_value_right(readings_folder, mapping, output_folder=directory_path,
-                                  group_titles=group_titles, legend_labels=legend_labels)
-HMD.plot_yaw_movement(readings_folder, mapping, output_folder=directory_path,
-                      group_titles=group_titles, legend_labels=legend_labels)
-HMD.radar_plot(readings_folder, mapping, output_folder=directory_path)
-HMD.gender_distribution(first_csv, directory_path)
-HMD.age_distribution(first_csv, directory_path)
-HMD.demographic_distribution(first_csv, directory_path)
+# HMD.plot_mean_trigger_value_right(readings_folder, mapping, output_folder=directory_path,
+#                                   group_titles=group_titles, legend_labels=legend_labels)
+# HMD.plot_yaw_movement(readings_folder, mapping, output_folder=directory_path,
+#                       group_titles=group_titles, legend_labels=legend_labels)
+# HMD.radar_plot(readings_folder, mapping, output_folder=directory_path)
+# HMD.gender_distribution(first_csv, directory_path)
+# HMD.age_distribution(first_csv, directory_path)
+# HMD.demographic_distribution(first_csv, directory_path)
+HMD.ttest(readings_folder, mapping, directory_path, group_titles,
+          legend_labels=legend_labels)
