@@ -100,7 +100,7 @@ class HMD_helper:
 
             # Print counts
             for value, count in value_counts.items():
-                print(f"{value}: {count}")
+                logger.info(f"{value}: {count}")
 
             # Create pie chart
             fig = go.Figure(data=[
@@ -113,7 +113,10 @@ class HMD_helper:
 
             # Save or display
             if save_file:
-                filename = column.replace(" ", "_").replace("?", "").lower()
+                # Replace spaces with underscores, remove question marks, strip final periods
+                filename = column.strip()  # remove leading/trailing whitespace
+                filename = re.sub(r"[^\w\s-]", "", filename)  # remove punctuation except underscores/hyphens
+                filename = filename.replace(" ", "_").lower()
                 self.save_plotly(fig, filename, save_final=True)
             else:
                 fig.show()
@@ -184,7 +187,10 @@ class HMD_helper:
 
             # Save or display
             if save_file:
-                filename = column_name.replace(" ", "_").replace("?", "").lower()
+                # Replace spaces with underscores, remove question marks, strip final periods
+                filename = column_name.strip()  # remove leading/trailing whitespace
+                filename = re.sub(r"[^\w\s-]", "", filename)  # remove punctuation except underscores/hyphens
+                filename = filename.replace(" ", "_").lower()
                 self.save_plotly(fig, filename, save_final=True)
             else:
                 fig.show()
