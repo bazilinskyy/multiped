@@ -168,7 +168,7 @@ Trust in automated vs manually driven cars
 Influence of another pedestrian on willingness to cross  
 
 
-[![Effect of car type](figures/the_presence_of_another_pedestrian_reduces_my_willingness_to_cross_the_street_when_a_car_is_driving_towards_me_post.png)](https://htmlpreview.github.io/?https://github.com/bazilinskyy/multiped/blob/main/figures/the_presence_of_another_pedestrian_reduces_my_willingness_to_cross_the_street_when_a_car_is_driving_towards_me_post.html)
+[![Effect of car type](figures/the_presence_of_another_pedestrian_reduces_my_willingness_to_cross_the_street_when_a_car_is_driving_towards_me_intake.png)](https://htmlpreview.github.io/?https://github.com/bazilinskyy/multiped/blob/main/figures/the_presence_of_another_pedestrian_reduces_my_willingness_to_cross_the_street_when_a_car_is_driving_towards_me_intake.html)
 Effect of car type (with or without eHMI)  
 
 
