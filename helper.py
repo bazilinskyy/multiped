@@ -75,7 +75,7 @@ class HMD_helper:
         result = df.loc[df["video_id"] == video_id_value, "display_name"]
         return result.iloc[0] if not result.empty else None
 
-    def plot_column_distribution(self, df, columns, output_folder, save_file=True):
+    def plot_column_distribution(self, df, columns, output_folder, save_file=True, tag=None):
         """
         Plots and prints distributions of specified survey columns.
 
@@ -117,6 +117,8 @@ class HMD_helper:
                 filename = column.strip()  # remove leading/trailing whitespace
                 filename = re.sub(r"[^\w\s-]", "", filename)  # remove punctuation except underscores/hyphens
                 filename = filename.replace(" ", "_").lower()
+                if tag:
+                    filename = f"{filename}_{tag}"
                 self.save_plotly(fig, filename, save_final=True)
             else:
                 fig.show()

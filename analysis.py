@@ -69,7 +69,7 @@ try:
         os.makedirs(output_folder)
         logger.info(f"Directory '{output_folder}' created successfully.")
 except Exception as e:
-    print(f"Error occurred while creating directory: {e}")
+    logger.error(f"Error occurred while creating directory: {e}")
 
 # Execute analysis
 if __name__ == "__main__":
@@ -79,12 +79,14 @@ if __name__ == "__main__":
     HMD.plot_column_distribution(intake_questionnaire,
                                  intake_columns_to_plot,
                                  output_folder="output",
-                                 save_file=True)
+                                 save_file=True,
+                                 tag="intake")
 
     HMD.plot_column_distribution(post_experiment_questionnaire,
                                  post_columns_to_plot,
                                  output_folder="output",
-                                 save_file=True)
+                                 save_file=True,
+                                 tag="post")
 
     HMD.distribution_plots(intake_questionnaire,
                            intake_columns_distribution_to_plot,
