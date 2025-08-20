@@ -122,6 +122,7 @@ multiped/readings.zip
 
 .mypy_cache
 .mypi.ini
+.venv
 
 # Blocker for data in Assets
 multiped-unity/Assets/*.csv

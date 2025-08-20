@@ -130,18 +130,29 @@ public class CarMovement : MonoBehaviour
         StartCoroutine("Wave");
     }
 
+    private float minDistanceP1 = Mathf.Infinity;
+    private float minTimeP1 = 0f;
+
+    private float minDistanceP2 = Mathf.Infinity;
+    private float minTimeP2 = 0f;
+
+
     public void FixedUpdate()
     {      
         fixedDeltaTime = Time.time - startTime;
+
         pedestrian1_distance = Vector3.Distance(distance_cube.transform.position, conditionScript.p1_object.transform.position);
         pedestrian2_distance = Vector3.Distance(distance_cube.transform.position, conditionScript.p2_object.transform.position);
+
         pedestrian1_distance_x = Mathf.Abs(distance_cube.transform.position.x - conditionScript.p1_object.transform.position.x);
         pedestrian2_distance_x = Mathf.Abs(distance_cube.transform.position.x - conditionScript.p2_object.transform.position.x);
+
         carDistance = Vector3.Distance(measuringPoint.transform.position, distance_cube.transform.position);
 
         StartCoroutine(SpeedCalculator()); 
 
         Debug.Log("continous_pedestrian1_distance= " + pedestrian1_distance_x + " pedestrian2_distance=" + pedestrian2_distance_x);
+
         if (pedestrian2_distance < 43 && Yield == 1)
         {
             counter += 1; 
@@ -173,7 +184,21 @@ public class CarMovement : MonoBehaviour
             {
                 yielding = false;
             }
-        }    
+        }
+
+        // Track minimum distances and times
+        if (pedestrian1_distance < minDistanceP1)
+        {
+            minDistanceP1 = pedestrian1_distance;
+            minTimeP1 = fixedDeltaTime;
+        }
+
+        if (pedestrian2_distance < minDistanceP2)
+        {
+            minDistanceP2 = pedestrian2_distance;
+            minTimeP2 = fixedDeltaTime;
+        }
+
     }
 
     IEnumerator Wave()
@@ -207,6 +232,12 @@ public class CarMovement : MonoBehaviour
             else
             {                // END 
                 Debug.Log("car movement finished");
+
+                // Print the minimum distance times
+                Debug.Log("Minimum distance to Pedestrian 1: " + minDistanceP1 + " at time: " + minTimeP1 + " seconds");
+                Debug.Log("Minimum distance to Pedestrian 2: " + minDistanceP2 + " at time: " + minTimeP2 + " seconds");
+
+
                 conditionFinished = true;                
                 StopCoroutine("Wave");               
             }
