@@ -106,6 +106,16 @@ if __name__ == "__main__":
                     column_name="TriggerValueRight",
                     xaxis_range=[0, 11],
                     yaxis_range=[0, 100],
+                    compare_trial="video_1",
+                    xaxis_title="Time, [s]",
+                    yaxis_title="Percentage of trials with trigger key pressed",
+                    margin=dict(l=120, r=2, t=12, b=12))
+
+    HMD.plot_column(mapping,
+                    column_name="TriggerValueRight",
+                    xaxis_range=[0, 18],
+                    yaxis_range=[0, 100],
+                    compare_trial="video_1",
                     xaxis_title="Time, [s]",
                     yaxis_title="Percentage of trials with trigger key pressed",
                     margin=dict(l=120, r=2, t=12, b=12))

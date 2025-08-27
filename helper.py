@@ -20,7 +20,6 @@ from datetime import datetime
 
 
 logger = CustomLogger(__name__)  # use custom logger
-template = common.get_configs("plotly_template")
 
 HMD_class = HMD_yaw()
 extra_class = Tools()
@@ -32,14 +31,12 @@ SAVE_EPS = True
 
 class HMD_helper:
 
-    # set template for plotly output
-    template = common.get_configs('plotly_template')
-    smoothen_signal = common.get_configs('smoothen_signal')
-    folder_figures = common.get_configs('figures')  # subdirectory to save figures
-    folder_stats = 'statistics'  # subdirectory to save statistical output
-
     def __init__(self):
-        self.test_trial = common.get_configs("compare_trial")
+        self.template = common.get_configs('plotly_template')
+        self.smoothen_signal = common.get_configs('smoothen_signal')
+        self.folder_figures = common.get_configs('figures')  # subdirectory to save figures
+        self.folder_stats = 'statistics'  # subdirectory to save statistical output
+        self.data_folder = common.get_configs("data")  # Get path to participant data
 
     def smoothen_filter(self, signal, type_flter='OneEuroFilter'):
         """Smoothen list with a filter.
@@ -212,9 +209,6 @@ class HMD_helper:
         participant_data = {}  # Store per-participant DataFrames
         all_trials = set()  # Collect all unique trial IDs
 
-        # Create a mapping from video_id to sound_clip_name for column renaming
-        mapping_dict = dict(zip(mapping["video_id"], mapping["sound_clip_name"]))
-
         # Iterate over each participant's folder
         for folder in sorted(os.listdir(data_folder)):
             folder_path = os.path.join(data_folder, folder)
@@ -222,7 +216,7 @@ class HMD_helper:
                 continue
 
             # Parse participant ID from folder name
-            match = re.match(r'Participant_(\d+)_', folder)
+            match = re.match(r'Participant_(\d+)', folder)
             if not match:
                 continue
             participant_id = int(match.group(1))
@@ -265,7 +259,7 @@ class HMD_helper:
         for slider, data in slider_data.items():
             df = pd.DataFrame(data, columns=["participant_id"] + all_trials)
             # Rename trial columns using mapping (video_id to sound_clip_name)
-            df.rename(columns={trial: mapping_dict.get(trial, trial) for trial in all_trials}, inplace=True)
+            # df.rename(columns={trial: mapping_dict.get(trial, trial) for trial in all_trials}, inplace=True)
 
             # Add average row at the end (ignoring participant_id)
             avg_values = df.iloc[:, 1:].mean(skipna=True)
@@ -1017,6 +1011,7 @@ class HMD_helper:
             column_name (str): Name of the column to export (e.g. 'TriggerValueRight').
             mapping (pd.DataFrame): Mapping DataFrame containing at least 'video_id' and 'video_length'.
         """
+
         participant_matrix = {}    # Store trigger value lists for each participant, keyed by timestamp
         all_timestamps = set()     # Collect all observed timestamps for alignment
 
@@ -1030,14 +1025,14 @@ class HMD_helper:
                 continue  # Ignore files, only process directories
 
             # Extract participant ID from folder name (expecting "Participant_###_...")
-            match = re.match(r'Participant_(\d+)_', folder)
+            match = re.match(r'Participant_(\d+)', folder)
             if not match:
                 continue
             participant_id = int(match.group(1))
 
             # Search for this participant's file matching the video ID
             for file in os.listdir(folder_path):
-                if f"_{video_id}.csv" in file:
+                if f"{video_id}.csv" in file:
                     file_path = os.path.join(folder_path, file)
                     df = pd.read_csv(file_path)
 
@@ -1058,10 +1053,10 @@ class HMD_helper:
 
         # Get the expected timeline from mapping for alignment (using video_length)
         video_length_row = mapping.loc[mapping["video_id"] == video_id, "video_length"]
+        print("video_length_row:", video_length_row)
         if not video_length_row.empty:
             video_length_sec = video_length_row.values[0] / 1000  # Convert ms to seconds
             all_timestamps = np.round(np.arange(0.0, video_length_sec + resolution, resolution), 2).tolist()
-
         else:
             logger.warning(f"Video length not found in mapping for video_id {video_id}")
 
@@ -1152,15 +1147,15 @@ class HMD_helper:
         # Write the matrix to the specified CSV file
         combined_df.to_csv(output_file, index=False)
 
-    def plot_column(self, mapping, column_name="TriggerValueRight", xaxis_title=None, yaxis_title=None,
-                    xaxis_range=None, yaxis_range=None, margin=None):
+    def plot_column(self, mapping, column_name="TriggerValueRight", compare_trial="video_1", xaxis_title=None,
+                    yaxis_title=None, xaxis_range=None, yaxis_range=None, margin=None):
         """
         Generate a comparison plot of keypress data (or other time-series columns) and subjective slider ratings
         across multiple video trials relative to a test/reference condition.
 
         This function processes participant trigger matrices for each trial,
         aligns timestamps, attaches slider-based subjective ratings (annoyance,
-        informativeness, noticeability), and prepares data for visualization,
+        informativeness, noticeability), and prepares data for visualisation,
         including significance testing (paired t-tests) between the test trial and each comparison trial.
 
         Args:
@@ -1173,49 +1168,56 @@ class HMD_helper:
             yaxis_range (list, optional): y-axis [min, max] limits for the plot.
             margin (dict, optional): Custom plot margin dictionary.
         """
-        # Filter out control/test video IDs for comparison
-        video_id = mapping["video_id"]
-        plot_videos = video_id[~video_id.isin(["test", "est"])]
+        # Find the video_length for the given video_id
+        lens = mapping.loc[mapping["video_id"].eq(compare_trial), "video_length"].unique()
 
-        # Map display names to line colors for plotting
-        color_dict = dict(zip(mapping['display_name'], mapping['colour']))
+        if len(lens) == 0:
+            raise ValueError(f"No rows found for video_id='{compare_trial}'")
+        elif len(lens) > 1:
+            # If the same video_id appears with different lengths, keep all matching lengths
+            mapping_filtered = mapping[mapping["video_length"].isin(lens)].copy()
+        else:
+            # Typical case: one length
+            mapping_filtered = mapping[mapping["video_length"].eq(lens[0])].copy()
+
+        # Filter out control/test video IDs for comparison
+        video_id = mapping_filtered["video_id"]
+        plot_videos = video_id[~video_id.isin(["baseline_1", "baseline_2"])]
 
         # Prepare containers for results and stats
         all_dfs = []  # To store averaged time-series for each trial
         all_labels = []  # To store display names for legend
         ttest_signals = []  # For collecting signals for significance testing
 
-        data_folder = common.get_configs("data")  # Get path to participant data
-
         # === Export trigger matrix for test (reference) trial ===
         self.export_participant_trigger_matrix(
-            data_folder=data_folder,
-            video_id=self.test_trial,
-            output_file=f"_output/participant_{column_name}_{self.test_trial}.csv",
+            data_folder=self.data_folder,
+            video_id=compare_trial,
+            output_file=os.path.join("output", f"participant_{column_name}_{compare_trial}.csv"),
             column_name=column_name,
-            mapping=mapping
+            mapping=mapping_filtered
         )
 
         # Read matrix and extract time-series for the test trial
-        test_raw_df = pd.read_csv(f"_output/participant_{column_name}_{self.test_trial}.csv")
+        test_raw_df = pd.read_csv(os.path.join("output", f"participant_{column_name}_{compare_trial}.csv"))
         test_matrix = extra_class.extract_time_series_values(test_raw_df)
 
         # === Loop through each comparison trial ===
         for video in plot_videos:
             # Get human-readable display name for this trial
-            display_name = mapping.loc[mapping["video_id"] == video, "display_name"].values[0]
+            display_name = mapping_filtered.loc[mapping_filtered["video_id"] == video, "video_id"].values[0]
 
             # Export trigger matrix for this video
             self.export_participant_trigger_matrix(
-                data_folder=data_folder,
+                data_folder=self.data_folder,
                 video_id=video,
-                output_file=f"_output/participant_{column_name}_{video}.csv",
+                output_file=os.path.join("output", f"participant_{column_name}_{video}.csv"),
                 column_name=column_name,
-                mapping=mapping
+                mapping=mapping_filtered
             )
 
             # Read and process the trigger matrix to extract time series for this trial
-            trial_raw_df = pd.read_csv(f"_output/participant_{column_name}_{video}.csv")
+            trial_raw_df = pd.read_csv(os.path.join("output", f"participant_{column_name}_{video}.csv"))
             trial_matrix = extra_class.extract_time_series_values(trial_raw_df)
 
             # Compute participant-averaged time series (by timestamp) for this trial
@@ -1251,8 +1253,8 @@ class HMD_helper:
         # Set line style: dashed for test trial, solid for others
         custom_line_dashes = []
         for label in all_labels:
-            vid = mapping.loc[mapping["display_name"] == label, "video_id"].values[0]
-            if vid == self.test_trial:
+            vid = mapping_filtered.loc[mapping_filtered["video_id"] == label, "video_id"].values[0]
+            if vid == compare_trial:
                 custom_line_dashes.append("dot")
             else:
                 custom_line_dashes.append("solid")
@@ -1292,7 +1294,7 @@ class HMD_helper:
             fig_save_height=850,
             save_file=True,
             save_final=True,
-            custom_line_colors=[color_dict.get(label, None) for label in all_labels],
+            # custom_line_colors=[color_dict.get(label, None) for label in all_labels],
             custom_line_dashes=custom_line_dashes,
             flag_trigger=True,
             margin=margin
@@ -1332,13 +1334,11 @@ class HMD_helper:
         all_labels = []  # Corresponding list of human-friendly trial labels
         ttest_signals = []  # Store t-test pairs for stats annotations
 
-        data_folder = common.get_configs("data")  # Get path to raw data
-
         # === Reference (test) trial: export yaw matrix and compute average yaw per timestamp ===
         test_video = self.test_trial
         test_participant_csv = f"_output/participant_{column_name}_{test_video}.csv"
         self.export_participant_quaternion_matrix(
-            data_folder=data_folder,
+            data_folder=self.data_folder,
             video_id=test_video,
             output_file=test_participant_csv,
             mapping=mapping
@@ -1362,7 +1362,7 @@ class HMD_helper:
 
             # Export quaternion/yaw matrix for this trial
             self.export_participant_quaternion_matrix(
-                data_folder=data_folder,
+                data_folder=self.data_folder,
                 video_id=video,
                 output_file=participant_csv,
                 mapping=mapping
