@@ -103,6 +103,8 @@ python3 analysis.py
 
 ## Results
 
+### Response of the participant
+
 
 [![Age Distribution of the participants](figures/what_is_your_age_in_years.png)](https://htmlpreview.github.io/?https://github.com/bazilinskyy/multiped/blob/main/figures/what_is_your_age_in_years.html)
 Age Distribution of the participants
@@ -191,12 +193,51 @@ Realism of the experiment
 [![Overall experience rating](figures/how_would_you_rate_your_overall_experience_in_this_experiment.png)](https://htmlpreview.github.io/?https://github.com/bazilinskyy/multiped/blob/main/figures/how_would_you_rate_your_overall_experience_in_this_experiment.html)
 Overall experience rating
 
+### Keypress from the participant
 
-## Troubleshooting
-### Troubleshooting setup
-#### ERROR: multiped is not a valid editable requirement
-Check that you are indeed in the parent folder for running command `pip install -e multiped`. This command will not work from inside of the folder containing the repo.
+[![Car is yielding](figures/all_videos_kp_slider_plot_all_values_with_yielding.png)](https://htmlpreview.github.io/?https://github.com/bazilinskyy/multiped/blob/main/figures/all_videos_kp_slider_plot_all_values_with_yielding.html)
+Car is yielding
+
+[![Car is not yielding](figures/all_videos_kp_slider_plot_all_values_without_yielding.png)](https://htmlpreview.github.io/?https://github.com/bazilinskyy/multiped/blob/main/figures/all_videos_kp_slider_plot_all_values_without_yielding.html)
+Car is not yielding
+
+[![Car is yielding and equipped with eHMI](figures/all_videos_kp_slider_plot_eHMI_on_yielding.png)](https://htmlpreview.github.io/?https://github.com/bazilinskyy/multiped/blob/main/figures/all_videos_kp_slider_plot_eHMI_on_yielding.html)
+Car is yielding and equipped with eHMI
+
+[![Car is not yielding and equipped with eHMI](figures/all_videos_kp_slider_plot_eHMI_on_non-yielding.png)](https://htmlpreview.github.io/?https://github.com/bazilinskyy/multiped/blob/main/figures/all_videos_kp_slider_plot_eHMI_on_non-yielding.html)
+Car is not yielding and equipped with eHMI
+
+[![Car is yielding and not equipped with eHMI](figures/all_videos_kp_slider_plot_eHMI_off_yielding.png)](https://htmlpreview.github.io/?https://github.com/bazilinskyy/multiped/blob/main/figures/all_videos_kp_slider_plot_eHMI_off_yielding.html)
+Car is yielding and not equipped with eHMI
+
+[![Car is not yielding and not equipped with eHMI](figures/all_videos_kp_slider_plot_eHMI_off_non-yielding.png)](https://htmlpreview.github.io/?https://github.com/bazilinskyy/multiped/blob/main/figures/all_videos_kp_slider_plot_eHMI_off_non-yielding.html)
+Car is not yielding and not equipped with eHMI
+
+[![Participant is in front with car equipped with eHMI and not yielding](figures/all_videos_kp_slider_plot_first_eHMI_on_non-yielding.png)](https://htmlpreview.github.io/?https://github.com/bazilinskyy/multiped/blob/main/figures/all_videos_kp_slider_plot_first_eHMI_on_non-yielding.html)
+Participant is in front with car equipped with eHMI and not yielding
+
+[![Participant is in front with car equipped with eHMI and yielding](figures/all_videos_kp_slider_plot_first_eHMI_on_yielding.png)](https://htmlpreview.github.io/?https://github.com/bazilinskyy/multiped/blob/main/figures/all_videos_kp_slider_plot_first_eHMI_on_yielding.html)
+Participant is in front with car equipped with eHMI and yielding
+
+[![Participant is in front with car equipped with no eHMI and not yielding](figures/all_videos_kp_slider_plot_first_eHMI_off_non-yielding.png)](https://htmlpreview.github.io/?https://github.com/bazilinskyy/multiped/blob/main/figures/all_videos_kp_slider_plot_first_eHMI_off_non-yielding.html)
+Participant is in front with car equipped with no eHMI and not yielding
+
+[![Participant is in front with car equipped with no eHMI and yielding](figures/all_videos_kp_slider_plot_first_eHMI_off_yielding.png)](https://htmlpreview.github.io/?https://github.com/bazilinskyy/multiped/blob/main/figures/all_videos_kp_slider_plot_first_eHMI_off_yielding.html)
+Participant is in front with car equipped with no eHMI and yielding
+
+[![Participant is in back with car equipped with eHMI and not yielding](figures/all_videos_kp_slider_plot_second_eHMI_on_non-yielding.png)](https://htmlpreview.github.io/?https://github.com/bazilinskyy/multiped/blob/main/figures/all_videos_kp_slider_plot_second_eHMI_on_non-yielding.html)
+Participant is in back with car equipped with eHMI and not yielding
+
+[![Participant is in back with car equipped with eHMI and yielding](figures/all_videos_kp_slider_plot_second_eHMI_on_yielding.png)](https://htmlpreview.github.io/?https://github.com/bazilinskyy/multiped/blob/main/figures/all_videos_kp_slider_plot_second_eHMI_on_yielding.html)
+Participant is in back with car equipped with eHMI and yielding
+
+[![Participant is in back with car equipped with no eHMI and not yielding](figures/all_videos_kp_slider_plot_second_eHMI_off_non-yielding.png)](https://htmlpreview.github.io/?https://github.com/bazilinskyy/multiped/blob/main/figures/all_videos_kp_slider_plot_second_eHMI_off_non-yielding.html)
+Participant is in back with car equipped with no eHMI and not yielding
+
+[![Participant is in back with car equipped with no eHMI and yielding](figures/all_videos_kp_slider_plot_second_eHMI_off_yielding.png)](https://htmlpreview.github.io/?https://github.com/bazilinskyy/multiped/blob/main/figures/all_videos_kp_slider_plot_second_eHMI_off_yielding.html)
+Participant is in back with car equipped with no eHMI and yielding
+
 
 
 ## Contact
-If you have any questions or suggestions, feel free to reach out to md_shadab_alam@outlook.com
+If you have any questions or suggestions, feel free to reach out to md_shadab_alam@outlook.com and 

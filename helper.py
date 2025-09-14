@@ -1053,7 +1053,6 @@ class HMD_helper:
 
         # Get the expected timeline from mapping for alignment (using video_length)
         video_length_row = mapping.loc[mapping["video_id"] == video_id, "video_length"]
-        print("video_length_row:", video_length_row)
         if not video_length_row.empty:
             video_length_sec = video_length_row.values[0] / 1000  # Convert ms to seconds
             all_timestamps = np.round(np.arange(0.0, video_length_sec + resolution, resolution), 2).tolist()
@@ -1147,8 +1146,10 @@ class HMD_helper:
         # Write the matrix to the specified CSV file
         combined_df.to_csv(output_file, index=False)
 
-    def plot_column(self, mapping, column_name="TriggerValueRight", compare_trial="video_1", xaxis_title=None,
-                    yaxis_title=None, xaxis_range=None, yaxis_range=None, margin=None):
+    def plot_column(self, mapping, column_name="TriggerValueRight", parameter=None, parameter_value=None,
+                    additional_parameter=None, additional_parameter_value=None,
+                    compare_trial="video_1", xaxis_title=None, yaxis_title=None, xaxis_range=None,
+                    yaxis_range=None, margin=None, name=None):
         """
         Generate a comparison plot of keypress data (or other time-series columns) and subjective slider ratings
         across multiple video trials relative to a test/reference condition.
@@ -1179,6 +1180,12 @@ class HMD_helper:
         else:
             # Typical case: one length
             mapping_filtered = mapping[mapping["video_length"].eq(lens[0])].copy()
+
+        if parameter is not None:
+            mapping_filtered = mapping_filtered[mapping_filtered[parameter] == parameter_value]
+
+        if additional_parameter is not None:
+            mapping_filtered = mapping_filtered[mapping_filtered[additional_parameter] == additional_parameter_value]
 
         # Filter out control/test video IDs for comparison
         video_id = mapping_filtered["video_id"]
@@ -1270,7 +1277,7 @@ class HMD_helper:
             yaxis_title=yaxis_title,  # type: ignore
             xaxis_title_offset=-0.04,  # type: ignore
             yaxis_title_offset=0.18,  # type: ignore
-            name_file=f"all_videos_kp_slider_plot_{column_name}",
+            name_file=f"all_videos_kp_slider_plot_{name}",
             show_text_labels=True,
             pretty_text=True,
             events=events,
