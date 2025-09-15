@@ -9498,7 +9498,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 22d0e52bf168849489e7c0b22ffccc8e, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  writeFileName: Participant_25
+  writeFileName: Participant_1000
   writeFilePath: 
   conditionFinished: 0
   LEDBumperObject: {fileID: 566537598739974183}
@@ -49511,8 +49511,6 @@ MonoBehaviour:
     m_PreInfinity: 2
     m_PostInfinity: 2
     m_RotationOrder: 4
-  measuringPoint: {fileID: 502943854}
-  carDistance: 0
   Lfront: {fileID: 1437220363878305}
   Lrear: {fileID: 1123577249998233}
   Rfront: {fileID: 1154901003993327}
@@ -49521,6 +49519,8 @@ MonoBehaviour:
   Yield: 1
   startTime: 0
   WaveStarted: 0
+  measuringPoint: {fileID: 502943854}
+  carDistance: 0
   distance_cube: {fileID: 566537598299833256}
   pedestrian1: {fileID: 1341389619}
   pedestrian2: {fileID: 284051059}
@@ -49533,6 +49533,8 @@ MonoBehaviour:
   conditionFinished: 0
   AudioBeep: {fileID: 3656415362688339828}
   CountSound: {fileID: 3656415362688339829}
+  crossProximityMeters: 6
+  trialNumber: 0
 --- !u!1 &3715009751078815627
 GameObject:
   m_ObjectHideFlags: 0
