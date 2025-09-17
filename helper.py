@@ -1149,7 +1149,7 @@ class HMD_helper:
     def plot_column(self, mapping, column_name="TriggerValueRight", parameter=None, parameter_value=None,
                     additional_parameter=None, additional_parameter_value=None,
                     compare_trial="video_1", xaxis_title=None, yaxis_title=None, xaxis_range=None,
-                    yaxis_range=None, margin=None, name=None):
+                    yaxis_range=[0, 100], margin=None, name=None):
         """
         Generate a comparison plot of keypress data (or other time-series columns) and subjective slider ratings
         across multiple video trials relative to a test/reference condition.
@@ -1285,7 +1285,7 @@ class HMD_helper:
             events_annotations_font_size=common.get_configs("font_size") - 6,
             stacked=False,
             ttest_signals=ttest_signals,
-            ttest_anova_row_height=4,
+            ttest_anova_row_height=6,
             ttest_annotations_font_size=common.get_configs("font_size") - 6,
             ttest_annotation_x=0.7,  # type: ignore
             ttest_marker="circle",
