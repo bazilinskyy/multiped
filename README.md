@@ -103,6 +103,51 @@ python3 analysis.py
 
 ## Results
 
+### Keypress from the participant
+
+[![Car is yielding](figures/all_videos_kp_slider_plot_all_values_with_yielding.png)](https://htmlpreview.github.io/?https://github.com/bazilinskyy/multiped/blob/main/figures/all_videos_kp_slider_plot_all_values_with_yielding.html)
+Car is yielding
+
+[![Car is not yielding](figures/all_videos_kp_slider_plot_all_values_without_yielding.png)](https://htmlpreview.github.io/?https://github.com/bazilinskyy/multiped/blob/main/figures/all_videos_kp_slider_plot_all_values_without_yielding.html)
+Car is not yielding
+
+[![Car is yielding and equipped with eHMI](figures/all_videos_kp_slider_plot_eHMI_on_yielding.png)](https://htmlpreview.github.io/?https://github.com/bazilinskyy/multiped/blob/main/figures/all_videos_kp_slider_plot_eHMI_on_yielding.html)
+Car is yielding and equipped with eHMI
+
+[![Car is not yielding and equipped with eHMI](figures/all_videos_kp_slider_plot_eHMI_on_non-yielding.png)](https://htmlpreview.github.io/?https://github.com/bazilinskyy/multiped/blob/main/figures/all_videos_kp_slider_plot_eHMI_on_non-yielding.html)
+Car is not yielding and equipped with eHMI
+
+[![Car is yielding and not equipped with eHMI](figures/all_videos_kp_slider_plot_eHMI_off_yielding.png)](https://htmlpreview.github.io/?https://github.com/bazilinskyy/multiped/blob/main/figures/all_videos_kp_slider_plot_eHMI_off_yielding.html)
+Car is yielding and not equipped with eHMI
+
+[![Car is not yielding and not equipped with eHMI](figures/all_videos_kp_slider_plot_eHMI_off_non-yielding.png)](https://htmlpreview.github.io/?https://github.com/bazilinskyy/multiped/blob/main/figures/all_videos_kp_slider_plot_eHMI_off_non-yielding.html)
+Car is not yielding and not equipped with eHMI
+
+[![Participant is in front with car equipped with eHMI and not yielding](figures/all_videos_kp_slider_plot_first_eHMI_on_non-yielding.png)](https://htmlpreview.github.io/?https://github.com/bazilinskyy/multiped/blob/main/figures/all_videos_kp_slider_plot_first_eHMI_on_non-yielding.html)
+Participant is in front with car equipped with eHMI and not yielding
+
+[![Participant is in front with car equipped with eHMI and yielding](figures/all_videos_kp_slider_plot_first_eHMI_on_yielding.png)](https://htmlpreview.github.io/?https://github.com/bazilinskyy/multiped/blob/main/figures/all_videos_kp_slider_plot_first_eHMI_on_yielding.html)
+Participant is in front with car equipped with eHMI and yielding
+
+[![Participant is in front with car equipped with no eHMI and not yielding](figures/all_videos_kp_slider_plot_first_eHMI_off_non-yielding.png)](https://htmlpreview.github.io/?https://github.com/bazilinskyy/multiped/blob/main/figures/all_videos_kp_slider_plot_first_eHMI_off_non-yielding.html)
+Participant is in front with car equipped with no eHMI and not yielding
+
+[![Participant is in front with car equipped with no eHMI and yielding](figures/all_videos_kp_slider_plot_first_eHMI_off_yielding.png)](https://htmlpreview.github.io/?https://github.com/bazilinskyy/multiped/blob/main/figures/all_videos_kp_slider_plot_first_eHMI_off_yielding.html)
+Participant is in front with car equipped with no eHMI and yielding
+
+[![Participant is in back with car equipped with eHMI and not yielding](figures/all_videos_kp_slider_plot_second_eHMI_on_non-yielding.png)](https://htmlpreview.github.io/?https://github.com/bazilinskyy/multiped/blob/main/figures/all_videos_kp_slider_plot_second_eHMI_on_non-yielding.html)
+Participant is in back with car equipped with eHMI and not yielding
+
+[![Participant is in back with car equipped with eHMI and yielding](figures/all_videos_kp_slider_plot_second_eHMI_on_yielding.png)](https://htmlpreview.github.io/?https://github.com/bazilinskyy/multiped/blob/main/figures/all_videos_kp_slider_plot_second_eHMI_on_yielding.html)
+Participant is in back with car equipped with eHMI and yielding
+
+[![Participant is in back with car equipped with no eHMI and not yielding](figures/all_videos_kp_slider_plot_second_eHMI_off_non-yielding.png)](https://htmlpreview.github.io/?https://github.com/bazilinskyy/multiped/blob/main/figures/all_videos_kp_slider_plot_second_eHMI_off_non-yielding.html)
+Participant is in back with car equipped with no eHMI and not yielding
+
+[![Participant is in back with car equipped with no eHMI and yielding](figures/all_videos_kp_slider_plot_second_eHMI_off_yielding.png)](https://htmlpreview.github.io/?https://github.com/bazilinskyy/multiped/blob/main/figures/all_videos_kp_slider_plot_second_eHMI_off_yielding.html)
+Participant is in back with car equipped with no eHMI and yielding
+
+
 ### Response of the participant
 
 
@@ -192,51 +237,6 @@ Realism of the experiment
 
 [![Overall experience rating](figures/how_would_you_rate_your_overall_experience_in_this_experiment.png)](https://htmlpreview.github.io/?https://github.com/bazilinskyy/multiped/blob/main/figures/how_would_you_rate_your_overall_experience_in_this_experiment.html)
 Overall experience rating
-
-### Keypress from the participant
-
-[![Car is yielding](figures/all_videos_kp_slider_plot_all_values_with_yielding.png)](https://htmlpreview.github.io/?https://github.com/bazilinskyy/multiped/blob/main/figures/all_videos_kp_slider_plot_all_values_with_yielding.html)
-Car is yielding
-
-[![Car is not yielding](figures/all_videos_kp_slider_plot_all_values_without_yielding.png)](https://htmlpreview.github.io/?https://github.com/bazilinskyy/multiped/blob/main/figures/all_videos_kp_slider_plot_all_values_without_yielding.html)
-Car is not yielding
-
-[![Car is yielding and equipped with eHMI](figures/all_videos_kp_slider_plot_eHMI_on_yielding.png)](https://htmlpreview.github.io/?https://github.com/bazilinskyy/multiped/blob/main/figures/all_videos_kp_slider_plot_eHMI_on_yielding.html)
-Car is yielding and equipped with eHMI
-
-[![Car is not yielding and equipped with eHMI](figures/all_videos_kp_slider_plot_eHMI_on_non-yielding.png)](https://htmlpreview.github.io/?https://github.com/bazilinskyy/multiped/blob/main/figures/all_videos_kp_slider_plot_eHMI_on_non-yielding.html)
-Car is not yielding and equipped with eHMI
-
-[![Car is yielding and not equipped with eHMI](figures/all_videos_kp_slider_plot_eHMI_off_yielding.png)](https://htmlpreview.github.io/?https://github.com/bazilinskyy/multiped/blob/main/figures/all_videos_kp_slider_plot_eHMI_off_yielding.html)
-Car is yielding and not equipped with eHMI
-
-[![Car is not yielding and not equipped with eHMI](figures/all_videos_kp_slider_plot_eHMI_off_non-yielding.png)](https://htmlpreview.github.io/?https://github.com/bazilinskyy/multiped/blob/main/figures/all_videos_kp_slider_plot_eHMI_off_non-yielding.html)
-Car is not yielding and not equipped with eHMI
-
-[![Participant is in front with car equipped with eHMI and not yielding](figures/all_videos_kp_slider_plot_first_eHMI_on_non-yielding.png)](https://htmlpreview.github.io/?https://github.com/bazilinskyy/multiped/blob/main/figures/all_videos_kp_slider_plot_first_eHMI_on_non-yielding.html)
-Participant is in front with car equipped with eHMI and not yielding
-
-[![Participant is in front with car equipped with eHMI and yielding](figures/all_videos_kp_slider_plot_first_eHMI_on_yielding.png)](https://htmlpreview.github.io/?https://github.com/bazilinskyy/multiped/blob/main/figures/all_videos_kp_slider_plot_first_eHMI_on_yielding.html)
-Participant is in front with car equipped with eHMI and yielding
-
-[![Participant is in front with car equipped with no eHMI and not yielding](figures/all_videos_kp_slider_plot_first_eHMI_off_non-yielding.png)](https://htmlpreview.github.io/?https://github.com/bazilinskyy/multiped/blob/main/figures/all_videos_kp_slider_plot_first_eHMI_off_non-yielding.html)
-Participant is in front with car equipped with no eHMI and not yielding
-
-[![Participant is in front with car equipped with no eHMI and yielding](figures/all_videos_kp_slider_plot_first_eHMI_off_yielding.png)](https://htmlpreview.github.io/?https://github.com/bazilinskyy/multiped/blob/main/figures/all_videos_kp_slider_plot_first_eHMI_off_yielding.html)
-Participant is in front with car equipped with no eHMI and yielding
-
-[![Participant is in back with car equipped with eHMI and not yielding](figures/all_videos_kp_slider_plot_second_eHMI_on_non-yielding.png)](https://htmlpreview.github.io/?https://github.com/bazilinskyy/multiped/blob/main/figures/all_videos_kp_slider_plot_second_eHMI_on_non-yielding.html)
-Participant is in back with car equipped with eHMI and not yielding
-
-[![Participant is in back with car equipped with eHMI and yielding](figures/all_videos_kp_slider_plot_second_eHMI_on_yielding.png)](https://htmlpreview.github.io/?https://github.com/bazilinskyy/multiped/blob/main/figures/all_videos_kp_slider_plot_second_eHMI_on_yielding.html)
-Participant is in back with car equipped with eHMI and yielding
-
-[![Participant is in back with car equipped with no eHMI and not yielding](figures/all_videos_kp_slider_plot_second_eHMI_off_non-yielding.png)](https://htmlpreview.github.io/?https://github.com/bazilinskyy/multiped/blob/main/figures/all_videos_kp_slider_plot_second_eHMI_off_non-yielding.html)
-Participant is in back with car equipped with no eHMI and not yielding
-
-[![Participant is in back with car equipped with no eHMI and yielding](figures/all_videos_kp_slider_plot_second_eHMI_off_yielding.png)](https://htmlpreview.github.io/?https://github.com/bazilinskyy/multiped/blob/main/figures/all_videos_kp_slider_plot_second_eHMI_off_yielding.html)
-Participant is in back with car equipped with no eHMI and yielding
-
 
 
 ## Contact
