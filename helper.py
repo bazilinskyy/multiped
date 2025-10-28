@@ -18,7 +18,6 @@ from utils.tools import Tools
 from tqdm import tqdm
 from datetime import datetime
 import ast
-from typing import Optional
 
 
 logger = CustomLogger(__name__)  # use custom logger
@@ -1945,14 +1944,8 @@ class HMD_helper:
         # Save the generated plot using a helper function
         self.save_plotly(fig, 'yaw_histogram', save_final=True)
 
-    def heat_plot(
-        self,
-        folder_path: str,
-        mapping_df: pd.DataFrame,     # <- pass the dataframe here
-        relation: str = "ratio",      # 'ratio' (vb/va) or 'diff' (vb - va)
-        colorscale: str = "Viridis",  # any Plotly colorscale
-        summary_func=np.mean,         # how to reduce each video to one number (e.g., np.mean / np.median)
-    ):
+    def heat_plot(self, folder_path: str, mapping_df: pd.DataFrame, relation: str = "ratio",
+                  colorscale: str = "Viridis", summary_func=np.mean):
         """
         Compute one summary value per video CSV, rename axes using `mapping_df`,
         and show a Plotly heatmap of pairwise relations (no numbers, no colorbar).
