@@ -1952,8 +1952,6 @@ class HMD_helper:
         relation: str = "ratio",      # 'ratio' (vb/va) or 'diff' (vb - va)
         colorscale: str = "Viridis",  # any Plotly colorscale
         summary_func=np.mean,         # how to reduce each video to one number (e.g., np.mean / np.median)
-        save_html: Optional[str] = None,
-        save_png: Optional[str] = None,
     ):
         """
         Compute one summary value per video CSV, rename axes using `mapping_df`,
@@ -2092,8 +2090,18 @@ class HMD_helper:
 
         fig.update_layout(
             title="",
-            xaxis=dict(title="", tickangle=45),
-            yaxis=dict(title="", autorange="reversed"),
+            xaxis=dict(
+                title="",
+                tickangle=45,
+                tickfont=dict(size=18, color="black"),
+                titlefont=dict(size=16, color="black")
+            ),
+            yaxis=dict(
+                title="",
+                autorange="reversed",
+                tickfont=dict(size=18, color="black"),
+                titlefont=dict(size=16, color="black")
+            ),
             margin=dict(l=80, r=40, t=60, b=90),
             width=1600,
             height=1600,
