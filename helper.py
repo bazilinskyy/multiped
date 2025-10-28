@@ -17,6 +17,8 @@ from utils.HMD_helper import HMD_yaw
 from utils.tools import Tools
 from tqdm import tqdm
 from datetime import datetime
+import ast
+from typing import Optional
 
 
 logger = CustomLogger(__name__)  # use custom logger
@@ -1942,3 +1944,165 @@ class HMD_helper:
 
         # Save the generated plot using a helper function
         self.save_plotly(fig, 'yaw_histogram', save_final=True)
+
+    def heat_plot(
+        self,
+        folder_path: str,
+        mapping_df: pd.DataFrame,     # <- pass the dataframe here
+        relation: str = "ratio",      # 'ratio' (vb/va) or 'diff' (vb - va)
+        colorscale: str = "Viridis",  # any Plotly colorscale
+        summary_func=np.mean,         # how to reduce each video to one number (e.g., np.mean / np.median)
+        save_html: Optional[str] = None,
+        save_png: Optional[str] = None,
+    ):
+        """
+        Compute one summary value per video CSV, rename axes using `mapping_df`,
+        and show a Plotly heatmap of pairwise relations (no numbers, no colorbar).
+
+        Parameters
+        ----------
+        folder_path : str
+            Folder with 'participant_TriggerValueRight_video_*.csv'.
+        mapping_df : pd.DataFrame
+            Must include columns: 'video_id' and 'condition_name'.
+        relation : {'ratio','diff'}
+            'ratio' uses vb/va; 'diff' uses vb - va.
+        colorscale : str
+            Plotly colorscale name.
+        summary_func : callable
+            Aggregator applied to all numeric values per video (default: np.mean).
+        save_html : str | None
+            If provided, saves interactive HTML to this path.
+        save_png : str | None
+            If provided, saves static PNG to this path (requires 'kaleido').
+
+        Returns
+        -------
+        averages : dict
+            {mapped_label: summary_value}
+        relation_df : pd.DataFrame
+            Pairwise matrix (mapped_label × mapped_label)
+        fig : plotly.graph_objects.Figure
+            The heatmap figure.
+        """
+        # ---- Validate mapping_df ----
+        required_cols = {"video_id", "condition_name"}
+        if not required_cols.issubset(set(mapping_df.columns)):
+            raise ValueError(f"mapping_df must have columns {required_cols}, got {list(mapping_df.columns)}")
+
+        # Build dict: video_id -> condition_name
+        mapping_dict = dict(zip(mapping_df["video_id"].astype(str), mapping_df["condition_name"].astype(str)))
+
+        # ---- Find files ----
+        pattern = os.path.join(folder_path, "participant_TriggerValueRight_video_*.csv")
+        file_list = glob.glob(pattern)
+        if not file_list:
+            raise FileNotFoundError(f"No files matched pattern: {pattern}")
+
+        # Sort by numeric video index if present (video_123), else alphabetically
+        def _video_key(fn):
+            m = re.search(r"video_(\d+)\.csv$", os.path.basename(fn), flags=re.IGNORECASE)
+            return (0, int(m.group(1))) if m else (1, os.path.basename(fn).lower())
+        file_list = sorted(file_list, key=_video_key)
+
+        # ---- Helper: extract video_id from filename ----
+        def _extract_video_id(filename: str) -> str:
+            base = os.path.basename(filename)
+            m = re.search(r"(video_\d+)\.csv$", base, flags=re.IGNORECASE)
+            return m.group(1) if m else base
+
+        # ---- Compute per-video summary ----
+        averages = {}
+        for file_path in file_list:
+            try:
+                df = pd.read_csv(file_path)
+            except Exception as e:
+                logger.error(f"⚠️ Error reading {file_path}: {e}")
+                continue
+
+            df = df.drop(columns=["Timestamp"], errors="ignore")
+
+            all_values = []
+            for col in df.columns:
+                for val in df[col]:
+                    try:
+                        nums = ast.literal_eval(val)
+                        if isinstance(nums, list):
+                            # keep only finite numerics
+                            all_values.extend(
+                                float(x) for x in nums
+                                if isinstance(x, (int, float)) and np.isfinite(x)
+                            )
+                    except Exception:
+                        # skip unparseable cells
+                        continue
+
+            if not all_values:
+                continue
+
+            # Map label via mapping_df
+            video_id = _extract_video_id(file_path)
+            label = mapping_dict.get(video_id, video_id)  # fallback to video_id if not found
+            averages[label] = float(summary_func(all_values))
+
+        if not averages:
+            raise ValueError("No valid numeric data found in videos.")
+
+        # ---- Build pairwise relation matrix ----
+        labels = list(averages.keys())
+        n = len(labels)
+        mat = np.full((n, n), np.nan, dtype=float)
+
+        for i, a in enumerate(labels):
+            va = averages[a]
+            for j, b in enumerate(labels):
+                vb = averages[b]
+                if relation == "ratio":
+                    mat[i, j] = (vb / va) if va not in (0, None) else np.nan
+                elif relation == "diff":
+                    mat[i, j] = vb - va
+                else:
+                    raise ValueError("relation must be 'ratio' or 'diff'")
+
+        relation_df = pd.DataFrame(mat, index=labels, columns=labels)
+
+        # ---- Add formatted decimal text for cells ----
+        text_values = np.where(
+            np.isnan(relation_df.values),
+            "",
+            np.round(relation_df.values, 2).astype(str)
+        )
+
+        # ---- Plotly heatmap (no cell text, no colorbar) ----
+        fig = go.Figure(
+            data=go.Heatmap(
+                z=relation_df.values,
+                x=relation_df.columns,
+                y=relation_df.index,
+                text=text_values,           # show decimals in cells
+                texttemplate="%{text}",     # ensures text is rendered
+                colorscale=colorscale,
+                showscale=False,  # remove colorbar
+                hovertemplate=(
+                    "<b>%{y}</b> → <b>%{x}</b><br>"
+                    f"{relation}: %{{z:.6f}}<extra></extra>"
+                )
+            )
+        )
+
+        fig.update_layout(
+            title="",
+            xaxis=dict(title="", tickangle=45),
+            yaxis=dict(title="", autorange="reversed"),
+            margin=dict(l=80, r=40, t=60, b=90),
+            width=1600,
+            height=1600,
+            plot_bgcolor="white",
+            paper_bgcolor="white"
+        )
+
+        self.save_plotly(fig,
+                         'heatmap',
+                         height=1600,
+                         width=1600,
+                         save_final=True)

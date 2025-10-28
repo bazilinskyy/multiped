@@ -147,6 +147,9 @@ Participant is in back with car equipped with no eHMI and not yielding
 [![Participant is in back with car equipped with no eHMI and yielding](figures/all_videos_kp_slider_plot_second_eHMI_off_yielding.png)](https://htmlpreview.github.io/?https://github.com/bazilinskyy/multiped/blob/main/figures/all_videos_kp_slider_plot_second_eHMI_off_yielding.html)
 Participant is in back with car equipped with no eHMI and yielding
 
+[![Ratio-based heatplot showing relationships between yielding, eHMI, and pedestrian distance conditions](figures/heatmap.png)](https://htmlpreview.github.io/?https://github.com/bazilinskyy/multiped/blob/main/figures/heatmap.html)
+Ratio-based heatplot showing relationships between yielding, eHMI, and pedestrian distance conditions.
+
 
 ### Response of the participant
 

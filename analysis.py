@@ -103,7 +103,6 @@ if __name__ == "__main__":
 
     # Keypress data for yielding criteria
     HMD.plot_column(mapping,
-                    column_name="TriggerValueRight",
                     parameter=None,
                     # TODO: remove the range and extract it from mapping file
                     xaxis_range=[0, 18],
@@ -114,7 +113,6 @@ if __name__ == "__main__":
                     margin=dict(l=120, r=2, t=12, b=12))
 
     HMD.plot_column(mapping,
-                    column_name="TriggerValueRight",
                     parameter=None,
                     xaxis_range=[0, 11],
                     compare_trial="video_21",
@@ -125,7 +123,6 @@ if __name__ == "__main__":
 
     # Keypress data for yielding and eHMI criteria
     HMD.plot_column(mapping,
-                    column_name="TriggerValueRight",
                     parameter="eHMIOn",
                     parameter_value=0,
                     xaxis_range=[0, 18],
@@ -136,7 +133,6 @@ if __name__ == "__main__":
                     margin=dict(l=120, r=2, t=12, b=12))
 
     HMD.plot_column(mapping,
-                    column_name="TriggerValueRight",
                     parameter="eHMIOn",
                     parameter_value=1,
                     xaxis_range=[0, 18],
@@ -147,7 +143,6 @@ if __name__ == "__main__":
                     margin=dict(l=120, r=2, t=12, b=12))
 
     HMD.plot_column(mapping,
-                    column_name="TriggerValueRight",
                     parameter="eHMIOn",
                     parameter_value=0,
                     xaxis_range=[0, 11],
@@ -158,7 +153,6 @@ if __name__ == "__main__":
                     margin=dict(l=120, r=2, t=12, b=12))
 
     HMD.plot_column(mapping,
-                    column_name="TriggerValueRight",
                     parameter="eHMIOn",
                     parameter_value=1,
                     xaxis_range=[0, 11],
@@ -171,7 +165,6 @@ if __name__ == "__main__":
     # Keypress data for yielding, eHMI and position criteria
     # First person view
     HMD.plot_column(mapping,
-                    column_name="TriggerValueRight",
                     parameter="eHMIOn",
                     parameter_value=1,
                     additional_parameter="camera",
@@ -184,7 +177,6 @@ if __name__ == "__main__":
                     margin=dict(l=120, r=2, t=12, b=12))
 
     HMD.plot_column(mapping,
-                    column_name="TriggerValueRight",
                     parameter="eHMIOn",
                     parameter_value=1,
                     additional_parameter="camera",
@@ -197,7 +189,6 @@ if __name__ == "__main__":
                     margin=dict(l=120, r=2, t=12, b=12))
 
     HMD.plot_column(mapping,
-                    column_name="TriggerValueRight",
                     parameter="eHMIOn",
                     parameter_value=0,
                     additional_parameter="camera",
@@ -210,7 +201,6 @@ if __name__ == "__main__":
                     margin=dict(l=120, r=2, t=12, b=12))
 
     HMD.plot_column(mapping,
-                    column_name="TriggerValueRight",
                     parameter="eHMIOn",
                     parameter_value=0,
                     additional_parameter="camera",
@@ -224,7 +214,6 @@ if __name__ == "__main__":
 
     # Second-person view
     HMD.plot_column(mapping,
-                    column_name="TriggerValueRight",
                     parameter="eHMIOn",
                     parameter_value=1,
                     additional_parameter="camera",
@@ -237,7 +226,6 @@ if __name__ == "__main__":
                     margin=dict(l=120, r=2, t=12, b=12))
 
     HMD.plot_column(mapping,
-                    column_name="TriggerValueRight",
                     parameter="eHMIOn",
                     parameter_value=1,
                     additional_parameter="camera",
@@ -250,7 +238,6 @@ if __name__ == "__main__":
                     margin=dict(l=120, r=2, t=12, b=12))
 
     HMD.plot_column(mapping,
-                    column_name="TriggerValueRight",
                     parameter="eHMIOn",
                     parameter_value=0,
                     additional_parameter="camera",
@@ -263,7 +250,6 @@ if __name__ == "__main__":
                     margin=dict(l=120, r=2, t=12, b=12))
 
     HMD.plot_column(mapping,
-                    column_name="TriggerValueRight",
                     parameter="eHMIOn",
                     parameter_value=0,
                     additional_parameter="camera",
@@ -276,26 +262,37 @@ if __name__ == "__main__":
                     margin=dict(l=120, r=2, t=12, b=12))
 
     # Head rotation
-    # HMD.plot_yaw(mapping,
-    #              xaxis_range=[0, 11],
-    #              yaxis_range=[-0.06, 0.06],
-    #              xaxis_title="Time, [s]",
-    #              yaxis_title="Yaw angle, [radian]",
-    #              margin=dict(l=100, r=2, t=10, b=10))
-    # HMD.plot_yaw_histogram(mapping, angle=30, num_bins=30, smoothen_filter_param=True)
+    HMD.plot_yaw(mapping,
+                 xaxis_range=[0, 18],
+                 yaxis_range=[-0.06, 0.06],
+                 xaxis_title="Time, [s]",
+                 yaxis_title="Yaw angle, [radian]",
+                 margin=dict(l=100, r=2, t=10, b=10))
 
-    # # Subjective responses
-    # HMD.plot_individual_csvs(csv_paths=["_output/slider_input_noticeability.csv",  # Noticeability
-    #                                     "_output/slider_input_info.csv",           # Informativeness
-    #                                     "_output/slider_input_annoyance.csv"],     # Annoyance
-    #                          mapping_df=mapping,
-    #                          font_size=30,
-    #                          vertical_spacing=0.27,
-    #                          height=1500,
-    #                          width=1600,
-    #                          margin=dict(t=40, b=100, l=10, r=10))
+    HMD.plot_yaw_histogram(mapping, angle=30, num_bins=30, smoothen_filter_param=True)
 
-    # HMD.plot_individual_csvs_barplot(csv_paths=["_output/slider_input_noticeability.csv",  # Noticeability
-    #                                             "_output/slider_input_info.csv",           # Informativeness
-    #                                             "_output/slider_input_annoyance.csv"],     # Annoyance
-    #                                  mapping_df=mapping)
+    # Subjective responses
+    csv_paths = [
+        os.path.join(output_folder, "slider_input_noticeability.csv"),  # Noticeability
+        os.path.join(output_folder, "slider_input_info.csv"),           # Informativeness
+        os.path.join(output_folder, "slider_input_annoyance.csv")       # Annoyance
+    ]
+
+    # Use in your plotting functions
+    HMD.plot_individual_csvs(
+        csv_paths=csv_paths,
+        mapping_df=mapping,
+        font_size=30,
+        vertical_spacing=0.27,
+        height=1500,
+        width=1600,
+        margin=dict(t=40, b=100, l=10, r=10)
+    )
+
+    HMD.plot_individual_csvs_barplot(
+        csv_paths=csv_paths,
+        mapping_df=mapping
+    )
+
+    # Heatplot
+    HMD.heat_plot(folder_path=output_folder, mapping_df=mapping)
