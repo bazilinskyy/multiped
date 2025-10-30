@@ -2096,14 +2096,14 @@ class HMD_helper:
                 titlefont=dict(size=16, color="black")
             ),
             margin=dict(l=80, r=40, t=60, b=90),
-            width=1600,
-            height=1600,
+            width=2400,
+            height=2400,
             plot_bgcolor="white",
             paper_bgcolor="white"
         )
 
         self.save_plotly(fig,
                          'heatmap',
-                         height=1600,
-                         width=1600,
+                         height=2400,
+                         width=2400,
                          save_final=True)
