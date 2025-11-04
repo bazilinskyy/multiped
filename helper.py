@@ -1950,7 +1950,7 @@ class HMD_helper:
         self.save_plotly(fig, 'yaw_histogram', save_final=True)
 
     def heat_plot(self, folder_path: str, mapping_df: pd.DataFrame, relation: str = "ratio",
-                  colorscale: str = "Viridis", summary_func=np.mean):
+              colorscale: str = "Viridis", summary_func=np.mean):
         """
         Compute one summary value per video CSV, rename axes using `mapping_df`,
         and show a Plotly heatmap of pairwise relations (no numbers, no colorbar).
@@ -1960,17 +1960,16 @@ class HMD_helper:
         folder_path : str
             Folder with 'participant_TriggerValueRight_video_*.csv'.
         mapping_df : pd.DataFrame
-            Must include columns: 'video_id' and 'condition_name'.
+            Must include columns: 'video_id', 'condition_name', 'camera',
+            'cross_p1_time_s', 'cross_p2_time_s'.
+            The cutoff time used per video is cross_p1_time_s if camera==0,
+            otherwise cross_p2_time_s. Only rows with Timestamp <= cutoff are used.
         relation : {'ratio','diff'}
             'ratio' uses vb/va; 'diff' uses vb - va.
         colorscale : str
             Plotly colorscale name.
         summary_func : callable
             Aggregator applied to all numeric values per video (default: np.mean).
-        save_html : str | None
-            If provided, saves interactive HTML to this path.
-        save_png : str | None
-            If provided, saves static PNG to this path (requires 'kaleido').
 
         Returns
         -------
@@ -1982,12 +1981,28 @@ class HMD_helper:
             The heatmap figure.
         """
         # ---- Validate mapping_df ----
-        required_cols = {"video_id", "condition_name"}
+        required_cols = {"video_id", "condition_name", "camera", "cross_p1_time_s", "cross_p2_time_s"}
         if not required_cols.issubset(set(mapping_df.columns)):
             raise ValueError(f"mapping_df must have columns {required_cols}, got {list(mapping_df.columns)}")
 
-        # Build dict: video_id -> condition_name
-        mapping_dict = dict(zip(mapping_df["video_id"].astype(str), mapping_df["condition_name"].astype(str)))
+        # Normalize dtypes
+        md = mapping_df.copy()
+        md["video_id"] = md["video_id"].astype(str)
+        # Force numerics for times; invalids -> NaN
+        md["cross_p1_time_s"] = pd.to_numeric(md["cross_p1_time_s"], errors="coerce")
+        md["cross_p2_time_s"] = pd.to_numeric(md["cross_p2_time_s"], errors="coerce")
+        md["camera"] = pd.to_numeric(md["camera"], errors="coerce").astype("Int64")
+
+        # Build lookup: video_id -> {label, camera, p1, p2}
+        mapping_info = {
+            row["video_id"]: {
+                "label": str(row["condition_name"]),
+                "camera": int(row["camera"]) if pd.notna(row["camera"]) else None,
+                "p1": float(row["cross_p1_time_s"]) if pd.notna(row["cross_p1_time_s"]) else None,
+                "p2": float(row["cross_p2_time_s"]) if pd.notna(row["cross_p2_time_s"]) else None,
+            }
+            for _, row in md.iterrows()
+        }
 
         # ---- Find files ----
         pattern = os.path.join(folder_path, "participant_TriggerValueRight_video_*.csv")
@@ -2007,24 +2022,62 @@ class HMD_helper:
             m = re.search(r"(video_\d+)\.csv$", base, flags=re.IGNORECASE)
             return m.group(1) if m else base
 
-        # ---- Compute per-video summary ----
+        # ---- Compute per-video summary (respecting time cutoff) ----
         averages = {}
         for file_path in file_list:
+            video_id = _extract_video_id(file_path)
+            info = mapping_info.get(video_id)
+
+            # Determine cutoff (if mapping missing or incomplete, we'll fall back to no cutoff)
+            cutoff = None
+            label = video_id
+            if info:
+                label = info["label"]
+                cam = info["camera"]
+                if cam == 0:
+                    cutoff = info["p1"]
+                elif cam == 1:
+                    cutoff = info["p2"]
+                else:
+                    logger.warning(f"⚠️ camera not 0/1 for {video_id}; using full data (no cutoff).")
+
             try:
                 df = pd.read_csv(file_path)
             except Exception as e:
                 logger.error(f"⚠️ Error reading {file_path}: {e}")
                 continue
 
-            df = df.drop(columns=["Timestamp"], errors="ignore")
+            if "Timestamp" not in df.columns:
+                logger.warning(f"⚠️ 'Timestamp' column missing in {file_path}; using full data.")
+                ts_filtered = df
+            else:
+                # Coerce Timestamp to numeric seconds, drop rows with invalid timestamps
+                ts = pd.to_numeric(df["Timestamp"], errors="coerce")
+                valid = ts.notna()
+                df = df.loc[valid].copy()
+                ts = ts.loc[valid]
 
+                if cutoff is not None and np.isfinite(cutoff):
+                    mask = ts <= float(cutoff)
+                    ts_filtered = df.loc[mask].copy()
+                else:
+                    ts_filtered = df
+
+            # If nothing remains after filtering, skip
+            if ts_filtered.empty:
+                logger.warning(f"⚠️ No rows after time filtering for {file_path}; skipping.")
+                continue
+
+            # Drop Timestamp before aggregating values
+            ts_filtered = ts_filtered.drop(columns=["Timestamp"], errors="ignore")
+
+            # Parse list-like cells and collect finite numerics
             all_values = []
-            for col in df.columns:
-                for val in df[col]:
+            for col in ts_filtered.columns:
+                for val in ts_filtered[col]:
                     try:
-                        nums = ast.literal_eval(val)
+                        nums = ast.literal_eval(val) if isinstance(val, str) else val
                         if isinstance(nums, list):
-                            # keep only finite numerics
                             all_values.extend(
                                 float(x) for x in nums
                                 if isinstance(x, (int, float)) and np.isfinite(x)
@@ -2034,15 +2087,13 @@ class HMD_helper:
                         continue
 
             if not all_values:
+                logger.warning(f"⚠️ No numeric values found (after cutoff) in {file_path}; skipping.")
                 continue
 
-            # Map label via mapping_df
-            video_id = _extract_video_id(file_path)
-            label = mapping_dict.get(video_id, video_id)  # fallback to video_id if not found
             averages[label] = float(summary_func(all_values))
 
         if not averages:
-            raise ValueError("No valid numeric data found in videos.")
+            raise ValueError("No valid numeric data found in videos (after applying time cutoffs).")
 
         # ---- Build pairwise relation matrix ----
         labels = list(averages.keys())
@@ -2112,3 +2163,14 @@ class HMD_helper:
                          height=2400,
                          width=2400,
                          save_final=True)
+
+        # summary_df = pd.DataFrame({
+        #     "Condition": list(averages.keys()),
+        #     "Summary_Value": list(averages.values())
+        # }).sort_values("Condition")
+
+        # print("\n=== Condition Summary (pre-heatmap) ===")
+        # print(summary_df.to_string(index=False))
+        # print("=======================================\n")
+
+        return averages, relation_df, fig
