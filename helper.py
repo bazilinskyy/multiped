@@ -28,6 +28,7 @@ extra_class = Tools()
 # Consts
 SAVE_PNG = True
 SAVE_EPS = True
+output = common.get_configs("output")
 
 
 class HMD_helper:
@@ -1201,13 +1202,14 @@ class HMD_helper:
         self.export_participant_trigger_matrix(
             data_folder=self.data_folder,
             video_id=compare_trial,
-            output_file=os.path.join("output", f"participant_{column_name}_{compare_trial}.csv"),
+            output_file=os.path.join(common.get_configs("output"), f"participant_{column_name}_{compare_trial}.csv"),
             column_name=column_name,
             mapping=mapping_filtered
         )
 
         # Read matrix and extract time-series for the test trial
-        test_raw_df = pd.read_csv(os.path.join("output", f"participant_{column_name}_{compare_trial}.csv"))
+        test_raw_df = pd.read_csv(os.path.join(common.get_configs("output"),
+                                               f"participant_{column_name}_{compare_trial}.csv"))
         test_matrix = extra_class.extract_time_series_values(test_raw_df)
 
         # === Loop through each comparison trial ===
@@ -1219,13 +1221,13 @@ class HMD_helper:
             self.export_participant_trigger_matrix(
                 data_folder=self.data_folder,
                 video_id=video,
-                output_file=os.path.join("output", f"participant_{column_name}_{video}.csv"),
+                output_file=os.path.join(common.get_configs("output"), f"participant_{column_name}_{video}.csv"),
                 column_name=column_name,
                 mapping=mapping_filtered
             )
 
             # Read and process the trigger matrix to extract time series for this trial
-            trial_raw_df = pd.read_csv(os.path.join("output", f"participant_{column_name}_{video}.csv"))
+            trial_raw_df = pd.read_csv(os.path.join(common.get_configs("output"), f"participant_{column_name}_{video}.csv"))
             trial_matrix = extra_class.extract_time_series_values(trial_raw_df)
 
             # Compute participant-averaged time series (by timestamp) for this trial
@@ -1344,7 +1346,8 @@ class HMD_helper:
 
         # === Reference (test) trial: export yaw matrix and compute average yaw per timestamp ===
         test_video = self.test_trial
-        test_participant_csv = f"_output/participant_{column_name}_{test_video}.csv"
+        test_participant_csv = os.path.join(common.get_configs("output"),
+                                            f"participant_{column_name}_{test_video}.csv")
         self.export_participant_quaternion_matrix(
             data_folder=self.data_folder,
             video_id=test_video,
@@ -1353,20 +1356,22 @@ class HMD_helper:
         )
 
         # Compute average yaw for the reference (test) trial and save
-        test_yaw_csv = f"_output/yaw_avg_{test_video}.csv"
+        test_yaw_csv = os.path.join(common.get_configs("output"), f"yaw_avg_{test_video}.csv")
+
         HMD_class.compute_avg_yaw_from_matrix_csv(
             input_csv=test_participant_csv,
             output_csv=test_yaw_csv
         )
         test_matrix = extra_class.all_yaws_per_bin(
-            input_csv=f"_output/participant_{column_name}_{self.test_trial}.csv"
+            input_csv=os.path.join(common.get_configs("output"),
+                                   f"participant_{column_name}_{self.test_trial}.csv")
         )
 
         # === Iterate through each video trial (excluding control/test) ===
         for video in plot_videos:
             # Get display name for current trial
             display_name = mapping.loc[mapping["video_id"] == video, "display_name"].values[0]
-            participant_csv = f"_output/participant_{column_name}_{video}.csv"
+            participant_csv = os.path.join(common.get_configs("output"), f"participant_{column_name}_{video}.csv")
 
             # Export quaternion/yaw matrix for this trial
             self.export_participant_quaternion_matrix(
@@ -1377,7 +1382,7 @@ class HMD_helper:
             )
 
             # Compute avg yaw for this trial
-            yaw_csv = f"_output/yaw_avg_{video}.csv"
+            yaw_csv = os.path.join(common.get_configs("output"), f"yaw_avg_{video}.csv")
             HMD_class.compute_avg_yaw_from_matrix_csv(
                 input_csv=participant_csv,
                 output_csv=yaw_csv
@@ -1389,12 +1394,12 @@ class HMD_helper:
 
             # Extract all per-bin yaw values (for saving and t-test)
             trial_matrix = extra_class.all_yaws_per_bin(
-                input_csv=f"_output/participant_{column_name}_{video}.csv"
+                input_csv=os.path.join(common.get_configs("output"), f"participant_{column_name}_{video}.csv")
             )
 
             yaw_values = extra_class.flatten_trial_matrix(trial_matrix)
             yaw_values = yaw_values[~np.isnan(yaw_values)]  # Remove NaNs if present
-            trial_txt_path = f"_output/yaw_values_{video}.txt"
+            trial_txt_path = os.path.join(common.get_configs("output"), f"yaw_values_{video}.txt")
             np.savetxt(trial_txt_path, yaw_values)
 
             # Prepare for t-test: compare each trial vs. test reference (exclude self-comparison)
