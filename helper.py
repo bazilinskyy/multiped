@@ -4,7 +4,7 @@ import glob
 import plotly.graph_objects as go
 import plotly as py
 import plotly.io as pio
-from plotly.subplots import make_subplots
+import plotly.express as px
 # For OneEuroFilter, see https://github.com/casiez/OneEuroFilter
 from OneEuroFilter import OneEuroFilter
 import common
@@ -12,7 +12,6 @@ from custom_logger import CustomLogger
 import re
 import numpy as np
 from scipy.stats import ttest_rel, ttest_ind
-from scipy.stats import zscore
 from utils.HMD_helper import HMD_yaw
 from utils.tools import Tools
 from tqdm import tqdm
@@ -58,21 +57,6 @@ class HMD_helper:
         else:
             logger.error('Specified filter {} not implemented.', type_flter)
             return -1
-
-    def get_sound_clip_name(self, df, video_id_value):
-        """
-        Returns the display name for a given video_id from the provided DataFrame.
-
-        Args:
-            df (pd.DataFrame): DataFrame containing at least 'video_id' and 'display_name' columns.
-            video_id_value (str or int): The video_id to search for.
-
-        Returns:
-            str or None: The corresponding display name, or None if not found.
-        """
-        # Filter DataFrame for the matching video_id and get the display_name
-        result = df.loc[df["video_id"] == video_id_value, "display_name"]
-        return result.iloc[0] if not result.empty else None
 
     def plot_column_distribution(self, df, columns, output_folder, save_file=True, tag=None):
         """
@@ -1227,7 +1211,8 @@ class HMD_helper:
             )
 
             # Read and process the trigger matrix to extract time series for this trial
-            trial_raw_df = pd.read_csv(os.path.join(common.get_configs("output"), f"participant_{column_name}_{video}.csv"))
+            trial_raw_df = pd.read_csv(os.path.join(common.get_configs("output"),
+                                                    f"participant_{column_name}_{video}.csv"))
             trial_matrix = extra_class.extract_time_series_values(trial_raw_df)
 
             # Compute participant-averaged time series (by timestamp) for this trial
@@ -1310,647 +1295,60 @@ class HMD_helper:
             margin=margin
         )
 
-    def plot_yaw(self, mapping, column_name="Yaw", xaxis_title=None, yaxis_title=None,
-                 xaxis_range=None, yaxis_range=None, margin=None):
+    def plot_gender_by_nationality(self, csv_path,
+                                   gender_col="What is your gender?",
+                                   nationality_col="Nationality"):
         """
-        Generate a comparison plot of keypress yaw data and subjective slider ratings
-        for multiple video trials relative to a test condition.
-
-        The function processes trigger matrices for each participant and trial,
-        aligns time series data, attaches subjective slider-based ratings (annoyance,
-        informativeness, noticeability), and prepares the data for visualization.
-        Significance testing (paired t-tests) is performed between the test condition
-        and each other trial.
-
-        Args:
-            mapping (pd.DataFrame): DataFrame with video metadata, including
-                'video_id', 'sound_clip_name', 'display_name', and 'colour'.
-            column_name (str, optional): The matrix column to process (default "Yaw").
-            xaxis_title (str, optional): Custom label for the x-axis.
-            yaxis_title (str, optional): Custom label for the y-axis.
-            xaxis_range (list, optional): x-axis [min, max] limits for the plot.
-            yaxis_range (list, optional): y-axis [min, max] limits for the plot.
-            margin (dict, optional): Custom plot margin dictionary.
+        Reads a CSV file and generates an interactive Plotly bar chart
+        showing gender distribution for each nationality.
         """
 
-        # Filter out any 'test' or 'est' control videos from the mapping
-        video_id = mapping["video_id"]
-        plot_videos = video_id[~video_id.isin(["test", "est"])]
+        df = pd.read_csv(csv_path)
 
-        # Build a color dictionary for plotting
-        color_dict = dict(zip(mapping['display_name'], mapping['colour']))
+        nationality_map = {
+            "Pakistani": "Pakistan",
+            "Yemini": "Yemen",
+            "Yemeni": "Yemen",
+            "Nepalese": "Nepal",
+            "Chinese": "China",
+            "chinese": "China",
+            " Chinese": "China",
+            "Polish": "Poland",
+            "Indian ": "India",
+            "Dutch ": "Netherlands",
+            "Iranian": "Iran",
+            "Romanian": "Romania",
+            "Spanish": "Spain",
+            "Colombian": "Colombia",
+            "portuguese": "Portugal",
+            "Taiwanese": "Taiwan",
+            "German": "Germany"
+        }
 
-        all_dfs = []  # List to collect DataFrames for each trial
-        all_labels = []  # Corresponding list of human-friendly trial labels
-        ttest_signals = []  # Store t-test pairs for stats annotations
-
-        # === Reference (test) trial: export yaw matrix and compute average yaw per timestamp ===
-        test_video = self.test_trial
-        test_participant_csv = os.path.join(common.get_configs("output"),
-                                            f"participant_{column_name}_{test_video}.csv")
-        self.export_participant_quaternion_matrix(
-            data_folder=self.data_folder,
-            video_id=test_video,
-            output_file=test_participant_csv,
-            mapping=mapping
+        # Apply mapping
+        df[nationality_col] = df[nationality_col].map(nationality_map).fillna(
+            df[nationality_col].str.capitalize()
         )
 
-        # Compute average yaw for the reference (test) trial and save
-        test_yaw_csv = os.path.join(common.get_configs("output"), f"yaw_avg_{test_video}.csv")
+        # --- Group data ---
+        s = df.groupby([nationality_col, gender_col]).size()
+        s.name = "Count"
+        grouped = s.reset_index()
 
-        HMD_class.compute_avg_yaw_from_matrix_csv(
-            input_csv=test_participant_csv,
-            output_csv=test_yaw_csv
-        )
-        test_matrix = extra_class.all_yaws_per_bin(
-            input_csv=os.path.join(common.get_configs("output"),
-                                   f"participant_{column_name}_{self.test_trial}.csv")
-        )
-
-        # === Iterate through each video trial (excluding control/test) ===
-        for video in plot_videos:
-            # Get display name for current trial
-            display_name = mapping.loc[mapping["video_id"] == video, "display_name"].values[0]
-            participant_csv = os.path.join(common.get_configs("output"), f"participant_{column_name}_{video}.csv")
-
-            # Export quaternion/yaw matrix for this trial
-            self.export_participant_quaternion_matrix(
-                data_folder=self.data_folder,
-                video_id=video,
-                output_file=participant_csv,
-                mapping=mapping
-            )
-
-            # Compute avg yaw for this trial
-            yaw_csv = os.path.join(common.get_configs("output"), f"yaw_avg_{video}.csv")
-            HMD_class.compute_avg_yaw_from_matrix_csv(
-                input_csv=participant_csv,
-                output_csv=yaw_csv
-            )
-
-            df = pd.read_csv(yaw_csv)
-            all_dfs.append(df)
-            all_labels.append(display_name)
-
-            # Extract all per-bin yaw values (for saving and t-test)
-            trial_matrix = extra_class.all_yaws_per_bin(
-                input_csv=os.path.join(common.get_configs("output"), f"participant_{column_name}_{video}.csv")
-            )
-
-            yaw_values = extra_class.flatten_trial_matrix(trial_matrix)
-            yaw_values = yaw_values[~np.isnan(yaw_values)]  # Remove NaNs if present
-            trial_txt_path = os.path.join(common.get_configs("output"), f"yaw_values_{video}.txt")
-            np.savetxt(trial_txt_path, yaw_values)
-
-            # Prepare for t-test: compare each trial vs. test reference (exclude self-comparison)
-            if video != test_video:
-                ttest_signals.append({
-                    "signal_1": test_matrix,
-                    "signal_2": trial_matrix,
-                    "paired": True,
-                    "label": f"{display_name}"
-                })
-
-        # === Combine all trial DataFrames into a single one for plotting ===
-        combined_df = pd.DataFrame()
-        combined_df["Timestamp"] = all_dfs[0]["Timestamp"]
-
-        # Add events if required (here, a placeholder event at t=8.7s)
-        events = []
-        events.append({'id': 1,
-                       'start': 8.7,  # type: ignore
-                       'end': 8.7,  # type: ignore
-                       'annotation': ''})
-
-        # Add trial average yaw series as columns
-        for df, label in zip(all_dfs, all_labels):
-            combined_df[label] = df["AvgYaw"]
-
-        # Choose line style: dashed for test trial, solid for others
-        custom_line_dashes = []
-        # for label in all_labels:
-        #     vid = mapping.loc[mapping["display_name"] == label, "video_id"].values[0]
-        #     if vid == self.test_trial:
-        #         custom_line_dashes.append("dot")
-        #     else:
-        #         custom_line_dashes.append("solid")
-
-        # === Call central plotting function with all visualization & stats options ===
-        self.plot_kp(
-            df=combined_df,
-            y=all_labels,
-            y_legend_kp=all_labels,
-            xaxis_range=xaxis_range,
-            yaxis_range=yaxis_range,
-            xaxis_title=xaxis_title,  # type: ignore
-            yaxis_title=yaxis_title,  # type: ignore
-            xaxis_title_offset=-0.047,  # type: ignore
-            # yaxis_title_offset=0.17,  # type: ignore
-            name_file=f"all_videos_yaw_angle_{column_name}",
-            show_text_labels=True,
-            pretty_text=True,
-            events=events,
-            events_width=2,
-            events_annotations_font_size=common.get_configs("font_size") - 6,
-            stacked=False,
-            # ttest_signals=ttest_signals,
-            ttest_anova_row_height=0.01,
-            ttest_annotations_font_size=common.get_configs("font_size") - 6,
-            ttest_annotation_x=0.8,  # type: ignore
-            ttest_marker_size=common.get_configs("font_size") - 4,
-            xaxis_step=1,
-            yaxis_step=0.03,  # type: ignore
-            legend_x=0,
-            legend_y=1.225,
-            legend_columns=2,
-            line_width=3,
-            fig_save_width=1470,
-            fig_save_height=850,
-            font_size=common.get_configs("font_size"),
-            save_file=True,
-            save_final=True,
-            custom_line_colors=[color_dict.get(label, None) for label in all_labels],
-            custom_line_dashes=custom_line_dashes,
-            flag_trigger=False,
-            margin=margin
+        # --- Plot ---
+        fig = px.bar(
+            grouped,
+            x=nationality_col,
+            y="Count",
+            color=gender_col,
+            barmode="group",
+            title=""
         )
 
-    def plot_individual_csvs(self, csv_paths, mapping_df, font_size=None, color_dict=None, vertical_spacing=0.25,
-                             height=1500, width=1600, margin=dict(t=30, b=100, l=40, r=40)):  # noqa:E741
-        """
-        Plots individual participant responses from three CSV files as boxplots, with one subplot
-        for each metric (Annoyance, Informativeness, Noticeability) and one for the composite score.
-
-        Sound clip order and display names are taken from the mapping_df. Only clips found in all
-        CSV files will be plotted. Colors are set based on a user-defined color_dict.
-
-        Composite Score Calculation:
-            The composite score is calculated for each sound clip and participant as follows:
-            1. Invert the Annoyance score (higher Annoyance = worse) by subtracting each value
-                from the maximum scale value (e.g., 10).
-            2. Standardise each metric (inverted Annoyance, Informativeness, Noticeability) using z-scores.
-            3. Average the three standardised values (equal weighting) to form a single composite score per response.
-            This approach is based on the SUM (Single Usability Metric) methodology described
-                by Sauro & Kindlund (2005) (https://doi.org/10.1145/1054972.1055028).
-
-        Parameters:
-            csv_paths (list of str): List of three CSV file paths in the order:
-                                     [Annoyance, Informativeness, Noticeability].
-            mapping_df (pd.DataFrame): DataFrame with columns 'sound_clip_name' and 'display_name'
-                                       used to map internal sound clip names to human-readable labels.
-            font_size (int, optional): Font size for figure text.
-            color_dict (dict, optional): Dictionary mapping display names to specific plot colors.
-            vertical_spacing (int, optional): Vertical spacing between subplots.
-            height (int, optional): Height of plot.
-            width (int, optional): Width of plot.
-            margin (dict, optional): Custom plot margin dictionary.
-        """
-        # todo: copy changes in attributes to the barplot.
-
-        if len(csv_paths) != 3:
-            raise ValueError("Please provide exactly three CSV file paths.")
-
-        color_dict = dict(zip(mapping_df['display_name'], mapping_df['colour']))
-
-        # Load all data frames and get the set of common columns
-        all_data = []
-        all_columns_sets = []
-
-        for path in csv_paths:
-            df = pd.read_csv(path)
-            df = df[df['participant_id'] != 'average']
-            df_numeric = df.drop(columns='participant_id').astype(float)
-            all_data.append(df_numeric)
-            all_columns_sets.append(set(df_numeric.columns))
-
-        # Compute the intersection of all column names across datasets
-        common_cols = set.intersection(*all_columns_sets)
-
-        # Filter mapping_df to only keep sound clips that exist in all datasets
-        mapping_df = mapping_df[mapping_df['sound_clip_name'].isin(common_cols)]
-        sorted_internal_names = mapping_df['sound_clip_name'].tolist()
-        sorted_display_names = mapping_df['display_name'].tolist()
-
-        # Reorder columns in all data frames
-        all_data = [df[sorted_internal_names] for df in all_data]
-
-        # Compute composite score from annoyance, informativeness, noticeability
-        max_scale = 10
-        annoyance = all_data[2]
-        info = all_data[1]
-        notice = all_data[0]
-
-        non_annoyance = max_scale - annoyance
-        z_annoyance = zscore(non_annoyance, axis=0)
-        z_info = zscore(info, axis=0)
-        z_notice = zscore(notice, axis=0)
-
-        composite = (z_annoyance + z_info + z_notice) / 3
-        composite = pd.DataFrame(composite, columns=sorted_internal_names)
-
-        plot_data = all_data + [composite]
-
-        # Define subplot layout and titles
-        subplot_titles = ['Noticeability', 'Informativeness', 'Annoyance', 'Composite score']
-
-        fig = make_subplots(rows=2, cols=2, subplot_titles=subplot_titles, vertical_spacing=vertical_spacing)
-
-        # Set subplot title font sizes
-        for annotation in fig['layout']['annotations']:  # type: ignore
-            annotation['font'] = dict(size=font_size or common.get_configs('font_size'),  # type: ignore
-                                      family=common.get_configs('font_family'))
-
-        # Assign colors from color_dict
-        all_colors = [color_dict.get(label, None) for label in sorted_display_names]
-
-        # Plot each metric
-        for i, df_metric in enumerate(plot_data):
-            row = (i // 2) + 1
-            col = (i % 2) + 1
-            # y_max = 13 if i < 3 else df_metric.max().max() + 2
-
-            # check for composite score
-            if i < 3:
-                for j, colname in enumerate(sorted_internal_names):
-                    fig.add_trace(
-                        go.Box(
-                            y=df_metric[colname],
-                            name=sorted_display_names[j],
-                            boxpoints='outliers',
-                            marker_color=all_colors[j],
-                            line=dict(width=2),
-                            showlegend=False
-                        ),
-                        row=row,
-                        col=col
-                    )
-
-                    # Compute and plot mean markers
-                    mean_y = [df_metric[col].mean() for col in sorted_internal_names]
-                    fig.add_trace(
-                        go.Scatter(
-                            x=sorted_display_names,
-                            y=mean_y,
-                            mode='markers',
-                            marker=dict(symbol='diamond', color='black', size=8),
-                            name='Mean',
-                            showlegend=(i == 0)  # Only show legend once
-                        ),
-                        row=row,
-                        col=col
-                    )
-
-        # Create mapping from internal sound clip names to display names
-        mapping_dict = dict(zip(mapping_df['sound_clip_name'], mapping_df['display_name']))
-
-        avgs, stds, all_columns_sets = [], [], []
-
-        # Read and process each CSV file
-        for path in csv_paths:
-            df = pd.read_csv(path)
-            avg_row = df[df['participant_id'] == 'average']
-            if avg_row.empty:
-                raise ValueError(f"No 'average' row found in {path}")
-
-            # Exclude 'average' row to compute per-sound-clip std deviation
-            numeric_df = df[df['participant_id'] != 'average'].drop(columns='participant_id').astype(float)
-            std_row = numeric_df.std()
-            avg_row = avg_row.drop(columns='participant_id').iloc[0].astype(float)
-
-            avgs.append(avg_row)
-            stds.append(std_row)
-            all_columns_sets.append(set(numeric_df.columns))
-
-        # Find sound clips present in all three CSVs
-        common_cols = set.intersection(*all_columns_sets)
-
-        # Filter and sort mapping_df to retain and order only the common sound clips
-        mapping_df = mapping_df[mapping_df['sound_clip_name'].isin(common_cols)]
-        sorted_internal_names = mapping_df['sound_clip_name'].tolist()
-        sorted_display_names = mapping_df['display_name'].tolist()
-        mapping_dict = dict(zip(sorted_internal_names, sorted_display_names))
-
-        # Reorder averages and stds to match the mapping order
-        avgs = [avg[sorted_internal_names] for avg in avgs]
-        stds = [std[sorted_internal_names] for std in stds]
-
-        columns = avgs[0].index.tolist()
-        display_names = [mapping_dict.get(col, col) for col in columns]
-
-        # Compute Composite Score (z-score normalised average with inverted Annoyance)
-        annoyance = avgs[2]  # First CSV = Annoyance
-        info = avgs[1]  # Second CSV = Informativeness
-        notice = avgs[0]  # Third CSV = Noticeability
-
-        max_scale = 10  # Assumed survey/rating scale maximum
-        non_annoyance = max_scale - annoyance
-
-        z_annoyance = zscore(non_annoyance)
-        z_info = zscore(info)
-        z_notice = zscore(notice)
-
-        composite = (z_annoyance + z_info + z_notice) / 3
-        composite_std = ((stds[0] + stds[1] + stds[2]) / 3).fillna(0)  # Optional, just for label
-
-        # Prepare data for each subplot: means and standard deviations
-        data_to_plot = [
-            (avgs[0], stds[0]),
-            (avgs[1], stds[1]),
-            (avgs[2], stds[2]),
-            (composite, composite_std)
-        ]
-
-        # Add each subplot's barplot
-        for i, (means, deviations) in enumerate(data_to_plot):
-            if i == 3:
-                fig.add_trace(
-                    go.Bar(
-                        x=display_names,
-                        y=means,
-                        # name=subplot_titles[i],
-                        showlegend=False,
-                        marker_color=all_colors,
-                    ),
-                    row=row,
-                    col=col
-                )
-
-                # Annotate each bar with mean and std (as text)
-                for x_val, y_val, m, d in zip(display_names, means, means, deviations):
-                    fig.add_annotation(
-                        text=f"{m:.2f} ({d:.2f})",
-                        x=x_val,
-                        y=y_val + 0.05,
-                        showarrow=False,
-                        textangle=-90,
-                        font=dict(size=20),
-                        xanchor='center',
-                        yanchor='bottom',
-                        row=row,
-                        col=col
-                    )
-
-        # Layout settings
-        fig.update_layout(
-            font=dict(size=font_size or common.get_configs('font_size'), family=common.get_configs('font_family')),
-            height=height,
-            width=width,
-            margin=margin,
-            showlegend=False
-        )
-        fig.update_xaxes(tickangle=45)
-
-        # Save plot
-        self.save_plotly(
-            fig,
-            'boxplot_response',
-            height=height,
-            width=width,
-            save_final=True
-        )
-
-    def plot_individual_csvs_barplot(self, csv_paths, mapping_df, font_size=None):
-        """
-        Reads three CSV files, extracts the 'average' row from each, and generates a 2x2 grid of bar plots.
-        Each bar plot displays the average and standard deviation of 15 sound clips for a different response
-        metric (Noticeability, Informativeness, Annoyance), plus a composite score plot.
-
-        Composite Score Calculation:
-            The composite score is calculated for each sound clip as follows:
-            1. Invert the Annoyance mean (higher Annoyance = worse) by subtracting each value from the
-                maximum scale value (e.g., 10).
-            2. Standardise the mean values of each metric (inverted Annoyance, Informativeness, Noticeability)
-                using z-scores.
-            3. Average the three standardised values (equal weighting) to form a single composite score per sound clip.
-            This process follows the Single Usability Metric (SUM) methodology by Sauro & Kindlund (2005).
-
-        Parameters:
-            csv_paths (list of str): List of three file paths to CSVs. Each CSV must have a row labeled
-                'average' and per-participant rows.
-            mapping_df (pd.DataFrame): DataFrame mapping 'sound_clip_name' to human-readable 'display_name'.
-            font_size (int, optional): Font size for plot labels and titles.
-        """
-
-        # Ensure exactly three CSVs are provided
-        if len(csv_paths) != 3:
-            raise ValueError("Please provide exactly three CSV file paths.")
-
-        # Create mapping from internal sound clip names to display names
-        mapping_dict = dict(zip(mapping_df['sound_clip_name'], mapping_df['display_name']))
-
-        avgs, stds, all_columns_sets = [], [], []
-
-        # Read and process each CSV file
-        for path in csv_paths:
-            df = pd.read_csv(path)
-            avg_row = df[df['participant_id'] == 'average']
-            if avg_row.empty:
-                raise ValueError(f"No 'average' row found in {path}")
-
-            # Exclude 'average' row to compute per-sound-clip std deviation
-            numeric_df = df[df['participant_id'] != 'average'].drop(columns='participant_id').astype(float)
-            std_row = numeric_df.std()
-            avg_row = avg_row.drop(columns='participant_id').iloc[0].astype(float)
-
-            avgs.append(avg_row)
-            stds.append(std_row)
-            all_columns_sets.append(set(numeric_df.columns))
-
-        # Find sound clips present in all three CSVs
-        common_cols = set.intersection(*all_columns_sets)
-
-        # Filter and sort mapping_df to retain and order only the common sound clips
-        mapping_df = mapping_df[mapping_df['sound_clip_name'].isin(common_cols)]
-        sorted_internal_names = mapping_df['sound_clip_name'].tolist()
-        sorted_display_names = mapping_df['display_name'].tolist()
-        mapping_dict = dict(zip(sorted_internal_names, sorted_display_names))
-
-        # Reorder averages and stds to match the mapping order
-        avgs = [avg[sorted_internal_names] for avg in avgs]
-        stds = [std[sorted_internal_names] for std in stds]
-
-        columns = avgs[0].index.tolist()
-        display_names = [mapping_dict.get(col, col) for col in columns]
-
-        # Compute Composite Score (z-score normalised average with inverted Annoyance)
-        annoyance = avgs[2]  # First CSV = Annoyance
-        info = avgs[1]  # Second CSV = Informativeness
-        notice = avgs[0]  # Third CSV = Noticeability
-
-        max_scale = 10  # Assumed survey/rating scale maximum
-        non_annoyance = max_scale - annoyance
-
-        z_annoyance = zscore(non_annoyance)
-        z_info = zscore(info)
-        z_notice = zscore(notice)
-
-        composite = (z_annoyance + z_info + z_notice) / 3
-        composite_std = ((stds[0] + stds[1] + stds[2]) / 3).fillna(0)  # Optional, just for label
-
-        # Prepare plot titles
-        subplot_titles = ['Noticeability', 'Informativeness', 'Annoyance', 'Composite score']
-
-        # Create 2x2 subplots
-        fig = make_subplots(rows=2, cols=2, subplot_titles=subplot_titles, vertical_spacing=0.3)
-
-        # Adjust subplot title font sizes
-        for annotation in fig['layout']['annotations']:  # type: ignore
-            annotation['font'] = dict(size=font_size or common.get_configs('font_size'),  # type: ignore
-                                      family=common.get_configs('font_family'))
-
-        # Prepare data for each subplot: means and standard deviations
-        data_to_plot = [
-            (avgs[0], stds[0]),
-            (avgs[1], stds[1]),
-            (avgs[2], stds[2]),
-            (composite, composite_std)
-        ]
-
-        # Add each subplot's barplot
-        for i, (means, deviations) in enumerate(data_to_plot):
-            row = (i // 2) + 1
-            col = (i % 2) + 1
-
-            fig.add_trace(
-                go.Bar(
-                    x=display_names,
-                    y=means,
-                    # name=subplot_titles[i],
-                    showlegend=False
-                ),
-                row=row,
-                col=col
-            )
-
-            # Annotate each bar with mean and std (as text)
-            for x_val, y_val, m, d in zip(display_names, means, means, deviations):
-                fig.add_annotation(
-                    text=f"{m:.2f} ({d:.2f})",
-                    x=x_val,
-                    y=y_val + 0.15,
-                    showarrow=False,
-                    textangle=-90,
-                    font=dict(size=15),
-                    xanchor='center',
-                    yanchor='bottom',
-                    row=row,
-                    col=col
-                )
-            # Fix y-axis range for the first 3 subplots
-            if i < 3:
-                fig.update_yaxes(range=[0, 12], row=row, col=col)
-
-        # Update figure layout and style
-        fig.update_layout(
-            font=dict(size=font_size or common.get_configs('font_size'), family=common.get_configs('font_family')),
-            height=1200,
-            width=1600,
-            margin=dict(t=20, b=120, l=40, r=40),
-            showlegend=False
-        )
-
-        fig.update_xaxes(tickangle=45)
-
-        # Save the resulting figure
-        self.save_plotly(fig,
-                         'bar_response',
-                         height=1200,
-                         width=1600,
-                         save_final=True)
-
-    def plot_yaw_histogram(self, mapping, angle=180, data_folder='_output', num_bins=None,
-                           smoothen_filter_param=False):
-        """
-        Plots a histogram of average yaw angles for each trial across participants.
-
-        This function loads yaw angle data from text files for different trials, optionally smooths the data,
-        and plots histograms for each trial on a shared figure. Each line represents the distribution of yaw
-        angles for a single trial.
-
-        Parameters:
-            mapping (DataFrame): A data structure (e.g., pandas DataFrame) mapping trial identifiers to display names.
-            angle (int, optional): The yaw angle range considered for the histogram, from -angle to +angle.
-                Default is 180.
-            data_folder (str, optional): Path to the folder containing the yaw angle data files. Default is '_output'.
-            num_bins (int, optional): Number of bins for the histogram. If None, defaults to 2 * angle.
-            smoothen_filter_param (bool, optional): Whether to smooth the yaw data using a filter
-                (e.g., OneEuroFilter).
-        """
-
-        # Find all yaw angle text files in the data folder
-        txt_files = glob.glob(os.path.join(data_folder, 'yaw_values_*.txt'))
-        txt_files = sorted(txt_files)  # Ensure a consistent order
-
-        fig = go.Figure()  # Initialise the plotly figure
-        if num_bins is None:
-            num_bins = 2 * angle  # Default bin count
-
-        for file_path in txt_files:
-            # Extract the trial id from the filename
-            match = re.search(r'yaw_values_(.+)\.txt', os.path.basename(file_path))
-            if not match:
-                continue
-            trial_id = match.group(1)
-
-            # Get the human-readable trial name using the mapping DataFrame
-            display_name = self.get_sound_clip_name(df=mapping, video_id_value=trial_id)
-
-            # Load all yaw values for the trial from file
-            yaw_values = np.loadtxt(file_path)
-
-            # Convert to degrees (if not already in deg)
-            yaw_deg = np.degrees(yaw_values)
-
-            # Smoothing (optional)
-            if smoothen_filter_param:
-                yaw_deg = self.smoothen_filter(yaw_deg.tolist(), type_flter='OneEuroFilter')
-                yaw_deg = np.array(yaw_deg)
-
-            # Keep only angles within the specified range
-            filtered = yaw_deg[(yaw_deg >= -angle) & (yaw_deg <= angle)]
-            if len(filtered) == 0:
-                continue  # Skip if no data falls within the range
-
-            # Compute histogram for the current trial
-            hist, bins = np.histogram(filtered, bins=num_bins, range=(-angle, angle), density=True)
-            bin_centers = 0.5 * (bins[:-1] + bins[1:])
-
-            # Add the histogram as a line to the plot
-            fig.add_trace(go.Scatter(
-                x=bin_centers,
-                y=hist,
-                mode='lines',
-                name=display_name,
-                line=dict(width=2)
-            ))
-
-        # Add a vertical dashed line at 0 degrees (center)
-        fig.add_vline(x=0, line=dict(dash='dash',
-                                     color='gray'),
-                      annotation_text="0°",
-                      annotation_position="top")
-
-        # Set up axis labels, tick values, legend, and overall plot style
-        fig.update_layout(
-            xaxis_title='Yaw angle (deg)',
-            yaxis_title='Frequency',
-            xaxis=dict(
-                tickmode='array',
-                tickvals=[-angle, -(2*angle/3), -(angle/3), 0, (angle/3), ((2*angle/3)), angle]
-            ),
-            legend=dict(font=dict(size=20)),
-            width=1400,
-            height=800,
-            font=dict(size=common.get_configs('font_size'),
-                      family=common.get_configs('font_family')),
-            margin=dict(t=60, b=60, l=60, r=60)
-        )
-
-        # Save the generated plot using a helper function
-        self.save_plotly(fig, 'yaw_histogram', save_final=True)
+        fig.show()
 
     def heat_plot(self, folder_path: str, mapping_df: pd.DataFrame, relation: str = "ratio",
-              colorscale: str = "Viridis", summary_func=np.mean):
+                  colorscale: str = "Viridis", summary_func=np.mean):
         """
         Compute one summary value per video CSV, rename axes using `mapping_df`,
         and show a Plotly heatmap of pairwise relations (no numbers, no colorbar).
@@ -2158,19 +1556,500 @@ class HMD_helper:
             paper_bgcolor="white"
         )
 
-        self.save_plotly(fig,
-                         'heatmap',
-                         height=2400,
-                         width=2400,
-                         save_final=True)
+        self.save_plotly(fig, 'heatmap', height=2400, width=2400, save_final=True)
 
-        # summary_df = pd.DataFrame({
-        #     "Condition": list(averages.keys()),
-        #     "Summary_Value": list(averages.values())
-        # }).sort_values("Condition")
+        # One row per condition / label with the average trigger value
+        summary_df = pd.DataFrame({
+            "label": list(averages.keys()),
+            "avg_trigger": list(averages.values())
+        }).sort_values("label")
 
-        # print("\n=== Condition Summary (pre-heatmap) ===")
-        # print(summary_df.to_string(index=False))
-        # print("=======================================\n")
+        trigger_summary_path = os.path.join(folder_path, "trigger_summary.csv")
+        summary_df.to_csv(trigger_summary_path, index=False)
+        logger.info(f"Saved trigger averages to: {trigger_summary_path}")
 
-        return averages, relation_df, fig
+        # Optional: also save the pairwise relation matrix
+        relation_path = os.path.join(folder_path, "trigger_relation_matrix.csv")
+        relation_df.to_csv(relation_path)
+        logger.info(f"Saved trigger relation matrix to: {relation_path}")
+
+    def load_and_average_Q2(self, trigger_summary_csv: str, responses_root: str, mapping_df: pd.DataFrame,
+                            n_participants: int = 50, response_col_index: int = 2, save_combined: bool = True):
+        """
+        Combine per-condition trigger averages with averaged Q2 (distance question)
+        per condition.
+
+        Parameters
+        ----------
+        trigger_summary_csv : str
+            Path to 'trigger_summary.csv' saved by `heat_plot`.
+            Must have columns: ['label', 'avg_trigger'] where 'label' matches
+            mapping_df['condition_name'] (or video_id if you used that as label).
+        responses_root : str
+            Root folder containing Participant_1, Participant_2, ... subfolders.
+        mapping_df : pd.DataFrame
+            Must contain at least ['video_id', 'condition_name'].
+        n_participants : int
+            Total number of participants (default 50).
+        response_col_index : int
+            Zero-based index of the column containing the distance question (Q2).
+            With lines like 'video_25,0,41,71', index 2 corresponds to 41.
+        save_combined : bool
+            If True, save condition-level summary to
+            responses_root/condition_level_trigger_Q2.csv
+
+        Returns
+        -------
+        trial_df : pd.DataFrame
+            Trial-level data with columns:
+            ['participant', 'video_id', 'condition_name', 'Q_distance', 'avg_trigger']
+
+        condition_df : pd.DataFrame
+            Condition-level summary with columns:
+            ['condition_name', 'avg_trigger', 'mean_Q2', 'std_Q2', 'n_trials']
+        """
+        # --- Load trigger summary (condition -> avg_trigger) --- #
+        trigger_df = pd.read_csv(trigger_summary_csv)
+
+        if "label" not in trigger_df.columns or "avg_trigger" not in trigger_df.columns:
+            raise ValueError(
+                f"trigger_summary_csv must have columns ['label', 'avg_trigger'], "
+                f"got {trigger_df.columns.tolist()}"
+            )
+
+        # Rename 'label' to 'condition_name' to match mapping_df
+        trigger_df = trigger_df.rename(columns={"label": "condition_name"})
+        trigger_df["condition_name"] = trigger_df["condition_name"].astype(str)
+
+        # --- Prepare mapping: video_id -> condition_name --- #
+        map_df = mapping_df[["video_id", "condition_name"]].copy()
+        map_df["video_id"] = map_df["video_id"].astype(str)
+        map_df["condition_name"] = map_df["condition_name"].astype(str)
+
+        # --- Read all participant response CSVs (no headers) --- #
+        all_records = []
+
+        for pid in range(1, n_participants + 1):
+            participant_folder = os.path.join(responses_root, f"Participant_{pid}")
+            if not os.path.isdir(participant_folder):
+                logger.warning(f"Participant folder not found: {participant_folder}")
+                continue
+
+            pattern = os.path.join(participant_folder, f"Participant_{pid}_*.csv")
+            files = glob.glob(pattern)
+            if not files:
+                logger.warning(f"No response CSVs for Participant {pid} with pattern {pattern}")
+                continue
+
+            for fp in files:
+                df = pd.read_csv(fp, header=None)
+
+                # Need at least: trial_name (col 0) + Q2 column
+                if df.shape[1] <= response_col_index:
+                    logger.warning(
+                        f"File {fp} has only {df.shape[1]} columns, "
+                        f"cannot take column index {response_col_index}."
+                    )
+                    continue
+
+                tmp = df[[0, response_col_index]].copy()
+                tmp.columns = ["video_id", "Q_distance"]
+                tmp["participant"] = pid
+
+                # Keep only actual trials (video_*) and drop baselines
+                mask = tmp["video_id"].astype(str).str.startswith("video_")
+                tmp = tmp.loc[mask]
+
+                all_records.append(tmp)
+
+        if not all_records:
+            raise ValueError("No participant response data found. Check paths / patterns.")
+
+        trial_df = pd.concat(all_records, ignore_index=True)
+
+        # --- Attach condition_name via mapping_df (video_id -> condition_name) --- #
+        trial_df["video_id"] = trial_df["video_id"].astype(str)
+        trial_df = trial_df.merge(
+            map_df,
+            on="video_id",
+            how="left",
+        )
+
+        # --- Attach avg_trigger per condition_name --- #
+        trial_df = trial_df.merge(
+            trigger_df,
+            on="condition_name",
+            how="left",
+        )
+
+        # Now trial_df has:
+        # participant, video_id, Q_distance, condition_name, avg_trigger
+
+        # --- Average Q2 per condition (and pick avg_trigger per condition) --- #
+        condition_df = (
+            trial_df
+            .groupby("condition_name", as_index=False)
+            .agg(
+                avg_trigger=("avg_trigger", "mean"),  # same value repeated; mean is fine
+                mean_Q2=("Q_distance", "mean"),
+                std_Q2=("Q_distance", "std"),
+                n_trials=("Q_distance", "size"),
+            )
+            .sort_values("condition_name")
+        )
+
+        if save_combined:
+            out_path = os.path.join(responses_root, "condition_level_trigger_Q2.csv")
+            condition_df.to_csv(out_path, index=False)
+            logger.info(f"Saved condition-level trigger + Q2 data to: {out_path}")
+
+    def analyze_and_plot_distance_effect_plotly(self, condition_df, mapping_df, out_dir=None):
+        """
+        Merge condition-level averages with distance, yielding, eHMI, and camera,
+        compute full-factorial summaries, and create Plotly figures.
+
+        Assumes:
+          - condition_df has at least: ['condition_name', 'avg_trigger', 'mean_Q2']
+          - mapping_df has at least: ['condition_name', 'distPed', 'yielding', 'eHMIOn', 'camera']
+
+        Parameters
+        ----------
+        condition_df : pd.DataFrame
+            Output of load_and_average_Q2; must contain:
+            ['condition_name', 'avg_trigger', 'mean_Q2', ...]
+        mapping_df : pd.DataFrame
+            Must contain:
+            ['condition_name', 'distPed', 'yielding', 'eHMIOn', 'camera', ...]
+        out_dir : str or None
+            If not None, save figures to this folder as HTML files.
+
+        Returns
+        -------
+        cond_plot_df : pd.DataFrame
+            Condition-level data with attached factors and scaled Q2.
+        by_cond : pd.DataFrame
+        Full-factorial summary:distPed × yielding × eHMIOn × camera
+        figs : dict
+            {"behaviour": fig_behaviour, "q2": fig_q2, "scatter": fig_scatter}
+        """
+
+        # --- REQUIRED columns ---
+        required_cols = ["condition_name", "distPed", "yielding", "eHMIOn", "camera"]
+        missing = [c for c in required_cols if c not in mapping_df.columns]
+        if missing:
+            raise ValueError(f"mapping_df missing: {missing}")
+
+        needed_cond_cols = ["condition_name", "avg_trigger", "mean_Q2"]
+        missing2 = [c for c in needed_cond_cols if c not in condition_df.columns]
+        if missing2:
+            raise ValueError(f"condition_df missing: {missing2}")
+
+        # --- Prepare mapping info ---
+        mapping_df = mapping_df.copy()
+        mapping_df["condition_name"] = mapping_df["condition_name"].astype(str)
+
+        cond_plot_df = condition_df.copy()
+        cond_plot_df["condition_name"] = cond_plot_df["condition_name"].astype(str)
+
+        # Merge mapping info onto condition-level data
+        cond_plot_df = cond_plot_df.merge(
+            mapping_df[required_cols],
+            on="condition_name",
+            how="left"
+        )
+
+        # Scale trigger to 0–100
+        cond_plot_df["avg_trigger"] = cond_plot_df["avg_trigger"] * 100.0
+
+        # Drop if some factors missing
+        cond_plot_df = cond_plot_df.dropna(subset=["distPed", "yielding", "eHMIOn", "camera"])
+
+        # Q2 stays in original 0–100 scale
+
+        # ============================
+        # Full-factorial summary (means only, no SE)
+        # ============================
+        group_cols = ["distPed", "yielding", "eHMIOn", "camera"]
+
+        by_cond = (
+            cond_plot_df
+            .groupby(group_cols, as_index=False)
+            .agg(
+                avg_trigger_mean=("avg_trigger", "mean"),  # 0–100
+                Q2_mean=("mean_Q2", "mean"),               # 0–100
+            )
+            .sort_values(group_cols)
+        )
+
+        logger.info("\n=== Full-factorial condition table (NO SE, 0–100 scales) ===")
+        logger.info("\n=== Full-factorial condition table (NO SE, 0–100 scales) ===\n{}",
+                    by_cond.to_string(index=False))
+        logger.info("===========================================================\n")
+
+        # ============================
+        # Figure 1 — Behaviour vs Distance (legend = camera)
+        # ============================
+        fig_beh = px.line(
+            by_cond,
+            x="distPed",
+            y="avg_trigger_mean",
+            color="camera",
+            facet_col="eHMIOn",
+            facet_row="yielding",
+            markers=True,
+            title="",
+        )
+        fig_beh.update_layout(
+            template="plotly_white",
+            xaxis_title="Distance between pedestrian (in m)",
+            yaxis_title="Mean avg_trigger (0–100)",
+            legend_title="Camera",
+        )
+        fig_beh.for_each_annotation(
+            lambda a: a.update(
+                text=a.text.replace("eHMIOn=", "eHMI=").replace("yielding=", "yielding=")
+            )
+        )
+
+        # ============================
+        # Figure 2 — Q2 vs Distance (legend = camera)
+        # ============================
+        fig_q2 = px.line(
+            by_cond,
+            x="distPed",
+            y="Q2_mean",
+            color="camera",
+            facet_col="eHMIOn",
+            facet_row="yielding",
+            markers=True,
+            title="",
+        )
+        fig_q2.update_layout(
+            template="plotly_white",
+            xaxis_title="Distance between pedestrian (in m)",
+            yaxis_title="Mean response of effect of other pedestrian",
+            legend_title="Camera",
+        )
+        fig_q2.for_each_annotation(
+            lambda a: a.update(
+                text=a.text.replace("eHMIOn=", "eHMI=").replace("yielding=", "yielding=")
+            )
+        )
+
+        # ============================
+        # EXTRA Figure A — Behaviour vs distance, legend = yielding
+        # behaviour_full_factorial_legend_yielding
+        # ============================
+        fig_beh_yield = px.line(
+            by_cond,
+            x="distPed",
+            y="avg_trigger_mean",
+            color="yielding",
+            facet_col="eHMIOn",
+            facet_row="camera",
+            markers=True,
+            title="",
+        )
+        fig_beh_yield.update_layout(
+            template="plotly_white",
+            xaxis_title="Distance between pedestrian (in m)",
+            yaxis_title="Mean avg_trigger (0–100)",
+            legend_title="Yielding",
+        )
+        fig_beh_yield.for_each_annotation(
+            lambda a: a.update(
+                text=a.text.replace("eHMIOn=", "eHMI=").replace("camera=", "camera=")
+            )
+        )
+
+        # ============================
+        # EXTRA Figure B — Behaviour vs distance, legend = eHMIOn
+        # behaviour_full_factorial_legend_eHMI
+        # ============================
+        fig_beh_ehmi = px.line(
+            by_cond,
+            x="distPed",
+            y="avg_trigger_mean",
+            color="eHMIOn",
+            facet_col="yielding",
+            facet_row="camera",
+            markers=True,
+            title="",
+        )
+        fig_beh_ehmi.update_layout(
+            template="plotly_white",
+            xaxis_title="Distance between pedestrian (in m)",
+            yaxis_title="Mean response of effect of other pedestrian",
+            legend_title="eHMIOn",
+        )
+        fig_beh_ehmi.for_each_annotation(
+            lambda a: a.update(
+                text=a.text.replace("yielding=", "yielding=").replace("camera=", "camera=")
+            )
+        )
+
+        # ============================
+        # EXTRA Figure C — Q2 vs distance, legend = yielding
+        # Q2_full_factorial_legend_yielding
+        # ============================
+        fig_q2_yield = px.line(
+            by_cond,
+            x="distPed",
+            y="Q2_mean",
+            color="yielding",
+            facet_col="eHMIOn",
+            facet_row="camera",
+            markers=True,
+            title="",
+        )
+        fig_q2_yield.update_layout(
+            template="plotly_white",
+            xaxis_title="Distance between pedestrian (in m)",
+            yaxis_title="Mean response of effect of other pedestrian",
+            legend_title="Yielding",
+        )
+        fig_q2_yield.for_each_annotation(
+            lambda a: a.update(
+                text=a.text.replace("eHMIOn=", "eHMI=").replace("camera=", "camera=")
+            )
+        )
+
+        # ============================
+        # EXTRA Figure D — Q2 vs distance, legend = eHMIOn
+        # Q2_full_factorial_legend_eHMI
+        # ============================
+        fig_q2_ehmi = px.line(
+            by_cond,
+            x="distPed",
+            y="Q2_mean",
+            color="eHMIOn",
+            facet_col="yielding",
+            facet_row="camera",
+            markers=True,
+            title="",
+        )
+        fig_q2_ehmi.update_layout(
+            template="plotly_white",
+            xaxis_title="Distance between pedestrian (in m)",
+            yaxis_title="Mean response of effect of other pedestrian",
+            legend_title="eHMIOn",
+        )
+        fig_q2_ehmi.for_each_annotation(
+            lambda a: a.update(
+                text=a.text.replace("yielding=", "yielding=").replace("camera=", "camera=")
+            )
+        )
+
+        # ============================
+        # Figure 3 — Behaviour vs Q2 scatter (condition-level)
+        # ============================
+        fig_scatter = px.scatter(
+            cond_plot_df,
+            x="avg_trigger",
+            y="mean_Q2",
+            color="distPed",
+            title="",
+        )
+
+        x_vals = cond_plot_df["avg_trigger"].values
+        y_vals = cond_plot_df["mean_Q2"].values
+        if len(x_vals) >= 2 and np.isfinite(x_vals).all() and np.isfinite(y_vals).all():
+            b1, b0 = np.polyfit(x_vals, y_vals, 1)
+            xs = np.linspace(x_vals.min(), x_vals.max(), 100)
+            ys = b0 + b1 * xs
+            fig_scatter.add_trace(
+                go.Scatter(x=xs, y=ys, mode="lines", name="Trend")
+            )
+
+        fig_scatter.update_layout(
+            template="plotly_white",
+            xaxis_title="avg_trigger (0–100)",
+            yaxis_title="Mean response of effect of other pedestrian",
+        )
+
+        # ============================
+        # Figure 4 — NEAR (1–2 m) minus FAR (4–5 m) per context
+        # ============================
+        ctx_cols = ["yielding", "eHMIOn", "camera"]
+
+        near = (
+            by_cond[by_cond["distPed"].isin([1, 2])]
+            .groupby(ctx_cols, as_index=False)
+            .agg(
+                avg_trigger_near=("avg_trigger_mean", "mean"),
+                Q2_near=("Q2_mean", "mean"),
+            )
+        )
+        far = (
+            by_cond[by_cond["distPed"].isin([4, 5])]
+            .groupby(ctx_cols, as_index=False)
+            .agg(
+                avg_trigger_far=("avg_trigger_mean", "mean"),
+                Q2_far=("Q2_mean", "mean"),
+            )
+        )
+
+        diff_df = near.merge(far, on=ctx_cols, how="inner")
+        diff_df["delta_behaviour"] = diff_df["avg_trigger_near"] - diff_df["avg_trigger_far"]
+        diff_df["delta_Q2"] = diff_df["Q2_near"] - diff_df["Q2_far"]
+
+        diff_df["context"] = diff_df.apply(
+            lambda r: f"Y{int(r['yielding'])}_H{int(r['eHMIOn'])}_C{int(r['camera'])}",
+            axis=1,
+        )
+
+        logger.info("\n=== NEAR–FAR differences per context ===")
+        logger.info("\n=== NEAR–FAR differences per context ===\n{}",
+                    diff_df[["context", "delta_behaviour", "delta_Q2"]].to_string(index=False))
+        logger.info("========================================\n")
+
+        long_diff = diff_df.melt(
+            id_vars=["context"],
+            value_vars=["delta_behaviour", "delta_Q2"],
+            var_name="measure",
+            value_name="delta",
+        )
+        long_diff["measure"] = long_diff["measure"].map({
+            "delta_behaviour": "Behaviour (avg_trigger)",
+            "delta_Q2": "Self-report (Q2)",
+        })
+
+        fig_diff = px.bar(
+            long_diff,
+            x="context",
+            y="delta",
+            color="measure",
+            barmode="group",
+            title="",
+        )
+        fig_diff.update_layout(
+            template="plotly_white",
+            xaxis_title="Context (Y = yielding, H = eHMI, C = camera)",
+            yaxis_title="Near – far difference",
+            legend_title="Measure",
+        )
+        fig_diff.add_hline(y=0, line_dash="dash", line_color="black")
+
+        # ============================
+        # Stats summary
+        # ============================
+        corr = cond_plot_df["avg_trigger"].corr(cond_plot_df["mean_Q2"])
+        logger.info(f"Correlation (avg_trigger, Q2): r = {corr:.3f}")
+
+        xd = by_cond["distPed"].values
+        yd_beh = by_cond["avg_trigger_mean"].values
+        slope_beh, intercept_beh = np.polyfit(xd, yd_beh, 1)
+        logger.info(f"Overall behaviour vs distance: slope = {slope_beh:.4f} (trigger units per 1 m)")
+
+        yd_q2 = by_cond["Q2_mean"].values
+        slope_q2, intercept_q2 = np.polyfit(xd, yd_q2, 1)
+        logger.info(f"Overall Q2 vs distance: slope = {slope_q2:.4f} (Q2 units per 1 m)")
+
+        self.save_plotly(fig_beh, "behaviour_full_factorial", save_final=True)
+        self.save_plotly(fig_q2, "Q2_full_factorial", save_final=True)
+        self.save_plotly(fig_scatter, "behaviour_vs_Q2_scatter", save_final=True)
+        self.save_plotly(fig_diff, "near_minus_far_behaviour_vs_Q2", save_final=True)
+        self.save_plotly(fig_beh_yield, "behaviour_full_factorial_legend_yielding", save_final=True)
+        self.save_plotly(fig_beh_yield, "behaviour_full_factorial_legend_eHMI", save_final=True)
+        self.save_plotly(fig_q2_yield, "Q2_full_factorial_legend_yielding", save_final=True)
+        self.save_plotly(fig_q2_ehmi, "Q2_full_factorial_legend_eHMI", save_final=True)

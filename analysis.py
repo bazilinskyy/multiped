@@ -76,6 +76,10 @@ if __name__ == "__main__":
     logger.info("Analysis started.")
 
     # Information on participants
+    HMD.plot_gender_by_nationality(intake_questionnaire,
+                                   gender_col="What is your gender?",
+                                   nationality_col="What is your nationality?")
+
     HMD.plot_column_distribution(intake_questionnaire,
                                  intake_columns_to_plot,
                                  output_folder="output",
@@ -261,38 +265,15 @@ if __name__ == "__main__":
                     name="second_eHMI_off_yielding",
                     margin=dict(l=120, r=2, t=12, b=12))
 
-    # Head rotation
-    HMD.plot_yaw(mapping,
-                 xaxis_range=[0, 18],
-                 yaxis_range=[-0.06, 0.06],
-                 xaxis_title="Time, [s]",
-                 yaxis_title="Yaw angle, [radian]",
-                 margin=dict(l=100, r=2, t=10, b=10))
-
-    HMD.plot_yaw_histogram(mapping, angle=30, num_bins=30, smoothen_filter_param=True)
-
-    # Subjective responses
-    csv_paths = [
-        os.path.join(output_folder, "slider_input_noticeability.csv"),  # Noticeability
-        os.path.join(output_folder, "slider_input_info.csv"),           # Informativeness
-        os.path.join(output_folder, "slider_input_annoyance.csv")       # Annoyance
-    ]
-
-    # Use in your plotting functions
-    HMD.plot_individual_csvs(
-        csv_paths=csv_paths,
-        mapping_df=mapping,
-        font_size=30,
-        vertical_spacing=0.27,
-        height=1500,
-        width=1600,
-        margin=dict(t=40, b=100, l=10, r=10)
-    )
-
-    HMD.plot_individual_csvs_barplot(
-        csv_paths=csv_paths,
-        mapping_df=mapping
-    )
-
     # Heatplot
     HMD.heat_plot(folder_path=output_folder, mapping_df=mapping)
+    HMD.load_and_average_Q2(
+        trigger_summary_csv=os.path.join("_output", "trigger_summary.csv"),
+        responses_root=os.path.join("data", "hmd"),
+        mapping_df=mapping)
+
+    HMD.analyze_and_plot_distance_effect_plotly(
+        condition_df=pd.read_csv(os.path.join("data", "hmd", "condition_level_trigger_Q2.csv")),
+        mapping_df=mapping,
+        out_dir=output_folder,
+    )

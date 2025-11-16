@@ -38,7 +38,7 @@ RenderSettings:
   m_ReflectionIntensity: 1
   m_CustomReflection: {fileID: 0}
   m_Sun: {fileID: 0}
-  m_IndirectSpecularColor: {r: 0.13510102, g: 0.1913424, b: 0.29764882, a: 1}
+  m_IndirectSpecularColor: {r: 0.13516045, g: 0.19140959, b: 0.2976546, a: 1}
   m_UseRadianceAmbientProbe: 0
 --- !u!157 &3
 LightmapSettings:
@@ -1718,7 +1718,7 @@ MonoBehaviour:
       m_Calls: []
   m_text: 'Hello!
 
-    You need to press the trigger button only when you feel it
+    You need to hold the trigger button only when you feel it
     is NOT SAFE to cross the road.
 
     Please click to start.'
