@@ -104,22 +104,22 @@ python3 analysis.py
 ## Results
 
 ### Realtion between trigger press and response from the participant
-[![behaviour_full_factorial](figures/behaviour_full_factorial.png)](https://htmlpreview.github.io/?https://github.com/bazilinskyy/multiped/blob/main/figures/behaviour_full_factorial.html)
+[![behaviour_vs_Q2_scatter](figures/crossing_risk_vs_Q2_scatter.png)](https://htmlpreview.github.io/?https://github.com/bazilinskyy/multiped/blob/main/figures/crossing_risk_vs_Q2_scatter.html)
+Condition-wise relationship between behavioural trigger and Q2 across all distances and factors.
+
+[![near_minus_far_behaviour_vs_Q2](figures/near_minus_far_crossing_risk_vs_Q2.png)](https://htmlpreview.github.io/?https://github.com/bazilinskyy/multiped/blob/main/figures/near_minus_far_crossing_risk_vs_Q2.html)
+Near (1–2 m) minus far (4–5 m) differences in trigger and Q2 for each yielding × eHMI × position context.
+
+[![behaviour_full_factorial](figures/crossing_risk_full_factorial.png)](https://htmlpreview.github.io/?https://github.com/bazilinskyy/multiped/blob/main/figures/crossing_risk_full_factorial.html)
 Behavioural trigger (0–100) across distance, split by yielding, eHMI, and participant position.
 
 [![Q2_full_factorial](figures/Q2_full_factorial.png)](https://htmlpreview.github.io/?https://github.com/bazilinskyy/multiped/blob/main/figures/Q2_full_factorial.html)
 Self-reported distance influence (Q2, 0–100) across distance, split by yielding, eHMI, and participant position.
 
-[![behaviour_vs_Q2_scatter](figures/behaviour_vs_Q2_scatter.png)](https://htmlpreview.github.io/?https://github.com/bazilinskyy/multiped/blob/main/figures/behaviour_vs_Q2_scatter.html)
-Condition-wise relationship between behavioural trigger and Q2 across all distances and factors.
-
-[![near_minus_far_behaviour_vs_Q2](figures/near_minus_far_behaviour_vs_Q2.png)](https://htmlpreview.github.io/?https://github.com/bazilinskyy/multiped/blob/main/figures/near_minus_far_behaviour_vs_Q2.html)
-Near (1–2 m) minus far (4–5 m) differences in trigger and Q2 for each yielding × eHMI × position context.
-
-[![behaviour_full_factorial_legend_yielding](figures/behaviour_full_factorial_legend_yielding.png)](https://htmlpreview.github.io/?https://github.com/bazilinskyy/multiped/blob/main/figures/behaviour_full_factorial_legend_yielding.html)
+[![behaviour_full_factorial_legend_yielding](figures/crossing_risk_full_factorial_legend_yielding.png)](https://htmlpreview.github.io/?https://github.com/bazilinskyy/multiped/blob/main/figures/crossing_risk_full_factorial_legend_yielding.html)
 Behavioural trigger across distance with yielding shown in the legend and faceted by eHMI and position.
 
-[![behaviour_full_factorial_legend_eHMI](figures/behaviour_full_factorial_legend_eHMI.png)](https://htmlpreview.github.io/?https://github.com/bazilinskyy/multiped/blob/main/figures/behaviour_full_factorial_legend_eHMI.html)
+[![behaviour_full_factorial_legend_eHMI](figures/crossing_risk_full_factorial_legend_eHMI.png)](https://htmlpreview.github.io/?https://github.com/bazilinskyy/multiped/blob/main/figures/crossing_risk_full_factorial_legend_eHMI.html)
 Behavioural trigger across distance with eHMI status in the legend and faceted by yielding and position.
 
 [![Q2_full_factorial_legend_yielding](figures/Q2_full_factorial_legend_yielding.png)](https://htmlpreview.github.io/?https://github.com/bazilinskyy/multiped/blob/main/figures/Q2_full_factorial_legend_yielding.html)

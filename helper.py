@@ -1708,30 +1708,27 @@ class HMD_helper:
         Merge condition-level averages with distance, yielding, eHMI, and camera,
         compute full-factorial summaries, and create Plotly figures.
 
-        Assumes:
-          - condition_df has at least: ['condition_name', 'avg_trigger', 'mean_Q2']
-          - mapping_df has at least: ['condition_name', 'distPed', 'yielding', 'eHMIOn', 'camera']
-
-        Parameters
-        ----------
-        condition_df : pd.DataFrame
-            Output of load_and_average_Q2; must contain:
-            ['condition_name', 'avg_trigger', 'mean_Q2', ...]
-        mapping_df : pd.DataFrame
-            Must contain:
-            ['condition_name', 'distPed', 'yielding', 'eHMIOn', 'camera', ...]
-        out_dir : str or None
-            If not None, save figures to this folder as HTML files.
-
-        Returns
+        Assumes
         -------
-        cond_plot_df : pd.DataFrame
-            Condition-level data with attached factors and scaled Q2.
-        by_cond : pd.DataFrame
-        Full-factorial summary:distPed × yielding × eHMIOn × camera
-        figs : dict
-            {"behaviour": fig_behaviour, "q2": fig_q2, "scatter": fig_scatter}
+        condition_df has at least:
+            ['condition_name', 'avg_trigger', 'mean_Q2']
+            - avg_trigger: proportion of time trigger was held (unsafe) per condition.
+        mapping_df has at least:
+            ['condition_name', 'distPed', 'yielding', 'eHMIOn', 'camera']
+
+        Interpretation
+        --------------
+        - avg_trigger is scaled to 0–100 and interpreted as:
+            "Mean perceived crossing risk (0–100)".
+        - mean_Q2 is interpreted as:
+            "Self-reported influence of other pedestrian (0–100)".
         """
+
+        # Helper: turn "var=value" facet titles into just "value"
+        def _strip_facet_equals(fig):
+            fig.for_each_annotation(
+                lambda a: a.update(text=a.text.split("=", 1)[-1].strip())
+            )
 
         # --- REQUIRED columns ---
         required_cols = ["condition_name", "distPed", "yielding", "eHMIOn", "camera"]
@@ -1755,18 +1752,28 @@ class HMD_helper:
         cond_plot_df = cond_plot_df.merge(
             mapping_df[required_cols],
             on="condition_name",
-            how="left"
+            how="left",
         )
-        # Convert coded distance values to actual meters
+
+        # Convert coded distance values to actual meters (1→2 m, 2→4 m, ...)
         cond_plot_df["distPed_m"] = cond_plot_df["distPed"] * 2
 
-        # Scale trigger to 0–100
-        cond_plot_df["avg_trigger"] = cond_plot_df["avg_trigger"] * 100.0
+        # Scale trigger to 0–100: "Mean perceived crossing risk (0–100)"
+        cond_plot_df["crossing_risk"] = cond_plot_df["avg_trigger"] * 100.0
 
         # Drop if some factors missing
-        cond_plot_df = cond_plot_df.dropna(subset=["distPed", "yielding", "eHMIOn", "camera"])
+        cond_plot_df = cond_plot_df.dropna(
+            subset=["distPed", "yielding", "eHMIOn", "camera"]
+        )
 
-        # Q2 stays in original 0–100 scale
+        # Label maps for binary factors (0/1 → text)
+        label_map_yield = {0: "Not yielding", 1: "Yielding"}
+        label_map_ehmi = {0: "eHMI off", 1: "eHMI on"}
+        label_map_cam = {0: "Can see other person", 1: "Cannot see other person"}
+
+        cond_plot_df["yielding_label"] = cond_plot_df["yielding"].map(label_map_yield)
+        cond_plot_df["eHMI_label"] = cond_plot_df["eHMIOn"].map(label_map_ehmi)
+        cond_plot_df["camera_label"] = cond_plot_df["camera"].map(label_map_cam)
 
         # ============================
         # Full-factorial summary (means only, no SE)
@@ -1777,41 +1784,65 @@ class HMD_helper:
             cond_plot_df
             .groupby(group_cols, as_index=False)
             .agg(
-                avg_trigger_mean=("avg_trigger", "mean"),  # 0–100
-                Q2_mean=("mean_Q2", "mean"),               # 0–100
+                mean_crossing_risk=("crossing_risk", "mean"),  # Mean perceived crossing risk
+                Q2_mean=("mean_Q2", "mean"),                   # Self-report (Q2)
             )
             .sort_values(group_cols)
         )
 
+        # Add label columns for plotting facets
+        by_cond["yielding_label"] = by_cond["yielding"].map(label_map_yield)
+        by_cond["eHMI_label"] = by_cond["eHMIOn"].map(label_map_ehmi)
+        by_cond["camera_label"] = by_cond["camera"].map(label_map_cam)
+
         logger.info("\n=== Full-factorial condition table (NO SE, 0–100 scales) ===")
-        logger.info("\n=== Full-factorial condition table (NO SE, 0–100 scales) ===\n{}",
-                    by_cond.to_string(index=False))
+        logger.info(
+            "\n=== Full-factorial condition table (NO SE, 0–100 scales) ===\n{}",
+            by_cond.to_string(index=False),
+        )
         logger.info("===========================================================\n")
 
+        # Common label mapping for all figures
+        base_labels = {
+            "distPed_m": "Distance between pedestrians (m)",
+            "crossing_risk": "Mean perceived crossing risk (0–100)",
+            "mean_crossing_risk": "Mean perceived crossing risk (0–100)",
+            "avg_trigger": "Mean perceived crossing risk (0–100)",
+            "Q2_mean": "Self-reported influence of other pedestrian (0–100)",
+            "mean_Q2": "Self-reported influence of other pedestrian (0–100)",
+            "camera_label": "Camera",
+            "yielding_label": "Yielding",
+            "eHMI_label": "eHMI",
+            "context": "Context (Y = yielding, H = eHMI, C = camera)",
+            "delta": "Near–far difference (0–100)",
+            "measure": "Measure",
+        }
+
+        # Category ordering for cleaner facets / legends
+        category_orders = {
+            "eHMI_label": ["eHMI off", "eHMI on"],
+            "yielding_label": ["Not yielding", "Yielding"],
+            "camera_label": ["Can see other person", "Cannot see other person"],
+        }
+
         # ============================
-        # Figure 1 — Behaviour vs Distance (legend = camera)
+        # Figure 1 — Mean crossing risk vs Distance (legend = camera)
         # ============================
         fig_beh = px.line(
             by_cond,
             x="distPed_m",
-            y="avg_trigger_mean",
-            color="camera",
-            facet_col="eHMIOn",
-            facet_row="yielding",
+            y="mean_crossing_risk",
+            color="camera_label",
+            facet_col="eHMI_label",
+            facet_row="yielding_label",
             markers=True,
+            labels=base_labels,
+            category_orders=category_orders,
             title="",
         )
-        fig_beh.update_layout(
-            template="plotly_white",
-            xaxis_title="Distance between pedestrian (in m)",
-            yaxis_title="Mean avg_trigger (0–100)",
-            legend_title="Camera",
-        )
-        fig_beh.for_each_annotation(
-            lambda a: a.update(
-                text=a.text.replace("eHMIOn=", "eHMI=").replace("yielding=", "yielding=")
-            )
-        )
+        fig_beh.update_layout(template="plotly_white")
+        _strip_facet_equals(fig_beh)
+        fig_beh.update_layout(legend_title_text="")
 
         # ============================
         # Figure 2 — Q2 vs Distance (legend = camera)
@@ -1820,140 +1851,107 @@ class HMD_helper:
             by_cond,
             x="distPed_m",
             y="Q2_mean",
-            color="camera",
-            facet_col="eHMIOn",
-            facet_row="yielding",
+            color="camera_label",
+            facet_col="eHMI_label",
+            facet_row="yielding_label",
             markers=True,
+            labels=base_labels,
+            category_orders=category_orders,
             title="",
         )
-        fig_q2.update_layout(
-            template="plotly_white",
-            xaxis_title="Distance between pedestrian (in m)",
-            yaxis_title="Mean response of effect of other pedestrian",
-            legend_title="Camera",
-        )
-        fig_q2.for_each_annotation(
-            lambda a: a.update(
-                text=a.text.replace("eHMIOn=", "eHMI=").replace("yielding=", "yielding=")
-            )
-        )
+        fig_q2.update_layout(template="plotly_white")
+        _strip_facet_equals(fig_q2)
+        fig_q2.update_layout(legend_title_text="")
 
         # ============================
-        # EXTRA Figure A — Behaviour vs distance, legend = yielding
-        # behaviour_full_factorial_legend_yielding
+        # EXTRA Figure A — Mean crossing risk vs distance, legend = yielding
         # ============================
         fig_beh_yield = px.line(
             by_cond,
             x="distPed_m",
-            y="avg_trigger_mean",
-            color="yielding",
-            facet_col="eHMIOn",
-            facet_row="camera",
+            y="mean_crossing_risk",
+            color="yielding_label",
+            facet_col="eHMI_label",
+            facet_row="camera_label",
             markers=True,
+            labels=base_labels,
+            category_orders=category_orders,
             title="",
         )
-        fig_beh_yield.update_layout(
-            template="plotly_white",
-            xaxis_title="Distance between pedestrian (in m)",
-            yaxis_title="Mean avg_trigger (0–100)",
-            legend_title="Yielding",
-        )
-        fig_beh_yield.for_each_annotation(
-            lambda a: a.update(
-                text=a.text.replace("eHMIOn=", "eHMI=").replace("camera=", "camera=")
-            )
-        )
+        fig_beh_yield.update_layout(template="plotly_white")
+        _strip_facet_equals(fig_beh_yield)
+        fig_beh_yield.update_layout(legend_title_text="")
 
         # ============================
-        # EXTRA Figure B — Behaviour vs distance, legend = eHMIOn
-        # behaviour_full_factorial_legend_eHMI
+        # EXTRA Figure B — Mean crossing risk vs distance, legend = eHMI
         # ============================
         fig_beh_ehmi = px.line(
             by_cond,
             x="distPed_m",
-            y="avg_trigger_mean",
-            color="eHMIOn",
-            facet_col="yielding",
-            facet_row="camera",
+            y="mean_crossing_risk",
+            color="eHMI_label",
+            facet_col="yielding_label",
+            facet_row="camera_label",
             markers=True,
+            labels=base_labels,
+            category_orders=category_orders,
             title="",
         )
-        fig_beh_ehmi.update_layout(
-            template="plotly_white",
-            xaxis_title="Distance between pedestrian (in m)",
-            yaxis_title="Mean response of effect of other pedestrian",
-            legend_title="eHMIOn",
-        )
-        fig_beh_ehmi.for_each_annotation(
-            lambda a: a.update(
-                text=a.text.replace("yielding=", "yielding=").replace("camera=", "camera=")
-            )
-        )
+        fig_beh_ehmi.update_layout(template="plotly_white")
+        _strip_facet_equals(fig_beh_ehmi)
+        fig_beh_ehmi.update_layout(legend_title_text="")
 
         # ============================
         # EXTRA Figure C — Q2 vs distance, legend = yielding
-        # Q2_full_factorial_legend_yielding
         # ============================
         fig_q2_yield = px.line(
             by_cond,
             x="distPed_m",
             y="Q2_mean",
-            color="yielding",
-            facet_col="eHMIOn",
-            facet_row="camera",
+            color="yielding_label",
+            facet_col="eHMI_label",
+            facet_row="camera_label",
             markers=True,
+            labels=base_labels,
+            category_orders=category_orders,
             title="",
         )
-        fig_q2_yield.update_layout(
-            template="plotly_white",
-            xaxis_title="Distance between pedestrian (in m)",
-            yaxis_title="Mean response of effect of other pedestrian",
-            legend_title="Yielding",
-        )
-        fig_q2_yield.for_each_annotation(
-            lambda a: a.update(
-                text=a.text.replace("eHMIOn=", "eHMI=").replace("camera=", "camera=")
-            )
-        )
+        fig_q2_yield.update_layout(template="plotly_white")
+        _strip_facet_equals(fig_q2_yield)
+        fig_q2_yield.update_layout(legend_title_text="")
 
         # ============================
-        # EXTRA Figure D — Q2 vs distance, legend = eHMIOn
-        # Q2_full_factorial_legend_eHMI
+        # EXTRA Figure D — Q2 vs distance, legend = eHMI
         # ============================
         fig_q2_ehmi = px.line(
             by_cond,
             x="distPed_m",
             y="Q2_mean",
-            color="eHMIOn",
-            facet_col="yielding",
-            facet_row="camera",
+            color="eHMI_label",
+            facet_col="yielding_label",
+            facet_row="camera_label",
             markers=True,
+            labels=base_labels,
+            category_orders=category_orders,
             title="",
         )
-        fig_q2_ehmi.update_layout(
-            template="plotly_white",
-            xaxis_title="Distance between pedestrian (in m)",
-            yaxis_title="Mean response of effect of other pedestrian",
-            legend_title="eHMIOn",
-        )
-        fig_q2_ehmi.for_each_annotation(
-            lambda a: a.update(
-                text=a.text.replace("yielding=", "yielding=").replace("camera=", "camera=")
-            )
-        )
+        fig_q2_ehmi.update_layout(template="plotly_white")
+        _strip_facet_equals(fig_q2_ehmi)
+        fig_q2_ehmi.update_layout(legend_title_text="")
 
         # ============================
-        # Figure 3 — Behaviour vs Q2 scatter (condition-level)
+        # Figure 3 — Mean crossing risk vs Q2 scatter (condition-level)
         # ============================
         fig_scatter = px.scatter(
             cond_plot_df,
-            x="avg_trigger",
+            x="crossing_risk",
             y="mean_Q2",
             color="distPed_m",
+            labels=base_labels,
             title="",
         )
 
-        x_vals = cond_plot_df["avg_trigger"].values
+        x_vals = cond_plot_df["crossing_risk"].values
         y_vals = cond_plot_df["mean_Q2"].values
         if len(x_vals) >= 2 and np.isfinite(x_vals).all() and np.isfinite(y_vals).all():
             b1, b0 = np.polyfit(x_vals, y_vals, 1)
@@ -1963,11 +1961,7 @@ class HMD_helper:
                 go.Scatter(x=xs, y=ys, mode="lines", name="Trend")
             )
 
-        fig_scatter.update_layout(
-            template="plotly_white",
-            xaxis_title="avg_trigger (0–100)",
-            yaxis_title="Mean response of effect of other pedestrian",
-        )
+        fig_scatter.update_layout(template="plotly_white")
 
         # ============================
         # Figure 4 — NEAR (1–2 m) minus FAR (4–5 m) per context
@@ -1978,7 +1972,7 @@ class HMD_helper:
             by_cond[by_cond["distPed_m"].isin([1, 2])]
             .groupby(ctx_cols, as_index=False)
             .agg(
-                avg_trigger_near=("avg_trigger_mean", "mean"),
+                crossing_risk_near=("mean_crossing_risk", "mean"),
                 Q2_near=("Q2_mean", "mean"),
             )
         )
@@ -1986,34 +1980,46 @@ class HMD_helper:
             by_cond[by_cond["distPed_m"].isin([4, 5])]
             .groupby(ctx_cols, as_index=False)
             .agg(
-                avg_trigger_far=("avg_trigger_mean", "mean"),
+                crossing_risk_far=("mean_crossing_risk", "mean"),
                 Q2_far=("Q2_mean", "mean"),
             )
         )
 
         diff_df = near.merge(far, on=ctx_cols, how="inner")
-        diff_df["delta_behaviour"] = diff_df["avg_trigger_near"] - diff_df["avg_trigger_far"]
+        diff_df["delta_crossing_risk"] = (
+            diff_df["crossing_risk_near"] - diff_df["crossing_risk_far"]
+        )
         diff_df["delta_Q2"] = diff_df["Q2_near"] - diff_df["Q2_far"]
 
+        # Context string with on/off text instead of 0/1
         diff_df["context"] = diff_df.apply(
-            lambda r: f"Y{int(r['yielding'])}_H{int(r['eHMIOn'])}_C{int(r['camera'])}",
+            lambda r: (
+                f"Y{'on' if r['yielding'] == 1 else 'off'}_"
+                f"H{'on' if r['eHMIOn'] == 1 else 'off'}_"
+                f"C{int(r['camera'])}"
+            ),
             axis=1,
         )
 
         logger.info("\n=== NEAR–FAR differences per context ===")
-        logger.info("\n=== NEAR–FAR differences per context ===\n{}",
-                    diff_df[["context", "delta_behaviour", "delta_Q2"]].to_string(index=False))
+        logger.info(
+            "\n=== NEAR–FAR differences per context ===\n{}",
+            diff_df[["context", "delta_crossing_risk", "delta_Q2"]].to_string(
+                index=False
+            ),
+        )
         logger.info("========================================\n")
 
         long_diff = diff_df.melt(
             id_vars=["context"],
-            value_vars=["delta_behaviour", "delta_Q2"],
+            value_vars=["delta_crossing_risk", "delta_Q2"],
             var_name="measure",
             value_name="delta",
         )
+
         long_diff["measure"] = long_diff["measure"].map({
-            "delta_behaviour": "Behaviour (avg_trigger)",
-            "delta_Q2": "Self-report (Q2)",
+            "delta_crossing_risk": "Mean perceived crossing risk (0–100)",
+            "delta_Q2": "Self-reported influence of other pedestrian (0–100)",
         })
 
         fig_diff = px.bar(
@@ -2022,36 +2028,66 @@ class HMD_helper:
             y="delta",
             color="measure",
             barmode="group",
+            labels={**base_labels, "delta": "Near–far difference (0–100)"},
             title="",
         )
-        fig_diff.update_layout(
-            template="plotly_white",
-            xaxis_title="Context (Y = yielding, H = eHMI, C = camera)",
-            yaxis_title="Near – far difference",
-            legend_title="Measure",
-        )
+        fig_diff.update_layout(template="plotly_white")
         fig_diff.add_hline(y=0, line_dash="dash", line_color="black")
 
         # ============================
         # Stats summary
         # ============================
-        corr = cond_plot_df["avg_trigger"].corr(cond_plot_df["mean_Q2"])
-        logger.info(f"Correlation (avg_trigger, Q2): r = {corr:.3f}")
+        corr = cond_plot_df["crossing_risk"].corr(cond_plot_df["mean_Q2"])
+        logger.info(
+            f"Correlation (Mean perceived crossing risk, Q2): r = {corr:.3f}"
+        )
 
         xd = by_cond["distPed_m"].values
-        yd_beh = by_cond["avg_trigger_mean"].values
-        slope_beh, intercept_beh = np.polyfit(xd, yd_beh, 1)
-        logger.info(f"Overall behaviour vs distance: slope = {slope_beh:.4f} (trigger units per 1 m)")
+        yd_risk = by_cond["mean_crossing_risk"].values
+        slope_risk, intercept_risk = np.polyfit(xd, yd_risk, 1)
+        logger.info(
+            "Overall Mean perceived crossing risk vs distance: "
+            f"slope = {slope_risk:.4f} (risk units per 1 m)"
+        )
 
         yd_q2 = by_cond["Q2_mean"].values
         slope_q2, intercept_q2 = np.polyfit(xd, yd_q2, 1)
-        logger.info(f"Overall Q2 vs distance: slope = {slope_q2:.4f} (Q2 units per 1 m)")
+        logger.info(
+            "Overall Q2 vs distance: "
+            f"slope = {slope_q2:.4f} (Q2 units per 1 m)"
+        )
 
-        self.save_plotly(fig_beh, "behaviour_full_factorial", save_final=True)
+        # ============================
+        # Save figures
+        # ============================
+        self.save_plotly(fig_beh, "crossing_risk_full_factorial", save_final=True)
         self.save_plotly(fig_q2, "Q2_full_factorial", save_final=True)
-        self.save_plotly(fig_scatter, "behaviour_vs_Q2_scatter", save_final=True)
-        self.save_plotly(fig_diff, "near_minus_far_behaviour_vs_Q2", save_final=True)
-        self.save_plotly(fig_beh_yield, "behaviour_full_factorial_legend_yielding", save_final=True)
-        self.save_plotly(fig_beh_ehmi, "behaviour_full_factorial_legend_eHMI", save_final=True)
-        self.save_plotly(fig_q2_yield, "Q2_full_factorial_legend_yielding", save_final=True)
-        self.save_plotly(fig_q2_ehmi, "Q2_full_factorial_legend_eHMI", save_final=True)
+        self.save_plotly(fig_scatter, "crossing_risk_vs_Q2_scatter", save_final=True)
+        self.save_plotly(
+            fig_diff, "near_minus_far_crossing_risk_vs_Q2", save_final=True
+        )
+        self.save_plotly(
+            fig_beh_yield, "crossing_risk_full_factorial_legend_yielding", save_final=True
+        )
+        self.save_plotly(
+            fig_beh_ehmi, "crossing_risk_full_factorial_legend_eHMI", save_final=True
+        )
+        self.save_plotly(
+            fig_q2_yield, "Q2_full_factorial_legend_yielding", save_final=True
+        )
+        self.save_plotly(
+            fig_q2_ehmi, "Q2_full_factorial_legend_eHMI", save_final=True
+        )
+
+        # Optionally return data and figs if you want to use them later
+        figs = {
+            "crossing_risk_full_factorial": fig_beh,
+            "Q2_full_factorial": fig_q2,
+            "crossing_risk_vs_Q2_scatter": fig_scatter,
+            "near_minus_far_crossing_risk_vs_Q2": fig_diff,
+            "crossing_risk_full_factorial_legend_yielding": fig_beh_yield,
+            "crossing_risk_full_factorial_legend_eHMI": fig_beh_ehmi,
+            "Q2_full_factorial_legend_yielding": fig_q2_yield,
+            "Q2_full_factorial_legend_eHMI": fig_q2_ehmi,
+        }
+        return cond_plot_df, by_cond, figs
