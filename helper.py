@@ -1757,6 +1757,8 @@ class HMD_helper:
             on="condition_name",
             how="left"
         )
+        # Convert coded distance values to actual meters
+        cond_plot_df["distPed_m"] = cond_plot_df["distPed"] * 2
 
         # Scale trigger to 0–100
         cond_plot_df["avg_trigger"] = cond_plot_df["avg_trigger"] * 100.0
@@ -1769,7 +1771,7 @@ class HMD_helper:
         # ============================
         # Full-factorial summary (means only, no SE)
         # ============================
-        group_cols = ["distPed", "yielding", "eHMIOn", "camera"]
+        group_cols = ["distPed_m", "yielding", "eHMIOn", "camera"]
 
         by_cond = (
             cond_plot_df
@@ -1791,7 +1793,7 @@ class HMD_helper:
         # ============================
         fig_beh = px.line(
             by_cond,
-            x="distPed",
+            x="distPed_m",
             y="avg_trigger_mean",
             color="camera",
             facet_col="eHMIOn",
@@ -1816,7 +1818,7 @@ class HMD_helper:
         # ============================
         fig_q2 = px.line(
             by_cond,
-            x="distPed",
+            x="distPed_m",
             y="Q2_mean",
             color="camera",
             facet_col="eHMIOn",
@@ -1842,7 +1844,7 @@ class HMD_helper:
         # ============================
         fig_beh_yield = px.line(
             by_cond,
-            x="distPed",
+            x="distPed_m",
             y="avg_trigger_mean",
             color="yielding",
             facet_col="eHMIOn",
@@ -1868,7 +1870,7 @@ class HMD_helper:
         # ============================
         fig_beh_ehmi = px.line(
             by_cond,
-            x="distPed",
+            x="distPed_m",
             y="avg_trigger_mean",
             color="eHMIOn",
             facet_col="yielding",
@@ -1894,7 +1896,7 @@ class HMD_helper:
         # ============================
         fig_q2_yield = px.line(
             by_cond,
-            x="distPed",
+            x="distPed_m",
             y="Q2_mean",
             color="yielding",
             facet_col="eHMIOn",
@@ -1920,7 +1922,7 @@ class HMD_helper:
         # ============================
         fig_q2_ehmi = px.line(
             by_cond,
-            x="distPed",
+            x="distPed_m",
             y="Q2_mean",
             color="eHMIOn",
             facet_col="yielding",
@@ -1947,7 +1949,7 @@ class HMD_helper:
             cond_plot_df,
             x="avg_trigger",
             y="mean_Q2",
-            color="distPed",
+            color="distPed_m",
             title="",
         )
 
@@ -1973,7 +1975,7 @@ class HMD_helper:
         ctx_cols = ["yielding", "eHMIOn", "camera"]
 
         near = (
-            by_cond[by_cond["distPed"].isin([1, 2])]
+            by_cond[by_cond["distPed_m"].isin([1, 2])]
             .groupby(ctx_cols, as_index=False)
             .agg(
                 avg_trigger_near=("avg_trigger_mean", "mean"),
@@ -1981,7 +1983,7 @@ class HMD_helper:
             )
         )
         far = (
-            by_cond[by_cond["distPed"].isin([4, 5])]
+            by_cond[by_cond["distPed_m"].isin([4, 5])]
             .groupby(ctx_cols, as_index=False)
             .agg(
                 avg_trigger_far=("avg_trigger_mean", "mean"),
@@ -2036,7 +2038,7 @@ class HMD_helper:
         corr = cond_plot_df["avg_trigger"].corr(cond_plot_df["mean_Q2"])
         logger.info(f"Correlation (avg_trigger, Q2): r = {corr:.3f}")
 
-        xd = by_cond["distPed"].values
+        xd = by_cond["distPed_m"].values
         yd_beh = by_cond["avg_trigger_mean"].values
         slope_beh, intercept_beh = np.polyfit(xd, yd_beh, 1)
         logger.info(f"Overall behaviour vs distance: slope = {slope_beh:.4f} (trigger units per 1 m)")
@@ -2050,6 +2052,6 @@ class HMD_helper:
         self.save_plotly(fig_scatter, "behaviour_vs_Q2_scatter", save_final=True)
         self.save_plotly(fig_diff, "near_minus_far_behaviour_vs_Q2", save_final=True)
         self.save_plotly(fig_beh_yield, "behaviour_full_factorial_legend_yielding", save_final=True)
-        self.save_plotly(fig_beh_yield, "behaviour_full_factorial_legend_eHMI", save_final=True)
+        self.save_plotly(fig_beh_ehmi, "behaviour_full_factorial_legend_eHMI", save_final=True)
         self.save_plotly(fig_q2_yield, "Q2_full_factorial_legend_yielding", save_final=True)
         self.save_plotly(fig_q2_ehmi, "Q2_full_factorial_legend_eHMI", save_final=True)
