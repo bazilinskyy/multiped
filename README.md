@@ -128,6 +128,16 @@ Q2 across distance with yielding shown in the legend and faceted by eHMI and pos
 [![Q2_full_factorial_legend_eHMI](figures/Q2_full_factorial_legend_eHMI.png)](https://htmlpreview.github.io/?https://github.com/bazilinskyy/multiped/blob/main/figures/Q2_full_factorial_legend_eHMI.html)
 Q2 across distance with eHMI status in the legend and faceted by yielding and position.
 
+[![behaviour_of_the_other_pedestrian](figures/behaviour_of_the_other_pedestrian.png)](https://htmlpreview.github.io/?https://github.com/bazilinskyy/multiped/blob/main/figures/behaviour_of_the_other_pedestrian.html)  
+Self-reported influence of the other pedestrian’s behaviour on participants’ decision to cross (0–100), split by vehicle yielding, eHMI status, and visibility of the other pedestrian.
+
+[![distance_between_pedestrian](figures/distance_between_pedestrian.png)](https://htmlpreview.github.io/?https://github.com/bazilinskyy/multiped/blob/main/figures/distance_between_pedestrian.html)  
+Self-reported influence of the distance between pedestrians on participants’ decision to cross (0–100), split by vehicle yielding, eHMI status, and visibility of the other pedestrian.
+
+[![intention_of_the_vehicle](figures/intention_of_the_vehicle.png)](https://htmlpreview.github.io/?https://github.com/bazilinskyy/multiped/blob/main/figures/intention_of_the_vehicle.html)  
+Self-reported understanding of the vehicle’s intention (0–100), split by vehicle yielding, eHMI status, and visibility of the other pedestrian.
+
+
 
 ### Trigger press from the participant
 

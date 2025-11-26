@@ -267,6 +267,7 @@ if __name__ == "__main__":
 
     # Heatplot
     HMD.heat_plot(folder_path=output_folder, mapping_df=mapping)
+
     HMD.load_and_average_Q2(
         trigger_summary_csv=os.path.join("_output", "trigger_summary.csv"),
         responses_root=os.path.join("data", "hmd"),
@@ -276,4 +277,22 @@ if __name__ == "__main__":
         condition_df=pd.read_csv(os.path.join("data", "hmd", "condition_level_trigger_Q2.csv")),
         mapping_df=mapping,
         out_dir=output_folder,
+    )
+
+    HMD.plot_2x4_violins(
+        responses_csv=os.path.join(output_folder, "slider_input_behaviour.csv"),
+        mapping=mapping,
+        name="behaviour_of_the_other_pedestrian"
+    )
+
+    HMD.plot_2x4_violins(
+        responses_csv=os.path.join(output_folder, "slider_input_distance.csv"),
+        mapping=mapping,
+        name="distance_between_pedestrian"
+    )
+
+    HMD.plot_2x4_violins(
+        responses_csv=os.path.join(output_folder, "slider_input_intention.csv"),
+        mapping=mapping,
+        name="intention_of_the_vehicle"
     )

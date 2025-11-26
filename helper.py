@@ -5,6 +5,7 @@ import plotly.graph_objects as go
 import plotly as py
 import plotly.io as pio
 import plotly.express as px
+from plotly.subplots import make_subplots
 # For OneEuroFilter, see https://github.com/casiez/OneEuroFilter
 from OneEuroFilter import OneEuroFilter
 import common
@@ -28,6 +29,7 @@ extra_class = Tools()
 SAVE_PNG = True
 SAVE_EPS = True
 output = common.get_configs("output")
+plotly_template = common.get_configs("plotly_template")
 
 
 class HMD_helper:
@@ -213,7 +215,9 @@ class HMD_helper:
                 # Expected pattern: Participant_[id]_[number]_[number].csv
                 if re.match(rf'Participant_{participant_id}_\d+_\d+\.csv', file):
                     # Assume no header: columns are trial, noticeability, info, annoyance
-                    df = pd.read_csv(file_path, header=None, names=["trial", "noticeability", "info", "annoyance"])
+                    df = pd.read_csv(file_path,
+                                     header=None,
+                                     names=["trial", "behaviour", "distance", "intention"])
                     df.set_index("trial", inplace=True)
                     participant_data[participant_id] = df
                     all_trials.update(df.index)
@@ -225,7 +229,7 @@ class HMD_helper:
         all_trials.insert(0, "test") if "test" in all_trials else None
 
         # Prepare dict to aggregate each slider rating across all participants
-        slider_data = {"noticeability": [], "info": [], "annoyance": []}
+        slider_data = {"behaviour": [], "distance": [], "intention": []}
 
         # For each participant, gather ratings for all trials, filling missing with None
         for participant_id, df in sorted(participant_data.items()):
@@ -237,9 +241,9 @@ class HMD_helper:
                     row[trial] = [None, None, None]
 
             # Split values for each slider
-            slider_data["noticeability"].append([participant_id] + [vals[0] for vals in row.values() if isinstance(vals, list)])  # noqa: E501
-            slider_data["info"].append([participant_id] + [vals[1] for vals in row.values() if isinstance(vals, list)])
-            slider_data["annoyance"].append([participant_id] + [vals[2] for vals in row.values() if isinstance(vals, list)])  # noqa: E501
+            slider_data["behaviour"].append([participant_id] + [vals[0] for vals in row.values() if isinstance(vals, list)])  # noqa: E501
+            slider_data["distance"].append([participant_id] + [vals[1] for vals in row.values() if isinstance(vals, list)])  # noqa: E501
+            slider_data["intention"].append([participant_id] + [vals[2] for vals in row.values() if isinstance(vals, list)])  # noqa: E501
 
         # Convert lists to DataFrames, rename columns, and add average row
         for slider, data in slider_data.items():
@@ -1840,7 +1844,7 @@ class HMD_helper:
             category_orders=category_orders,
             title="",
         )
-        fig_beh.update_layout(template="plotly_white")
+        fig_beh.update_layout(template=plotly_template)
         _strip_facet_equals(fig_beh)
         fig_beh.update_layout(legend_title_text="")
 
@@ -1859,7 +1863,7 @@ class HMD_helper:
             category_orders=category_orders,
             title="",
         )
-        fig_q2.update_layout(template="plotly_white")
+        fig_q2.update_layout(template=plotly_template)
         _strip_facet_equals(fig_q2)
         fig_q2.update_layout(legend_title_text="")
 
@@ -1878,7 +1882,7 @@ class HMD_helper:
             category_orders=category_orders,
             title="",
         )
-        fig_beh_yield.update_layout(template="plotly_white")
+        fig_beh_yield.update_layout(template=plotly_template)
         _strip_facet_equals(fig_beh_yield)
         fig_beh_yield.update_layout(legend_title_text="")
 
@@ -1897,7 +1901,7 @@ class HMD_helper:
             category_orders=category_orders,
             title="",
         )
-        fig_beh_ehmi.update_layout(template="plotly_white")
+        fig_beh_ehmi.update_layout(template=plotly_template)
         _strip_facet_equals(fig_beh_ehmi)
         fig_beh_ehmi.update_layout(legend_title_text="")
 
@@ -1916,7 +1920,7 @@ class HMD_helper:
             category_orders=category_orders,
             title="",
         )
-        fig_q2_yield.update_layout(template="plotly_white")
+        fig_q2_yield.update_layout(template=plotly_template)
         _strip_facet_equals(fig_q2_yield)
         fig_q2_yield.update_layout(legend_title_text="")
 
@@ -1935,7 +1939,7 @@ class HMD_helper:
             category_orders=category_orders,
             title="",
         )
-        fig_q2_ehmi.update_layout(template="plotly_white")
+        fig_q2_ehmi.update_layout(template=plotly_template)
         _strip_facet_equals(fig_q2_ehmi)
         fig_q2_ehmi.update_layout(legend_title_text="")
 
@@ -1961,7 +1965,7 @@ class HMD_helper:
                 go.Scatter(x=xs, y=ys, mode="lines", name="Trend")
             )
 
-        fig_scatter.update_layout(template="plotly_white")
+        fig_scatter.update_layout(template=plotly_template)
 
         # ============================
         # Figure 4 — NEAR (1–2 m) minus FAR (4–5 m) per context
@@ -2031,7 +2035,7 @@ class HMD_helper:
             labels={**base_labels, "delta": "Near–far difference (0–100)"},
             title="",
         )
-        fig_diff.update_layout(template="plotly_white")
+        fig_diff.update_layout(template=plotly_template)
         fig_diff.add_hline(y=0, line_dash="dash", line_color="black")
 
         # ============================
@@ -2063,31 +2067,120 @@ class HMD_helper:
         self.save_plotly(fig_beh, "crossing_risk_full_factorial", save_final=True)
         self.save_plotly(fig_q2, "Q2_full_factorial", save_final=True)
         self.save_plotly(fig_scatter, "crossing_risk_vs_Q2_scatter", save_final=True)
-        self.save_plotly(
-            fig_diff, "near_minus_far_crossing_risk_vs_Q2", save_final=True
-        )
-        self.save_plotly(
-            fig_beh_yield, "crossing_risk_full_factorial_legend_yielding", save_final=True
-        )
-        self.save_plotly(
-            fig_beh_ehmi, "crossing_risk_full_factorial_legend_eHMI", save_final=True
-        )
-        self.save_plotly(
-            fig_q2_yield, "Q2_full_factorial_legend_yielding", save_final=True
-        )
-        self.save_plotly(
-            fig_q2_ehmi, "Q2_full_factorial_legend_eHMI", save_final=True
+        self.save_plotly(fig_diff, "near_minus_far_crossing_risk_vs_Q2", save_final=True)
+        self.save_plotly(fig_beh_yield, "crossing_risk_full_factorial_legend_yielding", save_final=True)
+        self.save_plotly(fig_beh_ehmi, "crossing_risk_full_factorial_legend_eHMI", save_final=True)
+        self.save_plotly(fig_q2_yield, "Q2_full_factorial_legend_yielding", save_final=True)
+        self.save_plotly(fig_q2_ehmi, "Q2_full_factorial_legend_eHMI", save_final=True)
+
+    def plot_2x4_violins(self, responses_csv: str, mapping, name):
+        """
+        Create a 2x4 grid (8 subplots) of violin plots for all combinations
+        of (yielding x eHMIOn x camera) defined in the mapping file.
+        """
+
+        # 1. Load data
+        responses = pd.read_csv(responses_csv)
+        # 2. Drop baselines and reshape to long format
+        responses = responses.drop(columns=["baseline_1", "baseline_2"], errors="ignore")
+        video_cols = [c for c in responses.columns if c.startswith("video_")]
+
+        long_df = responses.melt(
+            id_vars=["participant_id"],
+            value_vars=video_cols,
+            var_name="video_id",
+            value_name="rating"
         )
 
-        # Optionally return data and figs if you want to use them later
-        figs = {
-            "crossing_risk_full_factorial": fig_beh,
-            "Q2_full_factorial": fig_q2,
-            "crossing_risk_vs_Q2_scatter": fig_scatter,
-            "near_minus_far_crossing_risk_vs_Q2": fig_diff,
-            "crossing_risk_full_factorial_legend_yielding": fig_beh_yield,
-            "crossing_risk_full_factorial_legend_eHMI": fig_beh_ehmi,
-            "Q2_full_factorial_legend_yielding": fig_q2_yield,
-            "Q2_full_factorial_legend_eHMI": fig_q2_ehmi,
-        }
-        return cond_plot_df, by_cond, figs
+        long_df["video_id"] = long_df["video_id"].astype(str)
+        mapping["video_id"] = mapping["video_id"].astype(str)
+
+        # 3. Merge with mapping
+        mapping_cond = mapping[["video_id", "yielding", "eHMIOn", "camera"]].drop_duplicates()
+        long_cond = long_df.merge(mapping_cond, on="video_id", how="left")
+
+        long_cond["rating"] = pd.to_numeric(long_cond["rating"], errors="coerce")
+        long_cond = long_cond.dropna(subset=["rating", "yielding", "eHMIOn", "camera"])
+
+        # 4. Unique condition combinations (should be 8)
+        conds = (
+            long_cond[["yielding", "eHMIOn", "camera"]]
+            .drop_duplicates()
+            .sort_values(["yielding", "eHMIOn", "camera"])
+            .reset_index(drop=True)
+        )
+
+        max_plots = 8
+        if len(conds) > max_plots:
+            conds = conds.iloc[:max_plots]
+
+        def camera_label(cam):
+            return "Can see other person" if cam == 0 else "Cannot see other person"
+
+        # Two-line subplot title, single-line trace label
+        def case_title(row):
+            line1 = f"{'Yielding' if row['yielding'] == 1 else 'Non-yielding'}, eHMI {'on' if row['eHMIOn'] == 1 else 'off'}"  # noqa: E501
+            line2 = camera_label(int(row['camera']))
+            return f"{line1}<br>{line2}"
+
+        def case_name(row):
+            # for hover / legend (one line)
+            return (
+                f"{'Yielding' if row['yielding'] == 1 else 'Non-yielding'}, "
+                f"eHMI {'on' if row['eHMIOn'] == 1 else 'off'}, "
+                f"{camera_label(int(row['camera']))}"
+            )
+
+        titles = [case_title(row) for _, row in conds.iterrows()]
+        names = [case_name(row) for _, row in conds.iterrows()]
+
+        # 5. Create 2x4 subplot figure and add violins
+        fig = make_subplots(
+            rows=2,
+            cols=4,
+            subplot_titles=titles
+        )
+
+        for i, cond_row in conds.iterrows():
+            sub = long_cond[
+                (long_cond["yielding"] == cond_row["yielding"]) &
+                (long_cond["eHMIOn"] == cond_row["eHMIOn"]) &
+                (long_cond["camera"] == cond_row["camera"])
+            ]
+
+            r = i // 4 + 1   # type: ignore # row 1–2
+            c = i % 4 + 1    # type: ignore # col 1–4
+
+            fig.add_trace(
+                go.Violin(
+                    y=sub["rating"],
+                    box_visible=True,
+                    meanline_visible=True,
+                    points="all",
+                    name=names[i],   # one-line label for hover # type: ignore
+                    showlegend=False
+                ),
+                row=r,
+                col=c
+            )
+
+        # 6. Layout
+        fig.update_layout(
+            height=900,
+            width=1600,
+            title_text="",
+            template=plotly_template
+        )
+
+        # y-axis label for first column
+        for r in range(1, 3):
+            fig.update_yaxes(title_text="Rating", row=r, col=1)
+
+        # Hide x tick labels (titles already describe conditions)
+        for r in range(1, 3):
+            for c in range(1, 5):
+                fig.update_xaxes(showticklabels=False, row=r, col=c)
+
+        self.save_plotly(
+            fig, name, save_final=True
+        )
