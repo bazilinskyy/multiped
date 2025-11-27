@@ -75,7 +75,7 @@ except Exception as e:
 if __name__ == "__main__":
     logger.info("Analysis started.")
 
-    # Information on participants
+    # # Information on participants
     HMD.plot_gender_by_nationality(intake_questionnaire,
                                    gender_col="What is your gender?",
                                    nationality_col="What is your nationality?")
@@ -167,6 +167,7 @@ if __name__ == "__main__":
                     margin=dict(l=120, r=2, t=12, b=12))
 
     # Keypress data for yielding, eHMI and position criteria
+
     # First person view
     HMD.plot_column(mapping,
                     parameter="eHMIOn",
@@ -279,6 +280,7 @@ if __name__ == "__main__":
         out_dir=output_folder,
     )
 
+    # Violin plots
     HMD.plot_2x4_violins(
         responses_csv=os.path.join(output_folder, "slider_input_behaviour.csv"),
         mapping=mapping,
@@ -296,3 +298,168 @@ if __name__ == "__main__":
         mapping=mapping,
         name="intention_of_the_vehicle"
     )
+
+    # Head rotation
+    HMD.plot_yaw(mapping,
+                 parameter=None,
+                 xaxis_range=[0, 18],
+                 compare_trial="video_1",
+                 xaxis_title="Time, [s]",
+                 yaxis_title="Percentage of trials with trigger key pressed",
+                 name="all_yaw_values_with_yielding",
+                 margin=dict(l=120, r=2, t=12, b=12))
+
+    HMD.plot_yaw(mapping,
+                 parameter=None,
+                 xaxis_range=[0, 11],
+                 compare_trial="video_21",
+                 xaxis_title="Time, [s]",
+                 yaxis_title="Percentage of trials with trigger key pressed",
+                 name="all_yaw_values_without_yielding",
+                 margin=dict(l=120, r=2, t=12, b=12))
+
+    # Keypress data for yielding and eHMI criteria
+
+    # eHMI is off and car is yielding
+    HMD.plot_yaw(mapping,
+                 parameter="eHMIOn",
+                 parameter_value=0,
+                 xaxis_range=[0, 18],
+                 compare_trial="video_1",
+                 xaxis_title="Time, [s]",
+                 yaxis_title="Percentage of trials with trigger key pressed",
+                 name="yaw_eHMI_off_yielding",
+                 margin=dict(l=120, r=2, t=12, b=12))
+
+    # eHMI is on and car is yielding
+    HMD.plot_yaw(mapping,
+                 parameter="eHMIOn",
+                 parameter_value=1,
+                 xaxis_range=[0, 18],
+                 compare_trial="video_11",
+                 xaxis_title="Time, [s]",
+                 yaxis_title="Percentage of trials with trigger key pressed",
+                 name="yaw_eHMI_on_yielding",
+                 margin=dict(l=120, r=2, t=12, b=12))
+
+    # eHMI is off and car is not yielding
+    HMD.plot_yaw(mapping,
+                 parameter="eHMIOn",
+                 parameter_value=0,
+                 xaxis_range=[0, 11],
+                 compare_trial="video_31",
+                 xaxis_title="Time, [s]",
+                 yaxis_title="Percentage of trials with trigger key pressed",
+                 name="yaw_eHMI_off_non-yielding",
+                 margin=dict(l=120, r=2, t=12, b=12))
+
+    # eHMI is off and car is not yielding
+    HMD.plot_yaw(mapping,
+                 parameter="eHMIOn",
+                 parameter_value=1,
+                 xaxis_range=[0, 11],
+                 compare_trial="video_21",
+                 xaxis_title="Time, [s]",
+                 yaxis_title="Percentage of trials with trigger key pressed",
+                 name="yaw_eHMI_on_non-yielding",
+                 margin=dict(l=120, r=2, t=12, b=12))
+
+    # Keypress data for yielding, eHMI and position criteria
+
+    # First person view
+    HMD.plot_yaw(mapping,
+                 parameter="eHMIOn",
+                 parameter_value=1,
+                 additional_parameter="camera",
+                 additional_parameter_value=0,
+                 xaxis_range=[0, 11],
+                 compare_trial="video_21",
+                 xaxis_title="Time, [s]",
+                 yaxis_title="Percentage of trials with trigger key pressed",
+                 name="yaw_first_eHMI_on_non-yielding",
+                 margin=dict(l=120, r=2, t=12, b=12))
+
+    HMD.plot_yaw(mapping,
+                 parameter="eHMIOn",
+                 parameter_value=1,
+                 additional_parameter="camera",
+                 additional_parameter_value=0,
+                 xaxis_range=[0, 18],
+                 compare_trial="video_11",
+                 xaxis_title="Time, [s]",
+                 yaxis_title="Percentage of trials with trigger key pressed",
+                 name="yaw_first_eHMI_on_yielding",
+                 margin=dict(l=120, r=2, t=12, b=12))
+
+    HMD.plot_yaw(mapping,
+                 parameter="eHMIOn",
+                 parameter_value=0,
+                 additional_parameter="camera",
+                 additional_parameter_value=0,
+                 xaxis_range=[0, 11],
+                 compare_trial="video_31",
+                 xaxis_title="Time, [s]",
+                 yaxis_title="Percentage of trials with trigger key pressed",
+                 name="yaw_first_eHMI_off_non-yielding",
+                 margin=dict(l=120, r=2, t=12, b=12))
+
+    HMD.plot_yaw(mapping,
+                 parameter="eHMIOn",
+                 parameter_value=0,
+                 additional_parameter="camera",
+                 additional_parameter_value=0,
+                 xaxis_range=[0, 18],
+                 compare_trial="video_1",
+                 xaxis_title="Time, [s]",
+                 yaxis_title="Percentage of trials with trigger key pressed",
+                 name="yaw_first_eHMI_off_yielding",
+                 margin=dict(l=120, r=2, t=12, b=12))
+
+    # Second-person view
+    HMD.plot_yaw(mapping,
+                 parameter="eHMIOn",
+                 parameter_value=1,
+                 additional_parameter="camera",
+                 additional_parameter_value=1,
+                 xaxis_range=[0, 11],
+                 compare_trial="video_26",
+                 xaxis_title="Time, [s]",
+                 yaxis_title="Percentage of trials with trigger key pressed",
+                 name="yaw_second_eHMI_on_non-yielding",
+                 margin=dict(l=120, r=2, t=12, b=12))
+
+    HMD.plot_yaw(mapping,
+                 parameter="eHMIOn",
+                 parameter_value=1,
+                 additional_parameter="camera",
+                 additional_parameter_value=1,
+                 xaxis_range=[0, 18],
+                 compare_trial="video_16",
+                 xaxis_title="Time, [s]",
+                 yaxis_title="Percentage of trials with trigger key pressed",
+                 name="yaw_second_eHMI_on_yielding",
+                 margin=dict(l=120, r=2, t=12, b=12))
+
+    HMD.plot_yaw(mapping,
+                 parameter="eHMIOn",
+                 parameter_value=0,
+                 additional_parameter="camera",
+                 additional_parameter_value=1,
+                 xaxis_range=[0, 11],
+                 compare_trial="video_36",
+                 xaxis_title="Time, [s]",
+                 yaxis_title="Percentage of trials with trigger key pressed",
+                 name="yaw_second_eHMI_off_non-yielding",
+                 margin=dict(l=120, r=2, t=12, b=12))
+
+    HMD.plot_yaw(mapping,
+                 parameter="eHMIOn",
+                 parameter_value=0,
+                 additional_parameter="camera",
+                 additional_parameter_value=1,
+                 xaxis_range=[0, 18],
+                 compare_trial="video_6",
+                 xaxis_title="Time, [s]",
+                 yaxis_title="Percentage of trials with trigger key pressed",
+                 name="yaw_second_eHMI_off_yielding",
+                 margin=dict(l=120, r=2, t=12, b=12))

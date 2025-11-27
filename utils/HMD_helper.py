@@ -144,64 +144,44 @@ class HMD_yaw():
         # Ensure scalar-first order: [w, x, y, z]
         return avg_q if avg_q[0] >= 0 else -avg_q  # Normalise sign
 
-    def compute_avg_yaw_from_matrix_csv(self, input_csv, output_csv=None):
+    def compute_avg_yaw_from_matrix_csv(self, input_csv, output_csv=None, force=False):
         """
-        Computes the average yaw angle for each timestamp in a CSV containing participant quaternion matrices.
+        Computes the average yaw angle for each timestamp in a CSV containing
+        participant quaternion matrices.
 
-        For each row (timestamp), this method:
-            - Parses all participant quaternion lists
-            - Averages all quaternions (using Markley's method)
-            - Converts the average quaternion to Euler angles
-            - Extracts the yaw (rotation about z-axis)
-
-        Args:
-            input_csv (str): Path to the input CSV file. Must contain 'Timestamp' and participant columns
-                             with string-encoded lists of quaternions (each as [w, x, y, z]).
-            output_csv (str, optional): If set, saves the resulting DataFrame to this path as CSV.
-
-        Returns:
-            pd.DataFrame: DataFrame with columns ['Timestamp', 'AvgYaw'].
-
-        Notes:
-            - Requires 'average_quaternions_eigen' and 'quaternion_to_euler' methods to be defined on self.
-            - Returns yaw in radians.
-            - If a row has no quaternions, 'AvgYaw' is set to None for that timestamp.
+        If output_csv is given and force=False and the file already exists,
+        it is loaded and returned instead of recomputing.
         """
+
+        # If we already have output & we're not forcing, just load and return
+        if output_csv is not None and not force and os.path.isfile(output_csv):
+            return pd.read_csv(output_csv)
+
         df = pd.read_csv(input_csv)
-        # Identify participant columns (assumed to be all except 'Timestamp')
         participant_cols = [col for col in df.columns if col != "Timestamp"]
 
         results = []
 
-        # Iterate over each timestamp/row in the CSV
-        for idx, row in df.iterrows():
+        for _, row in df.iterrows():
             all_quats = []
 
-            # Gather all quaternions for this timestamp from all participants
             for col in participant_cols:
                 try:
-                    # Parse the string-encoded list of quaternions
                     quats = ast.literal_eval(row[col])
-                    # Ensure it's a non-empty list before adding
                     if isinstance(quats, list) and len(quats) > 0:
                         all_quats.extend(quats)
                 except Exception:
-                    # Ignore parsing errors (e.g., malformed data)
                     continue
 
-            # If we found at least one quaternion, compute the average and yaw
             if all_quats:
                 avg_quat = self.average_quaternions_eigen(all_quats)
                 roll, pitch, yaw = self.quaternion_to_euler(*avg_quat)
-                results.append({'Timestamp': row["Timestamp"], 'AvgYaw': yaw})
+                results.append({"Timestamp": row["Timestamp"], "AvgYaw": yaw})
             else:
-                # If no quaternions, set AvgYaw as None
-                results.append({'Timestamp': row["Timestamp"], 'AvgYaw': None})
+                results.append({"Timestamp": row["Timestamp"], "AvgYaw": None})
 
-        # Convert the results to a DataFrame
         out_df = pd.DataFrame(results)
 
-        # Save to CSV if an output path was provided
         if output_csv is not None:
             out_df.to_csv(output_csv, index=False)
 

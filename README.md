@@ -187,6 +187,52 @@ Participant is in back with car equipped with no eHMI and yielding
 Ratio-based heatplot showing relationships between yielding, eHMI, and pedestrian distance conditions.
 
 
+### Head movement from the participant
+
+[![Car is yielding](figures/all_yaw_values_with_yielding.png)](https://htmlpreview.github.io/?https://github.com/bazilinskyy/multiped/blob/main/figures/all_yaw_values_with_yielding.html)
+Car is yielding
+
+[![Car is not yielding](figures/all_yaw_values_without_yielding.png)](https://htmlpreview.github.io/?https://github.com/bazilinskyy/multiped/blob/main/figures/all_yaw_values_without_yielding.html)
+Car is not yielding
+
+[![Car is yielding and equipped with eHMI](figures/yaw_eHMI_off_yielding.png)](https://htmlpreview.github.io/?https://github.com/bazilinskyy/multiped/blob/main/figures/yaw_eHMI_off_yielding.html)
+Car is yielding and equipped with eHMI
+
+[![Car is not yielding and equipped with eHMI](figures/yaw_eHMI_on_yielding.png)](https://htmlpreview.github.io/?https://github.com/bazilinskyy/multiped/blob/main/figures/yaw_eHMI_on_yielding.html)
+Car is not yielding and equipped with eHMI
+
+[![Car is yielding and not equipped with eHMI](figures/yaw_eHMI_off_non-yielding.png)](https://htmlpreview.github.io/?https://github.com/bazilinskyy/multiped/blob/main/figures/yaw_eHMI_off_non-yielding.html)
+Car is yielding and not equipped with eHMI
+
+[![Car is not yielding and not equipped with eHMI](figures/yaw_eHMI_on_non-yielding.png)](https://htmlpreview.github.io/?https://github.com/bazilinskyy/multiped/blob/main/figures/yaw_eHMI_on_non-yielding.html)
+Car is not yielding and not equipped with eHMI
+
+[![Participant is in front with car equipped with eHMI and not yielding](figures/yaw_first_eHMI_on_non-yielding.png)](https://htmlpreview.github.io/?https://github.com/bazilinskyy/multiped/blob/main/figures/yaw_first_eHMI_on_non-yielding.html)
+Participant is in front with car equipped with eHMI and not yielding
+
+[![Participant is in front with car equipped with eHMI and yielding](figures/yaw_first_eHMI_on_yielding.png)](https://htmlpreview.github.io/?https://github.com/bazilinskyy/multiped/blob/main/figures/yaw_first_eHMI_on_yielding.html)
+Participant is in front with car equipped with eHMI and yielding
+
+[![Participant is in front with car equipped with no eHMI and not yielding](figures/yaw_first_eHMI_off_non-yielding.png)](https://htmlpreview.github.io/?https://github.com/bazilinskyy/multiped/blob/main/figures/yaw_first_eHMI_off_non-yielding.html)
+Participant is in front with car equipped with no eHMI and not yielding
+
+[![Participant is in front with car equipped with no eHMI and yielding](figures/yaw_first_eHMI_off_yielding.png)](https://htmlpreview.github.io/?https://github.com/bazilinskyy/multiped/blob/main/figures/yaw_first_eHMI_off_yielding.html)
+Participant is in front with car equipped with no eHMI and yielding
+
+[![Participant is in back with car equipped with eHMI and not yielding](figures/yaw_second_eHMI_on_non-yielding.png)](https://htmlpreview.github.io/?https://github.com/bazilinskyy/multiped/blob/main/figures/yaw_second_eHMI_on_non-yielding.html)
+Participant is in back with car equipped with eHMI and not yielding
+
+[![Participant is in back with car equipped with eHMI and yielding](figures/yaw_second_eHMI_on_yielding.png)](https://htmlpreview.github.io/?https://github.com/bazilinskyy/multiped/blob/main/figures/yaw_second_eHMI_on_yielding.html)
+Participant is in back with car equipped with eHMI and yielding
+
+[![Participant is in back with car equipped with no eHMI and not yielding](figures/yaw_second_eHMI_off_non-yielding.png)](https://htmlpreview.github.io/?https://github.com/bazilinskyy/multiped/blob/main/figures/yaw_second_eHMI_off_non-yielding.html)
+Participant is in back with car equipped with no eHMI and not yielding
+
+[![Participant is in back with car equipped with no eHMI and yielding](figures/yaw_second_eHMI_off_yielding.png)](https://htmlpreview.github.io/?https://github.com/bazilinskyy/multiped/blob/main/figures/yaw_second_eHMI_off_yielding.html)
+Participant is in back with car equipped with no eHMI and yielding
+
+
+
 ### Response of the participant
 
 

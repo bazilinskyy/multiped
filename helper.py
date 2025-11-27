@@ -40,6 +40,7 @@ class HMD_helper:
         self.folder_figures = common.get_configs('figures')  # subdirectory to save figures
         self.folder_stats = 'statistics'  # subdirectory to save statistical output
         self.data_folder = common.get_configs("data")  # Get path to participant data
+        self.output_folder = common.get_configs("output")
 
     def smoothen_filter(self, signal, type_flter='OneEuroFilter'):
         """Smoothen list with a filter.
@@ -181,6 +182,58 @@ class HMD_helper:
                 self.save_plotly(fig, filename, save_final=True)
             else:
                 fig.show()
+
+    def plot_gender_by_nationality(self, csv_path,
+                                   gender_col="What is your gender?",
+                                   nationality_col="Nationality"):
+        """
+        Reads a CSV file and generates an interactive Plotly bar chart
+        showing gender distribution for each nationality.
+        """
+
+        df = pd.read_csv(csv_path)
+
+        nationality_map = {
+            "Pakistani": "Pakistan",
+            "Yemini": "Yemen",
+            "Yemeni": "Yemen",
+            "Nepalese": "Nepal",
+            "Chinese": "China",
+            "chinese": "China",
+            " Chinese": "China",
+            "Polish": "Poland",
+            "Indian ": "India",
+            "Dutch ": "Netherlands",
+            "Iranian": "Iran",
+            "Romanian": "Romania",
+            "Spanish": "Spain",
+            "Colombian": "Colombia",
+            "portuguese": "Portugal",
+            "Taiwanese": "Taiwan",
+            "German": "Germany"
+        }
+
+        # Apply mapping
+        df[nationality_col] = df[nationality_col].map(nationality_map).fillna(
+            df[nationality_col].str.capitalize()
+        )
+
+        # --- Group data ---
+        s = df.groupby([nationality_col, gender_col]).size()
+        s.name = "Count"
+        grouped = s.reset_index()
+
+        # --- Plot ---
+        fig = px.bar(
+            grouped,
+            x=nationality_col,
+            y="Count",
+            color=gender_col,
+            barmode="group",
+            title=""
+        )
+
+        fig.show()
 
     @staticmethod
     def read_slider_data(data_folder, mapping, output_folder):
@@ -349,68 +402,16 @@ class HMD_helper:
                 anova_marker_size=3, anova_marker_colour='black', anova_annotations_font_size=10,
                 anova_annotations_colour='black', ttest_anova_row_height=0.5, xaxis_step=5,
                 yaxis_step=5, y_legend_bar=None, line_width=1, bar_font_size=None,
-                custom_line_colors=None, custom_line_dashes=None, flag_trigger=False, margin=None):
+                custom_line_colors=None, custom_line_dashes=None, flag_trigger=False, margin=None,
+                cross_p1_times=None,                 # NEW: {line_name -> time}
+                cross_p1_marker='diamond',           # NEW: marker style
+                cross_p1_marker_size=10,
+                cross_p1_marker_colour='black'):
         """
         Plots keypress (response) data from a dataframe using Plotly, with options for custom lines,
-        annotations, t-test and ANOVA result overlays, event markers, and customisable styling and saving.
-
-
-        Args:
-            df (dataframe): DataFrame with stimuli data.
-            y (list): Column names of DataFrame to plot.
-            y_legend_kp (list, optional): Names for variables for keypress data to be shown in the legend.
-            x (list, optional): Values in index of DataFrame to plot for. If None, the index of df is used.
-            events (list, optional): List of events to draw, formatted as values on x axis.
-            events_width (int, optional): Thickness of the vertical lines.
-            events_dash (str, optional): Style of the vertical lines (e.g., 'dot', 'dash').
-            events_colour (str, optional): Colour of the vertical lines.
-            events_annotations_font_size (int, optional): Font size for annotations on vertical lines.
-            events_annotations_colour (str, optional): Colour for annotations on vertical lines.
-            xaxis_title (str, optional): Title for x axis of the keypress plot.
-            yaxis_title (str, optional): Title for y axis of the keypress plot.
-            xaxis_title_offset (float, optional): Horizontal offset for x axis title of keypress plot.
-            yaxis_title_offset (float, optional): Vertical offset for y axis title of keypress plot.
-            xaxis_range (list or None, optional): Range of x axis in format [min, max] for keypress plot.
-            yaxis_range (list or None, optional): Range of y axis in format [min, max] for keypress plot.
-            stacked (bool, optional): Whether to show bars as stacked chart.
-            pretty_text (bool, optional): Prettify tick labels by replacing underscores with spaces and capitalising.
-            orientation (str, optional): Orientation of bars; 'v' = vertical, 'h' = horizontal.
-            show_text_labels (bool, optional): Whether to output automatically positioned text labels.
-            name_file (str, optional): Name of file to save.
-            save_file (bool, optional): Whether to save the plot as an HTML file.
-            save_final (bool, optional): Whether to save the figure as a final image in /figures.
-            fig_save_width (int, optional): Width of the figure when saving.
-            fig_save_height (int, optional): Height of the figure when saving.
-            legend_x (float, optional): X location of legend as percentage of plot width.
-            legend_y (float, optional): Y location of legend as percentage of plot height.
-            legend_columns (int, optional): Number of columns in legend
-            font_family (str, optional): Font family to use in the figure.
-            font_size (int, optional): Font size to use in the figure.
-            ttest_signals (list, optional): Signals to compare using t-test.
-            ttest_marker (str, optional): Marker style for t-test points.
-            ttest_marker_size (int, optional): Size of t-test markers.
-            ttest_marker_colour (str, optional): Colour of t-test markers.
-            ttest_annotations_font_size (int, optional): Font size of t-test annotations.
-            ttest_annotations_colour (str, optional): Colour of t-test annotations.
-            anova_signals (dict, optional): Signals to compare using ANOVA.
-            anova_marker (str, optional): Marker style for ANOVA points.
-            anova_marker_size (int, optional): Size of ANOVA markers.
-            anova_marker_colour (str, optional): Colour of ANOVA markers.
-            anova_annotations_font_size (int, optional): Font size of ANOVA annotations.
-            anova_annotations_colour (str, optional): Colour of ANOVA annotations.
-            ttest_anova_row_height (float, optional): Height per row for t-test/ANOVA marker rows.
-            xaxis_step (int): Step between ticks on x axis.
-            yaxis_step (float): Step between ticks on y axis.
-            y_legend_bar (list, optional): Names for variables in bar data for legend.
-            line_width (int): Line width for keypress data plot.
-            bar_font_size (int, optional): Font size for bar plot text, if applicable.
-            custom_line_colors (list, optional): List of custom colors for each line.
-            custom_line_dashes (list, optional): List of custom dash styles for each line.
-            flag_trigger (bool, optional): If True, scale y values to percentages (multiply by 100).
-            margin (dict, optional): Plotly layout margin dict (e.g., {'l':40, 'r':40, ...}) for fine control.
-
+        annotations, t-test and ANOVA result overlays, event markers, per-line cross_p1 markers,
+        and customisable styling and saving.
         """
-        # todo: update docstrings in all methods
 
         logger.info('Creating keypress figure.')
         # calculate times
@@ -418,23 +419,16 @@ class HMD_helper:
         # plotly
         fig = go.Figure()
 
-        # adjust ylim, if ttest results need to be plotted
-        if ttest_signals:
-            if yaxis_range[0] != 0:  # type: ignore
-                # assume one row takes ttest_anova_row_height on y axis
-                yaxis_range[0] = (yaxis_range[0] - len(ttest_signals) * ttest_anova_row_height - ttest_anova_row_height)  # noqa: E501  # type: ignore
-
-        # adjust ylim, if anova results need to be plotted
-        if anova_signals:
-            # assume one row takes ttest_anova_row_height on y axis
-            yaxis_range[0] = (yaxis_range[0] - len(anova_signals) * ttest_anova_row_height - ttest_anova_row_height)  # noqa: E501  # type: ignore
+        # ensure yaxis_range is mutable if provided as a tuple
+        if isinstance(yaxis_range, tuple):
+            yaxis_range = list(yaxis_range)
 
         # track plotted values to compute min/max for ticks
         all_values = []
 
         # plot keypress data
         for row_number, key in enumerate(y):
-            values = df[key]  # or whatever logic fits
+            values = df[key]
             if y_legend_kp:
                 name = y_legend_kp[row_number]
             else:
@@ -448,7 +442,10 @@ class HMD_helper:
                     values = self.smoothen_filter(values)
             else:
                 # If not smoothing, ensure no NaNs anyway
-                values = values.fillna(0).tolist() if isinstance(values, pd.Series) else [v if not pd.isna(v) else 0 for v in values]  # noqa: E501
+                if isinstance(values, pd.Series):
+                    values = values.fillna(0).tolist()
+                else:
+                    values = [v if not pd.isna(v) else 0 for v in values]
 
             # convert to 0-100%
             if flag_trigger:
@@ -461,15 +458,52 @@ class HMD_helper:
 
             name = y_legend_kp[row_number] if y_legend_kp else key
 
-            # plot signal
-            fig.add_trace(go.Scatter(y=values,
-                                     mode='lines',
-                                     x=times,
-                                     line=dict(width=line_width,
-                                               color=custom_line_colors[row_number] if custom_line_colors else None,
-                                               dash=custom_line_dashes[row_number] if custom_line_dashes else None,
-                                               ),
-                                     name=name))
+            # main line
+            fig.add_trace(go.Scatter(
+                y=values,
+                mode='lines',
+                x=times,
+                line=dict(
+                    width=line_width,
+                    color=custom_line_colors[row_number] if custom_line_colors else None,
+                    dash=custom_line_dashes[row_number] if custom_line_dashes else None,
+                ),
+                name=name
+            ))
+
+            # --- NEW: marker for cross_p1_time_s on this line ---
+            if cross_p1_times and name in cross_p1_times:
+                t_cross = cross_p1_times[name]
+
+                # find nearest timestamp index (handles small timing mismatches)
+                times_array = np.array(times, dtype=float)
+                idx = int(np.abs(times_array - t_cross).argmin())
+
+                x_marker = float(times_array[idx])
+                y_marker = values[idx]
+
+                fig.add_trace(go.Scatter(
+                    x=[x_marker],
+                    y=[y_marker],
+                    mode='markers',
+                    marker=dict(
+                        symbol=cross_p1_marker,
+                        size=cross_p1_marker_size,
+                        color=cross_p1_marker_colour,
+                    ),
+                    name=f"{name} P1 cross",
+                    showlegend=False
+                ))
+
+        # --- if no yaxis_range provided, derive it from the data so it's never None ---
+        if yaxis_range is None:
+            if all_values:  # safeguard against empty data
+                actual_ymin = min(all_values)
+                actual_ymax = max(all_values)
+                yaxis_range = [actual_ymin, actual_ymax]
+            else:
+                # fallback range if for some reason there's no data
+                yaxis_range = [0, 1]
 
         # draw events
         HMD_helper.draw_events(fig=fig,
@@ -481,18 +515,21 @@ class HMD_helper:
                                events_annotations_font_size=events_annotations_font_size,
                                events_annotations_colour=events_annotations_colour)
 
-        # update axis
+        # update x-axis
         if xaxis_step:
             fig.update_xaxes(title_text=xaxis_title,
                              range=xaxis_range,
                              dtick=xaxis_step,
-                             title_font=dict(family=font_family, size=font_size or common.get_configs('font_size'))
+                             title_font=dict(family=font_family,
+                                             size=font_size or common.get_configs('font_size'))
                              )
         else:
             fig.update_xaxes(title_text=xaxis_title,
                              range=xaxis_range,
-                             title_font=dict(family=font_family, size=font_size or common.get_configs('font_size')))
-        # Find actual y range across all series
+                             title_font=dict(family=font_family,
+                                             size=font_size or common.get_configs('font_size')))
+
+        # Find actual y range across all series (for tick generation only)
         actual_ymin = min(all_values)
         actual_ymax = max(all_values)
 
@@ -505,7 +542,9 @@ class HMD_helper:
         formatted_negative_ticks = [int(tick) if tick.is_integer() else tick for tick in negative_ticks]
 
         # Combine and sort ticks
-        visible_ticks = np.sort(np.unique(np.concatenate((formatted_negative_ticks, formatted_positive_ticks))))
+        visible_ticks = np.sort(np.unique(
+            np.concatenate((formatted_negative_ticks, formatted_positive_ticks))
+        ))
 
         tick_labels = [str(int(t)) if t.is_integer() else f"{t:.2f}" for t in visible_ticks]
 
@@ -517,9 +556,10 @@ class HMD_helper:
             ticktext=tick_labels,
             automargin=True,
             title=dict(
-                        text="",
-                        font=dict(family=font_family, size=font_size or common.get_configs('font_size')),
-                        standoff=0
+                text="",
+                font=dict(family=font_family,
+                          size=font_size or common.get_configs('font_size')),
+                standoff=0
             )
         )
 
@@ -528,10 +568,11 @@ class HMD_helper:
             xref='paper',
             yref='paper',
             x=xaxis_title_offset,     # still left side
-            y=0.5 + yaxis_title_offset,  # push label higher (was 0.5 + offset)
+            y=0.5 + yaxis_title_offset,
             showarrow=False,
             textangle=-90,
-            font=dict(family=font_family, size=font_size or common.get_configs('font_size')),
+            font=dict(family=font_family,
+                      size=font_size or common.get_configs('font_size')),
             xanchor='center',
             yanchor='middle'
         )
@@ -546,7 +587,6 @@ class HMD_helper:
                     # capitalise
                     df[variable] = df[variable].str.capitalize()
 
-        # Plot slider data
         # use index of df if none is given
         if not x:
             x = df.index
@@ -598,12 +638,11 @@ class HMD_helper:
                 legend=dict(
                     x=legend_x,
                     y=legend_y,
-                    # margin=dict(l=0, r=0, t=0, b=0, pad=0),
                     bgcolor='rgba(0,0,0,0)',
                     font=dict(size=font_size or common.get_configs('font_size')),
-                    orientation='h',  # must be vertical
+                    orientation='h',
                     traceorder='normal',
-                    itemwidth=30,  # fixed item width to ensure consistent wrapping
+                    itemwidth=30,
                     itemsizing='constant'
                 ),
                 legend_title_text='',
@@ -619,18 +658,14 @@ class HMD_helper:
 
         # update font family
         if font_family:
-            # use given value
             fig.update_layout(font=dict(family=font_family))
         else:
-            # use value from config file
             fig.update_layout(font=dict(family=common.get_configs('font_family')))
 
         # update font size
         if font_size:
-            # use given value
             fig.update_layout(font=dict(size=font_size))
         else:
-            # use value from config file
             fig.update_layout(font=dict(size=common.get_configs('font_size')))
 
         # save file to local output folder
@@ -640,8 +675,7 @@ class HMD_helper:
                              remove_margins=False,
                              width=fig_save_width,
                              height=fig_save_height,
-                             save_final=save_final)  # also save as "final" figure
-        # open it in localhost instead
+                             save_final=save_final)
         else:
             fig.show()
 
@@ -801,7 +835,7 @@ class HMD_helper:
         Args:
             fig (figure): figure object.
             name_file (str): name of file to save.
-            yaxis_range (list): range of x axis in format [min, max] for the keypress plot.
+            yaxis_range (list): range of y axis in format [min, max] for the keypress plot.
             yaxis_step (int): step between ticks on y axis.
             ttest_signals (list): signals to compare with ttest. None = do not compare.
             ttest_marker (str): symbol of markers for the ttest.
@@ -815,11 +849,9 @@ class HMD_helper:
             anova_marker_colour (str): colour of markers for the ANOVA.
             anova_annotations_font_size (int): font size of annotations for ANOVA.
             anova_annotations_colour (str): colour of annotations for ANOVA.
-            ttest_anova_row_height (int): height of row of ttest/anova markers.
+            ttest_anova_row_height (float): height of row of ttest/anova markers in y units.
         """
-        # todo: anova support is broken after migration from original code
-        # todo: when no markers are to be shown, empty space is still added to the y axis
-        # Save original axis limits
+        # Save original axis limits (bottom/top of the main data area)
         original_min, original_max = yaxis_range
         # Counters for marker rows
         counter_ttest = 0
@@ -847,23 +879,22 @@ class HMD_helper:
 
                 if any(sig):
                     xs, ys = [], []
-                    # hardcoding margin from the x
-                    # todo: hardcoding value of margin
-                    if flag_trigger:
-                        y_offset = original_min - ttest_anova_row_height * (counter_ttest + 1) - 5
-                    else:
-                        y_offset = original_min - (ttest_anova_row_height * (counter_ttest + 1)) + 0.15
+
+                    # Place this row below the curves, one row further down per comparison
+                    # (same logic for kp/yaw; ttest_anova_row_height is in the same units as y)
+                    y_offset = original_min - ttest_anova_row_height * (counter_ttest + 1)
 
                     for i, s in enumerate(sig):
                         if s:
                             xs.append(times[i])
                             ys.append(y_offset)
+
                     # plot markers
                     for x, y, p_val in zip(xs, ys, p_vals):
                         fig.add_annotation(
                             x=x,
                             y=y,
-                            text='*',  # TODO: use ttest_marker
+                            text='*',  # TODO: use ttest_marker symbol if desired
                             showarrow=False,
                             yanchor='middle',
                             font=dict(family=common.get_configs("font_family"),
@@ -884,11 +915,15 @@ class HMD_helper:
                                                  color=ttest_annotations_colour))
                     counter_ttest += 1
 
-        # --- Adjust axis ---
-        if counter_ttest:
-            n_rows = counter_ttest + max(0, counter_anova - counter_ttest)
+        # TODO: ANOVA support is currently broken in original code; left untouched other than counting.
+        # If you later add ANOVA rows, increment `counter_anova` similarly and compute their y_offset.
+
+        # --- Adjust axis to include marker rows ---
+        if counter_ttest or counter_anova:
+            n_rows = max(counter_ttest, counter_anova)
+            # Extend the axis downward enough to include all rows, plus one extra row of padding
             min_y = original_min - ttest_anova_row_height * (n_rows + 1)
-            # Use dtick + tickformat for float ticks
+
             fig.update_layout(yaxis=dict(
                 range=[min_y, original_max],
                 dtick=yaxis_step,
@@ -915,77 +950,104 @@ class HMD_helper:
     @staticmethod
     def draw_events(fig, yaxis_range, events, events_width, events_dash, events_colour,
                     events_annotations_font_size, events_annotations_colour):
-        """Draw lines and annotations of events.
+        """Draw vertical lines and text labels for events (no arrows), with grouping by 'id'.
 
-        Args:
-            fig (figure): figure object.
-            yaxis_range (list): range of x axis in format [min, max] for the keypress plot.
-            events (list): list of events to draw formatted as values on x axis.
-            events_width (int): thickness of the vertical lines.
-            events_dash (str): type of the vertical lines.
-            events_colour (str): colour of the vertical lines.
-            events_annotations_font_size (int): font size of annotations for the vertical lines.
-            events_annotations_colour (str): colour of annotations for the vertical lines.
+        - Events with the same 'id' share a row band.
+        - If that band has more than 2 events, their labels are slightly staggered vertically
+          to avoid overlapping (e.g., yield_resume, yield_end, cross_p2).
         """
-        # count lines to calculate increase in coordinates of drawing
-        counter_lines = 0
-        # draw lines with annotations for events
-        if events:
-            for event in events:
-                # draw start
-                fig.add_shape(type='line',
-                              x0=event['start'],
-                              y0=yaxis_range[0],
-                              x1=event['start'],
-                              y1=yaxis_range[1],
-                              line=dict(color=events_colour,
-                                        dash=events_dash,
-                                        width=events_width))
-                # draw other elements only is start and finish are not the same
-                if event['start'] != event['end']:
-                    # draw finish
-                    fig.add_shape(type='line',
-                                  x0=event['end'],
-                                  y0=yaxis_range[0],
-                                  x1=event['end'],
-                                  y1=yaxis_range[1],
-                                  line=dict(color=events_colour,
-                                            dash=events_dash,
-                                            width=events_width))
-                    # draw horizontal line
-                    fig.add_annotation(ax=event['start'],
-                                       axref='x',
-                                       ay=yaxis_range[1] - counter_lines * 2 - 2,
-                                       ayref='y',
-                                       x=event['end'],
-                                       arrowcolor='black',
-                                       xref='x',
-                                       y=yaxis_range[1] - counter_lines * 2 - 2,
-                                       yref='y',
-                                       arrowwidth=events_width,
-                                       arrowside='end+start',
-                                       arrowsize=1,
-                                       arrowhead=2)
-                    # draw text label
-                    fig.add_annotation(text=event['annotation'],
-                                       x=(event['end'] + event['start']) / 2,
-                                       y=yaxis_range[1] - counter_lines * 2 - 1,  # use ylim value and draw lower
-                                       showarrow=False,
-                                       font=dict(family=common.get_configs("font_family"),
-                                                 size=events_annotations_font_size,
-                                                 color=events_annotations_colour))
-                # just draw text label
-                else:
-                    fig.add_annotation(text=event['annotation'],
-                                       x=event['start'] + 0.0,
-                                       y=yaxis_range[1],
-                                       # y=yaxis_range[1] - counter_lines * 2 - 0.2,  # use ylim value and draw lower
-                                       showarrow=False,
-                                       font=dict(family=common.get_configs("font_family"),
-                                                 size=events_annotations_font_size,
-                                                 color=events_annotations_colour))
-                # increase counter of lines drawn
-                counter_lines = counter_lines + 1
+
+        if not events:
+            return
+
+        y_min, y_max = yaxis_range
+        height = max(y_max - y_min, 1e-6)  # avoid zero height
+
+        # Group events by 'id'. Events without an id get their own group.
+        groups = {}
+        for idx, ev in enumerate(events):
+            key = ev.get('id')
+            if key is None:
+                key = f"_noid_{idx}"
+            if key not in groups:
+                groups[key] = []
+            groups[key].append(idx)
+
+        # Vertical spacing between row bands (fractions of axis height)
+        row_height_frac = 0.06
+        base_offset_frac = 0.02  # offset below the very top of the plot
+
+        # Iterate bands in insertion order
+        for row_index, (group_key, idx_list) in enumerate(groups.items()):
+            n = len(idx_list)
+            # Compute label_x for each event (needed if we ever want smarter staggering)
+            xs = []
+            for i in idx_list:
+                ev = events[i]
+                start = float(ev['start'])
+                end = float(ev['end'])
+                xs.append(0.5 * (start + end) if start != end else start)
+
+            # Offsets within this row:
+            # - For <=2 events, keep offsets = 0.0 → same height (good for yield_start/stop).
+            # - For >2 events, stagger them a bit vertically within the row band.
+            if n <= 2:
+                offsets = [0.0] * n
+            else:
+                # spread events within the row band
+                sub_delta = row_height_frac / max(n - 1, 1)
+                center = (n - 1) / 2.0
+                offsets = [(i - center) * sub_delta for i in range(n)]
+
+            base_frac = base_offset_frac + row_index * row_height_frac
+
+            for offset, event_index in zip(offsets, idx_list):
+                ev = events[event_index]
+                start = float(ev['start'])
+                end = float(ev['end'])
+                label = ev.get('annotation', '')
+
+                # final fractional position in [0, 1]-ish of plot height
+                frac = base_frac + offset
+                label_y = y_max - frac * height
+                label_x = 0.5 * (start + end) if start != end else start
+
+                # --- Vertical lines ---
+                fig.add_shape(
+                    type='line',
+                    x0=start,
+                    y0=y_min,
+                    x1=start,
+                    y1=y_max,
+                    line=dict(color=events_colour,
+                              dash=events_dash,
+                              width=events_width)
+                )
+
+                if start != end:
+                    fig.add_shape(
+                        type='line',
+                        x0=end,
+                        y0=y_min,
+                        x1=end,
+                        y1=y_max,
+                        line=dict(color=events_colour,
+                                  dash=events_dash,
+                                  width=events_width)
+                    )
+
+                # --- Text label ---
+                fig.add_annotation(
+                    text=label,
+                    x=label_x,
+                    y=label_y,
+                    showarrow=False,
+                    font=dict(
+                        family=common.get_configs("font_family"),
+                        size=int(events_annotations_font_size * 3.3),  # bigger text
+                        color=events_annotations_colour
+                    )
+                )
 
     def export_participant_trigger_matrix(self, data_folder, video_id, output_file, column_name, mapping):
         """
@@ -1059,81 +1121,81 @@ class HMD_helper:
         # Save matrix to CSV (do NOT fill missing with zero; keep NaN for clarity)
         combined_df.to_csv(output_file, index=False)
 
-    def export_participant_quaternion_matrix(self, data_folder, video_id, output_file, mapping):
+    def export_participant_quaternion_matrix(self, data_folder, video_id, output_file, mapping, overwrite=False):
         """
         Export a matrix of raw HMD quaternions per participant per timestamp for a given video.
-
-        Each cell contains a stringified list of quaternion vectors for that participant and timestamp.
-        This allows post-hoc reconstruction of head rotation trajectories per participant,
-        aligned to a common set of timestamps for the given video.
-
-        Args:
-            data_folder (str): Folder containing all participant data folders.
-            video_id (str): Video identifier (e.g. '002', 'test', etc.).
-            output_file (str): Output CSV file path (e.g. '_output/participant_quat_002.csv').
-            mapping (pd.DataFrame): DataFrame containing at least 'video_id' and 'video_length' columns.
+        If overwrite=False and output_file exists, it is reused.
         """
-        participant_matrix = {}  # Store quaternions per participant per timestamp
-        all_timestamps = set()  # Collect all timestamps observed
 
-        # Bin size for timestamps (in seconds)
+        # short-circuit if already exists
+        if not overwrite and os.path.isfile(output_file):
+            return
+
+        participant_matrix = {}
+        all_timestamps = set()
+
         resolution = common.get_configs("yaw_resolution") / 1000.0
 
-        # Iterate over all participant folders in the data directory
         for folder in sorted(os.listdir(data_folder)):
             folder_path = os.path.join(data_folder, folder)
             if not os.path.isdir(folder_path):
-                continue  # Skip files
+                continue
 
-            # Extract participant ID from folder name (expecting "Participant_###_...")
-            match = re.match(r'Participant_(\d+)_', folder)
+            match = re.match(r"Participant_(\d+)$", folder, re.IGNORECASE)
             if not match:
                 continue
+
             participant_id = int(match.group(1))
 
-            # Find file(s) for this participant matching the current video_id
             for file in os.listdir(folder_path):
-                if f"_{video_id}.csv" in file:
+                if file == f"{video_id}.csv":
                     file_path = os.path.join(folder_path, file)
                     df = pd.read_csv(file_path)
 
-                    required_cols = {"Timestamp", "HMDRotationW", "HMDRotationX", "HMDRotationY", "HMDRotationZ"}
-                    # Skip files not containing quaternion data
+                    required_cols = {
+                        "Timestamp",
+                        "HMDRotationW",
+                        "HMDRotationX",
+                        "HMDRotationY",
+                        "HMDRotationZ",
+                    }
                     if not required_cols.issubset(df.columns):
                         continue
 
-                    # Bin the timestamps to the specified resolution
-                    df["Timestamp"] = ((df["Timestamp"] / resolution).round() * resolution).round(2)
+                    df["Timestamp"] = (
+                        (df["Timestamp"] / resolution).round() * resolution
+                    ).round(2)
 
-                    # Group all quaternion lists by timestamp for this participant
                     quats_by_time = (
-                        df.groupby("Timestamp")[["HMDRotationW", "HMDRotationX", "HMDRotationY", "HMDRotationZ"]]
-                        .apply(lambda g: g.values.tolist()).to_dict()
+                        df.groupby("Timestamp")[
+                            ["HMDRotationW", "HMDRotationX", "HMDRotationY", "HMDRotationZ"]
+                        ]
+                        .apply(lambda g: g.values.tolist())
+                        .to_dict()
                     )
 
                     participant_matrix[f"P{participant_id}"] = quats_by_time
                     all_timestamps.update(quats_by_time.keys())
-                    break  # Only use the first matching file for this participant
+                    break
 
-        # Build the set of aligned timestamps using the expected video duration from mapping
         video_length_row = mapping.loc[mapping["video_id"] == video_id, "video_length"]
         if not video_length_row.empty:
-            video_length_sec = video_length_row.values[0] / 1000  # Convert ms to seconds
-            all_timestamps = np.round(np.arange(0, video_length_sec + resolution, resolution), 2).tolist()
+            video_length_sec = video_length_row.values[0] / 1000.0
+            all_timestamps = (
+                np.round(
+                    np.arange(0, video_length_sec + resolution, resolution), 2
+                ).tolist()
+            )
         else:
             logger.warning(f"Video length not found in mapping for video_id {video_id}")
+            all_timestamps = sorted(all_timestamps)
 
-        # Create DataFrame with 'Timestamp' as the index column
         combined_df = pd.DataFrame({"Timestamp": all_timestamps})
-
-        # For each participant, fill the column with the stringified list of quaternions at each timestamp
         for participant, values in participant_matrix.items():
-            # If a timestamp is missing for a participant, use empty list
             combined_df[participant] = combined_df["Timestamp"].map(
                 lambda ts: str(values.get(ts, []))
             )
 
-        # Write the matrix to the specified CSV file
         combined_df.to_csv(output_file, index=False)
 
     def plot_column(self, mapping, column_name="TriggerValueRight", parameter=None, parameter_value=None,
@@ -1159,16 +1221,20 @@ class HMD_helper:
             yaxis_range (list, optional): y-axis [min, max] limits for the plot.
             margin (dict, optional): Custom plot margin dictionary.
         """
-        # Find the video_length for the given video_id
+
+        # make yaxis_range mutable if it's a tuple
+        if isinstance(yaxis_range, tuple):
+            yaxis_range = list(yaxis_range)
+
+        # === Filter mapping to same video_length as reference trial ===
         lens = mapping.loc[mapping["video_id"].eq(compare_trial), "video_length"].unique()
 
         if len(lens) == 0:
             raise ValueError(f"No rows found for video_id='{compare_trial}'")
         elif len(lens) > 1:
-            # If the same video_id appears with different lengths, keep all matching lengths
+            # same video_id appears with different lengths; keep all those lengths
             mapping_filtered = mapping[mapping["video_length"].isin(lens)].copy()
         else:
-            # Typical case: one length
             mapping_filtered = mapping[mapping["video_length"].eq(lens[0])].copy()
 
         if parameter is not None:
@@ -1178,56 +1244,66 @@ class HMD_helper:
             mapping_filtered = mapping_filtered[mapping_filtered[additional_parameter] == additional_parameter_value]
 
         # Filter out control/test video IDs for comparison
-        video_id = mapping_filtered["video_id"]
-        plot_videos = video_id[~video_id.isin(["baseline_1", "baseline_2"])]
+        mapping_filtered = mapping_filtered[~mapping_filtered["video_id"].isin(["baseline_1", "baseline_2"])]
+        plot_videos = mapping_filtered["video_id"]
 
         # Prepare containers for results and stats
-        all_dfs = []  # To store averaged time-series for each trial
-        all_labels = []  # To store display names for legend
-        ttest_signals = []  # For collecting signals for significance testing
+        all_dfs = []        # averaged time-series for each trial
+        all_labels = []     # display names for legend
+        ttest_signals = []  # for significance testing
 
         # === Export trigger matrix for test (reference) trial ===
+        test_output_csv = os.path.join(
+            common.get_configs("output"),
+            f"participant_{column_name}_{compare_trial}.csv"
+        )
+
         self.export_participant_trigger_matrix(
             data_folder=self.data_folder,
             video_id=compare_trial,
-            output_file=os.path.join(common.get_configs("output"), f"participant_{column_name}_{compare_trial}.csv"),
+            output_file=test_output_csv,
             column_name=column_name,
             mapping=mapping_filtered
         )
 
         # Read matrix and extract time-series for the test trial
-        test_raw_df = pd.read_csv(os.path.join(common.get_configs("output"),
-                                               f"participant_{column_name}_{compare_trial}.csv"))
+        test_raw_df = pd.read_csv(test_output_csv)
         test_matrix = extra_class.extract_time_series_values(test_raw_df)
 
-        # === Loop through each comparison trial ===
+        # === Loop through each trial (including reference) ===
         for video in plot_videos:
             # Get human-readable display name for this trial
             display_name = mapping_filtered.loc[mapping_filtered["video_id"] == video, "video_id"].values[0]
+
+            trial_output_csv = os.path.join(
+                common.get_configs("output"),
+                f"participant_{column_name}_{video}.csv"
+            )
 
             # Export trigger matrix for this video
             self.export_participant_trigger_matrix(
                 data_folder=self.data_folder,
                 video_id=video,
-                output_file=os.path.join(common.get_configs("output"), f"participant_{column_name}_{video}.csv"),
+                output_file=trial_output_csv,
                 column_name=column_name,
                 mapping=mapping_filtered
             )
 
             # Read and process the trigger matrix to extract time series for this trial
-            trial_raw_df = pd.read_csv(os.path.join(common.get_configs("output"),
-                                                    f"participant_{column_name}_{video}.csv"))
+            trial_raw_df = pd.read_csv(trial_output_csv)
             trial_matrix = extra_class.extract_time_series_values(trial_raw_df)
 
             # Compute participant-averaged time series (by timestamp) for this trial
-            avg_df = extra_class.average_dataframe_vectors_with_timestamp(trial_raw_df,
-                                                                          column_name=f"{column_name}")
+            avg_df = extra_class.average_dataframe_vectors_with_timestamp(
+                trial_raw_df,
+                column_name=f"{column_name}"
+            )
 
             all_dfs.append(avg_df)
             all_labels.append(display_name)
 
-            # Prepare paired t-test between test trial and each comparison trial
-            if video != "test":
+            # Prepare paired t-test between reference trial and each comparison trial
+            if video != compare_trial:
                 ttest_signals.append({
                     "signal_1": test_matrix,
                     "signal_2": trial_matrix,
@@ -1236,20 +1312,78 @@ class HMD_helper:
                 })
 
         # === Combine all trial DataFrames for multi-trial plotting ===
+        if not all_dfs:
+            raise RuntimeError("No data frames found to plot.")
+
         combined_df = pd.DataFrame()
         combined_df["Timestamp"] = all_dfs[0]["Timestamp"]
 
         for df, label in zip(all_dfs, all_labels):
             combined_df[label] = df[column_name]
 
-        # Optional: add vertical event lines (e.g., stimulus onset) to plot
-        events = []
-        events.append({'id': 1,
-                       'start': 8.7,  # type: ignore
-                       'end': 8.7,  # type: ignore
-                       'annotation': ''})
+        # === Helper for event times (ignore ±0.02 s by rounding + mode) ===
+        def _get_mode_time(df, col, round_decimals=2):
+            """Return the mode of a time column, ignoring NaNs and
+            small numeric differences by rounding first."""
+            if col not in df.columns:
+                return None
 
-        # Set line style: dashed for test trial, solid for others
+            series = df[col].dropna()
+            if series.empty:
+                return None
+
+            rounded = series.round(round_decimals)
+            mode_vals = rounded.mode()
+            if mode_vals.empty:
+                return None
+
+            return float(mode_vals.iloc[0])
+
+        # === Build events from mapping_filtered timing columns ===
+        events = []
+
+        # Row 1: yield_start and yield_stop at same height
+        first_row_events = [
+            ("yield_start_time_s", "yield_start"),
+            ("yield_stop_time_s",  "yield_stop"),
+        ]
+        for col_name, label in first_row_events:
+            t = _get_mode_time(mapping_filtered, col_name)
+            if t is not None and not np.isnan(t):
+                events.append({
+                    "id": 1,
+                    "start": t,
+                    "end": t,
+                    "annotation": label
+                })
+
+        # Row 2: yield_resume, yield_end, cross_p2
+        second_row_events = [
+            ("yield_resume_time_s", "yield_resume"),
+            ("yield_end_time_s",    "yield_end"),
+            ("cross_p2_time_s",     "cross_p2"),
+        ]
+        for col_name, label in second_row_events:
+            t = _get_mode_time(mapping_filtered, col_name)
+            if t is not None and not np.isnan(t):
+                events.append({
+                    "id": 2,
+                    "start": t,
+                    "end": t,
+                    "annotation": label
+                })
+
+        # === cross_p1_time_s: per-line marker time for each video ===
+        cross_p1_times = {}
+        if "cross_p1_time_s" in mapping_filtered.columns:
+            for video, label in zip(plot_videos, all_labels):
+                series = mapping_filtered.loc[
+                    mapping_filtered["video_id"] == video, "cross_p1_time_s"
+                ].dropna()
+                if not series.empty:
+                    cross_p1_times[label] = float(series.iloc[0])
+
+        # === Set line style: dashed for reference (compare_trial), solid for others ===
         custom_line_dashes = []
         for label in all_labels:
             vid = mapping_filtered.loc[mapping_filtered["video_id"] == label, "video_id"].values[0]
@@ -1268,7 +1402,7 @@ class HMD_helper:
             xaxis_title=xaxis_title,  # type: ignore
             yaxis_title=yaxis_title,  # type: ignore
             xaxis_title_offset=-0.04,  # type: ignore
-            yaxis_title_offset=0.18,  # type: ignore
+            yaxis_title_offset=0.18,   # type: ignore
             name_file=f"all_videos_kp_slider_plot_{name}",
             show_text_labels=True,
             pretty_text=True,
@@ -1293,63 +1427,11 @@ class HMD_helper:
             fig_save_height=850,
             save_file=True,
             save_final=True,
-            # custom_line_colors=[color_dict.get(label, None) for label in all_labels],
             custom_line_dashes=custom_line_dashes,
             flag_trigger=True,
-            margin=margin
+            margin=margin,
+            cross_p1_times=cross_p1_times,   # NEW: pass per-line markers
         )
-
-    def plot_gender_by_nationality(self, csv_path,
-                                   gender_col="What is your gender?",
-                                   nationality_col="Nationality"):
-        """
-        Reads a CSV file and generates an interactive Plotly bar chart
-        showing gender distribution for each nationality.
-        """
-
-        df = pd.read_csv(csv_path)
-
-        nationality_map = {
-            "Pakistani": "Pakistan",
-            "Yemini": "Yemen",
-            "Yemeni": "Yemen",
-            "Nepalese": "Nepal",
-            "Chinese": "China",
-            "chinese": "China",
-            " Chinese": "China",
-            "Polish": "Poland",
-            "Indian ": "India",
-            "Dutch ": "Netherlands",
-            "Iranian": "Iran",
-            "Romanian": "Romania",
-            "Spanish": "Spain",
-            "Colombian": "Colombia",
-            "portuguese": "Portugal",
-            "Taiwanese": "Taiwan",
-            "German": "Germany"
-        }
-
-        # Apply mapping
-        df[nationality_col] = df[nationality_col].map(nationality_map).fillna(
-            df[nationality_col].str.capitalize()
-        )
-
-        # --- Group data ---
-        s = df.groupby([nationality_col, gender_col]).size()
-        s.name = "Count"
-        grouped = s.reset_index()
-
-        # --- Plot ---
-        fig = px.bar(
-            grouped,
-            x=nationality_col,
-            y="Count",
-            color=gender_col,
-            barmode="group",
-            title=""
-        )
-
-        fig.show()
 
     def heat_plot(self, folder_path: str, mapping_df: pd.DataFrame, relation: str = "ratio",
                   colorscale: str = "Viridis", summary_func=np.mean):
@@ -2183,4 +2265,271 @@ class HMD_helper:
 
         self.save_plotly(
             fig, name, save_final=True
+        )
+
+    def plot_yaw(self, mapping, column_name="Yaw", parameter=None, parameter_value=None,
+                 additional_parameter=None, additional_parameter_value=None, compare_trial="video_1",
+                 xaxis_title=None, yaxis_title=None, xaxis_range=None, yaxis_range=None,
+                 margin=None, name=None, recompute=False):
+        """
+        Generate a comparison plot of keypress yaw data and subjective slider ratings
+        for multiple video trials relative to a test condition.
+
+        The function processes trigger matrices for each participant and trial,
+        aligns time series data, attaches subjective slider-based ratings (annoyance,
+        informativeness, noticeability), and prepares the data for visualization.
+        Significance testing (paired t-tests) is performed between the test condition
+        and each other trial.
+
+        Args:
+            mapping (pd.DataFrame): DataFrame with video metadata, including
+                'video_id', 'sound_clip_name', 'display_name', and 'colour'.
+            column_name (str, optional): The matrix column to process (default "Yaw").
+            parameter / parameter_value (optional): Filter `mapping` by column == value.
+            additional_parameter / additional_parameter_value (optional): Second filter.
+            compare_trial (str, optional): Reference trial video_id.
+            xaxis_title (str, optional): Custom label for the x-axis.
+            yaxis_title (str, optional): Custom label for the y-axis.
+            xaxis_range (list, optional): x-axis [min, max] limits for the plot.
+            yaxis_range (list, optional): y-axis [min, max] limits for the plot.
+            margin (dict, optional): Custom plot margin dictionary.
+            name (str, optional): (currently unused).
+            recompute (bool, optional): If True, regenerate CSVs/TXT even if they exist.
+                                        If False, reuse existing files when present.
+        """
+        # ensure yaxis_range is mutable (plot_kp modifies it in-place)
+        if isinstance(yaxis_range, tuple):
+            yaxis_range = list(yaxis_range)
+
+        # Find the video_length for the given video_id
+        lens = mapping.loc[mapping["video_id"].eq(compare_trial), "video_length"].unique()
+
+        if len(lens) == 0:
+            raise ValueError(f"No rows found for video_id='{compare_trial}'")
+        elif len(lens) > 1:
+            # If the same video_id appears with different lengths, keep all matching lengths
+            mapping_filtered = mapping[mapping["video_length"].isin(lens)].copy()
+        else:
+            # Typical case: one length
+            mapping_filtered = mapping[mapping["video_length"].eq(lens[0])].copy()
+
+        if parameter is not None:
+            mapping_filtered = mapping_filtered[mapping_filtered[parameter] == parameter_value]
+
+        if additional_parameter is not None:
+            mapping_filtered = mapping_filtered[mapping_filtered[additional_parameter] == additional_parameter_value]
+
+        # Filter out control/test video IDs for comparison
+        mapping_filtered = mapping_filtered[~mapping_filtered["video_id"].isin(["baseline_1", "baseline_2"])]
+        plot_videos = mapping_filtered["video_id"]
+
+        all_dfs = []          # List to collect DataFrames for each trial
+        all_labels = []       # Corresponding list of human-friendly trial labels
+        ttest_signals = []    # Store t-test pairs for stats annotations
+
+        data_folder = common.get_configs("data")  # Get path to raw data
+
+        # === Reference (test) trial: export yaw matrix and compute average yaw per timestamp ===
+        test_participant_csv = os.path.join(
+            self.output_folder,
+            f"participant_{column_name}_{compare_trial}.csv"
+        )
+
+        # Export participant quaternion matrix for reference trial (only if needed)
+        if recompute or not os.path.exists(test_participant_csv):
+            self.export_participant_quaternion_matrix(
+                data_folder=self.data_folder,   # keep original behaviour for reference
+                video_id=compare_trial,
+                output_file=test_participant_csv,
+                mapping=mapping
+            )
+
+        # Compute average yaw for the reference (test) trial and save
+        test_yaw_csv = os.path.join(
+            self.output_folder,
+            f"yaw_avg_{compare_trial}.csv"     # IMPORTANT: separate file from participant_*.csv
+        )
+
+        if recompute or not os.path.exists(test_yaw_csv):
+            HMD_class.compute_avg_yaw_from_matrix_csv(
+                input_csv=test_participant_csv,
+                output_csv=test_yaw_csv
+            )
+
+        # Matrix for t-tests: must use participant matrix, not averaged yaw CSV
+        test_matrix = extra_class.all_yaws_per_bin(
+            input_csv=test_participant_csv
+        )
+
+        # === Iterate through each video trial (excluding control/test) ===
+        for video in plot_videos:
+            # Get display name for current trial
+            display_name = mapping.loc[mapping["video_id"] == video, "video_id"].values[0]
+            participant_csv = os.path.join(
+                self.output_folder,
+                f"participant_{column_name}_{video}.csv"
+            )
+
+            # Export quaternion/yaw matrix for this trial (if needed)
+            if recompute or not os.path.exists(participant_csv):
+                self.export_participant_quaternion_matrix(
+                    data_folder=data_folder,
+                    video_id=video,
+                    output_file=participant_csv,
+                    mapping=mapping
+                )
+
+            # Compute avg yaw for this trial (if needed)
+            yaw_csv = os.path.join(self.output_folder, f"yaw_avg_{video}.csv")
+            if recompute or not os.path.exists(yaw_csv):
+                HMD_class.compute_avg_yaw_from_matrix_csv(
+                    input_csv=participant_csv,
+                    output_csv=yaw_csv
+                )
+
+            df = pd.read_csv(yaw_csv)
+            all_dfs.append(df)
+            all_labels.append(display_name)
+
+            # Extract all per-bin yaw values (for saving and t-test)
+            trial_matrix = extra_class.all_yaws_per_bin(
+                input_csv=participant_csv
+            )
+
+            yaw_values = extra_class.flatten_trial_matrix(trial_matrix)
+            yaw_values = yaw_values[~np.isnan(yaw_values)]  # Remove NaNs if present
+
+            trial_txt_path = os.path.join(self.output_folder, f"yaw_values_{video}.txt")
+            if recompute or not os.path.exists(trial_txt_path):
+                np.savetxt(trial_txt_path, yaw_values)
+
+            # Prepare for t-test: compare each trial vs. test reference (exclude self-comparison)
+            if video != compare_trial:
+                ttest_signals.append({
+                    "signal_1": test_matrix,
+                    "signal_2": trial_matrix,
+                    "paired": True,
+                    "label": f"{display_name}"
+                })
+
+        # === Combine all trial DataFrames into a single one for plotting ===
+        if not all_dfs:
+            raise RuntimeError("No data frames found to plot.")
+
+        combined_df = pd.DataFrame()
+        combined_df["Timestamp"] = all_dfs[0]["Timestamp"]
+
+        # Add trial average yaw series as columns
+        for df, label in zip(all_dfs, all_labels):
+            combined_df[label] = df["AvgYaw"]
+
+        # === Helper for event times (ignore ±0.02 s by rounding + mode) ===
+        def _get_mode_time(df, col, round_decimals=2):
+            """Return the mode of a time column, ignoring NaNs and
+            small numeric differences by rounding first."""
+            if col not in df.columns:
+                return None
+
+            series = df[col].dropna()
+            if series.empty:
+                return None
+
+            rounded = series.round(round_decimals)
+            mode_vals = rounded.mode()
+            if mode_vals.empty:
+                return None
+
+            return float(mode_vals.iloc[0])
+
+        # === Build events from mapping_filtered timing columns ===
+        events = []
+
+        # Row group 1: yield_start AND yield_stop at the same height (id=1)
+        first_row_events = [
+            ("yield_start_time_s", "yield_start"),
+            ("yield_stop_time_s",  "yield_stop"),
+        ]
+        for col_name, label in first_row_events:
+            t = _get_mode_time(mapping_filtered, col_name)
+            if t is not None and not np.isnan(t):
+                events.append({
+                    "id": 1,
+                    "start": t,
+                    "end": t,
+                    "annotation": label
+                })
+
+        # Row group 2: yield_resume, yield_end, cross_p2 (id=2)
+        second_row_events = [
+            ("yield_resume_time_s", "yield_resume"),
+            ("yield_end_time_s",    "yield_end"),
+            ("cross_p2_time_s",     "cross_p2"),
+        ]
+        for col_name, label in second_row_events:
+            t = _get_mode_time(mapping_filtered, col_name)
+            if t is not None and not np.isnan(t):
+                events.append({
+                    "id": 2,
+                    "start": t,
+                    "end": t,
+                    "annotation": label
+                })
+
+        # === cross_p1_time_s: per-line time (one marker per plotted line) ===
+        cross_p1_times = {}
+        if "cross_p1_time_s" in mapping_filtered.columns:
+            for video, label in zip(plot_videos, all_labels):
+                series = mapping_filtered.loc[
+                    mapping_filtered["video_id"] == video, "cross_p1_time_s"
+                ].dropna()
+                if not series.empty:
+                    # take first non-NaN for that video/line
+                    cross_p1_times[label] = float(series.iloc[0])
+
+        # Choose line style: dashed for test trial, solid for others
+        custom_line_dashes = []
+        for label in all_labels:
+            vid = mapping.loc[mapping["video_id"] == label, "video_id"].values[0]
+            if vid == compare_trial:
+                custom_line_dashes.append("dot")
+            else:
+                custom_line_dashes.append("solid")
+
+        # === Call central plotting function with all visualization & stats options ===
+        self.plot_kp(
+            df=combined_df,
+            y=all_labels,
+            y_legend_kp=all_labels,
+            xaxis_range=xaxis_range,
+            yaxis_range=yaxis_range,
+            xaxis_title=xaxis_title,  # type: ignore
+            yaxis_title=yaxis_title,  # type: ignore
+            xaxis_title_offset=-0.047,  # type: ignore
+            name_file=f"{name}",
+            show_text_labels=True,
+            pretty_text=True,
+            events=events,
+            events_width=2,
+            events_annotations_font_size=common.get_configs("font_size") - 6,
+            stacked=False,
+            ttest_signals=ttest_signals,
+            ttest_anova_row_height=0.01,
+            ttest_annotations_font_size=common.get_configs("font_size") - 6,
+            ttest_annotation_x=0.8,  # type: ignore
+            ttest_marker_size=common.get_configs("font_size") - 4,
+            xaxis_step=1,
+            yaxis_step=0.03,  # type: ignore
+            legend_x=0,
+            legend_y=1.225,
+            legend_columns=2,
+            line_width=3,
+            fig_save_width=1470,
+            fig_save_height=850,
+            font_size=common.get_configs("font_size"),
+            save_file=True,
+            save_final=True,
+            custom_line_dashes=custom_line_dashes,
+            flag_trigger=False,
+            margin=margin,
+            cross_p1_times=cross_p1_times,
         )
