@@ -75,7 +75,7 @@ except Exception as e:
 if __name__ == "__main__":
     logger.info("Analysis started.")
 
-    # # Information on participants
+    # Information on participants
     HMD.plot_gender_by_nationality(intake_questionnaire,
                                    gender_col="What is your gender?",
                                    nationality_col="What is your nationality?")
@@ -108,7 +108,6 @@ if __name__ == "__main__":
     # Keypress data for yielding criteria
     HMD.plot_column(mapping,
                     parameter=None,
-                    # TODO: remove the range and extract it from mapping file
                     xaxis_range=[0, 18],
                     compare_trial="video_1",
                     xaxis_title="Time, [s]",
@@ -271,11 +270,11 @@ if __name__ == "__main__":
 
     HMD.load_and_average_Q2(
         trigger_summary_csv=os.path.join("_output", "trigger_summary.csv"),
-        responses_root=os.path.join("data", "hmd"),
+        responses_root=common.get_configs("data"),
         mapping_df=mapping)
 
     HMD.analyze_and_plot_distance_effect_plotly(
-        condition_df=pd.read_csv(os.path.join("data", "hmd", "condition_level_trigger_Q2.csv")),
+        condition_df=pd.read_csv(os.path.join(output_folder, "condition_level_trigger_Q2.csv")),
         mapping_df=mapping,
         out_dir=output_folder,
     )

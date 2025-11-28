@@ -30,6 +30,8 @@ SAVE_PNG = True
 SAVE_EPS = True
 output = common.get_configs("output")
 plotly_template = common.get_configs("plotly_template")
+font_size = common.get_configs("font_size")
+font_family = common.get_configs("font_family")
 
 
 class HMD_helper:
@@ -204,13 +206,16 @@ class HMD_helper:
             "Polish": "Poland",
             "Indian ": "India",
             "Dutch ": "Netherlands",
+            "Dutch": "Netherlands",
             "Iranian": "Iran",
             "Romanian": "Romania",
             "Spanish": "Spain",
             "Colombian": "Colombia",
             "portuguese": "Portugal",
             "Taiwanese": "Taiwan",
-            "German": "Germany"
+            "German": "Germany",
+            "Indian": "India",
+            "dutch": "Netherlands"
         }
 
         # Apply mapping
@@ -403,10 +408,8 @@ class HMD_helper:
                 anova_annotations_colour='black', ttest_anova_row_height=0.5, xaxis_step=5,
                 yaxis_step=5, y_legend_bar=None, line_width=1, bar_font_size=None,
                 custom_line_colors=None, custom_line_dashes=None, flag_trigger=False, margin=None,
-                cross_p1_times=None,                 # NEW: {line_name -> time}
-                cross_p1_marker='diamond',           # NEW: marker style
-                cross_p1_marker_size=10,
-                cross_p1_marker_colour='black'):
+                cross_p1_times=None, cross_p1_marker='diamond',
+                cross_p1_marker_size=10, cross_p1_marker_colour='black'):
         """
         Plots keypress (response) data from a dataframe using Plotly, with options for custom lines,
         annotations, t-test and ANOVA result overlays, event markers, per-line cross_p1 markers,
@@ -952,9 +955,10 @@ class HMD_helper:
                     events_annotations_font_size, events_annotations_colour):
         """Draw vertical lines and text labels for events (no arrows), with grouping by 'id'.
 
-        - Events with the same 'id' share a row band.
-        - If that band has more than 2 events, their labels are slightly staggered vertically
-          to avoid overlapping (e.g., yield_resume, yield_end, cross_p2).
+        - Events with the same 'id' share a horizontal row near the top of the plot.
+        - Row with id == 1 (e.g. 'Car decelerates', 'Car stops', 'Car accelerates')
+          is placed very close to the top.
+        - Labels are horizontally centered on their own vertical line (x = start).
         """
 
         if not events:
@@ -966,74 +970,67 @@ class HMD_helper:
         # Group events by 'id'. Events without an id get their own group.
         groups = {}
         for idx, ev in enumerate(events):
-            key = ev.get('id')
+            key = ev.get("id")
             if key is None:
                 key = f"_noid_{idx}"
-            if key not in groups:
-                groups[key] = []
-            groups[key].append(idx)
+            groups.setdefault(key, []).append(idx)
 
-        # Vertical spacing between row bands (fractions of axis height)
-        row_height_frac = 0.06
-        base_offset_frac = 0.02  # offset below the very top of the plot
+        # Base spacing between row bands (for ids other than 1)
+        row_height_frac = 0.10    # fraction of plot height between rows
+        base_offset_frac = 0.05   # offset below top of plot for non-id-1 rows
 
-        # Iterate bands in insertion order
+        # Iterate bands in insertion order (id=1 first, then id=2, etc.)
         for row_index, (group_key, idx_list) in enumerate(groups.items()):
-            n = len(idx_list)
-            # Compute label_x for each event (needed if we ever want smarter staggering)
-            xs = []
-            for i in idx_list:
-                ev = events[i]
-                start = float(ev['start'])
-                end = float(ev['end'])
-                xs.append(0.5 * (start + end) if start != end else start)
+            if not idx_list:
+                continue
 
-            # Offsets within this row:
-            # - For <=2 events, keep offsets = 0.0 → same height (good for yield_start/stop).
-            # - For >2 events, stagger them a bit vertically within the row band.
-            if n <= 2:
-                offsets = [0.0] * n
+            # Fractional vertical position for this row
+            if str(group_key) == "1":
+                # put id=1 row very close to the top
+                frac = 0.01
             else:
-                # spread events within the row band
-                sub_delta = row_height_frac / max(n - 1, 1)
-                center = (n - 1) / 2.0
-                offsets = [(i - center) * sub_delta for i in range(n)]
+                frac = base_offset_frac + row_index * row_height_frac
 
-            base_frac = base_offset_frac + row_index * row_height_frac
+            # keep inside the plot
+            frac = min(max(frac, 0.0), 0.95)
 
-            for offset, event_index in zip(offsets, idx_list):
+            label_y = y_max - frac * height
+
+            for event_index in idx_list:
                 ev = events[event_index]
-                start = float(ev['start'])
-                end = float(ev['end'])
-                label = ev.get('annotation', '')
+                start = float(ev["start"])
+                end = float(ev["end"])
+                label = ev.get("annotation", "")
 
-                # final fractional position in [0, 1]-ish of plot height
-                frac = base_frac + offset
-                label_y = y_max - frac * height
+                # Center label horizontally on its own line
                 label_x = 0.5 * (start + end) if start != end else start
 
-                # --- Vertical lines ---
+                # --- Vertical line(s) ---
                 fig.add_shape(
-                    type='line',
+                    type="line",
                     x0=start,
                     y0=y_min,
                     x1=start,
                     y1=y_max,
-                    line=dict(color=events_colour,
-                              dash=events_dash,
-                              width=events_width)
+                    line=dict(
+                        color=events_colour,
+                        dash=events_dash,
+                        width=events_width,
+                    ),
                 )
 
                 if start != end:
                     fig.add_shape(
-                        type='line',
+                        type="line",
                         x0=end,
                         y0=y_min,
                         x1=end,
                         y1=y_max,
-                        line=dict(color=events_colour,
-                                  dash=events_dash,
-                                  width=events_width)
+                        line=dict(
+                            color=events_colour,
+                            dash=events_dash,
+                            width=events_width,
+                        ),
                     )
 
                 # --- Text label ---
@@ -1041,12 +1038,14 @@ class HMD_helper:
                     text=label,
                     x=label_x,
                     y=label_y,
+                    xanchor="center",
+                    yanchor="bottom",
                     showarrow=False,
                     font=dict(
                         family=common.get_configs("font_family"),
-                        size=int(events_annotations_font_size * 3.3),  # bigger text
-                        color=events_annotations_colour
-                    )
+                        size=int(events_annotations_font_size * 3.3),
+                        color=events_annotations_colour,
+                    ),
                 )
 
     def export_participant_trigger_matrix(self, data_folder, video_id, output_file, column_name, mapping):
@@ -1342,10 +1341,11 @@ class HMD_helper:
         # === Build events from mapping_filtered timing columns ===
         events = []
 
-        # Row 1: yield_start and yield_stop at same height
+        # Row 1: all main car events at same height
         first_row_events = [
-            ("yield_start_time_s", "yield_start"),
-            ("yield_stop_time_s",  "yield_stop"),
+            ("yield_start_time_s", "Car decelerates"),
+            ("yield_stop_time_s",  "Car stops"),
+            ("yield_resume_time_s", "Car accelerates"),
         ]
         for col_name, label in first_row_events:
             t = _get_mode_time(mapping_filtered, col_name)
@@ -1357,11 +1357,9 @@ class HMD_helper:
                     "annotation": label
                 })
 
-        # Row 2: yield_resume, yield_end, cross_p2
+        # Row 2: crossing event on its own line below
         second_row_events = [
-            ("yield_resume_time_s", "yield_resume"),
-            ("yield_end_time_s",    "yield_end"),
-            ("cross_p2_time_s",     "cross_p2"),
+            ("cross_p2_time_s", "Car crosses the 1st pedestrian"),
         ]
         for col_name, label in second_row_events:
             t = _get_mode_time(mapping_filtered, col_name)
@@ -1372,6 +1370,12 @@ class HMD_helper:
                     "end": t,
                     "annotation": label
                 })
+
+        has_top_row = any(ev.get("id") == 1 for ev in events)
+        if not has_top_row:
+            for ev in events:
+                if ev.get("id") is not None:
+                    ev["id"] = 1
 
         # === cross_p1_time_s: per-line marker time for each video ===
         cross_p1_times = {}
@@ -1408,14 +1412,14 @@ class HMD_helper:
             pretty_text=True,
             events=events,
             events_width=2,
-            events_annotations_font_size=common.get_configs("font_size") - 6,
+            events_annotations_font_size=common.get_configs("font_size") - 8,
             stacked=False,
             ttest_signals=ttest_signals,
             ttest_anova_row_height=6,
-            ttest_annotations_font_size=common.get_configs("font_size") - 6,
-            ttest_annotation_x=0.7,  # type: ignore
+            ttest_annotations_font_size=common.get_configs("font_size") - 8,
+            ttest_annotation_x=0.001,  # type: ignore
             ttest_marker="circle",
-            ttest_marker_size=common.get_configs("font_size"),
+            ttest_marker_size=common.get_configs("font_size")-6,
             legend_x=0,
             legend_y=1.225,
             legend_columns=2,
@@ -1430,7 +1434,7 @@ class HMD_helper:
             custom_line_dashes=custom_line_dashes,
             flag_trigger=True,
             margin=margin,
-            cross_p1_times=cross_p1_times,   # NEW: pass per-line markers
+            cross_p1_times=cross_p1_times,
         )
 
     def heat_plot(self, folder_path: str, mapping_df: pd.DataFrame, relation: str = "ratio",
@@ -1785,7 +1789,7 @@ class HMD_helper:
         )
 
         if save_combined:
-            out_path = os.path.join(responses_root, "condition_level_trigger_Q2.csv")
+            out_path = os.path.join(output, "condition_level_trigger_Q2.csv")
             condition_df.to_csv(out_path, index=False)
             logger.info(f"Saved condition-level trigger + Q2 data to: {out_path}")
 
@@ -1811,9 +1815,14 @@ class HMD_helper:
         """
 
         # Helper: turn "var=value" facet titles into just "value"
+        facet_font = dict(size=font_size, family=font_family)
+
         def _strip_facet_equals(fig):
             fig.for_each_annotation(
-                lambda a: a.update(text=a.text.split("=", 1)[-1].strip())
+                lambda a: a.update(
+                    text=a.text.split("=", 1)[-1].strip(),
+                    font=facet_font,  # <- make facet titles same size/family
+                )
             )
 
         # --- REQUIRED columns ---
@@ -1894,8 +1903,10 @@ class HMD_helper:
             "crossing_risk": "Mean perceived crossing risk (0–100)",
             "mean_crossing_risk": "Mean perceived crossing risk (0–100)",
             "avg_trigger": "Mean perceived crossing risk (0–100)",
-            "Q2_mean": "Self-reported influence of other pedestrian (0–100)",
-            "mean_Q2": "Self-reported influence of other pedestrian (0–100)",
+
+            "Q2_mean": "Self-reported influence of other pedestrian<br>(0–100)",
+            "mean_Q2": "Self-reported influence of other pedestrian<br>(0–100)",
+
             "camera_label": "Camera",
             "yielding_label": "Yielding",
             "eHMI_label": "eHMI",
@@ -1910,6 +1921,7 @@ class HMD_helper:
             "yielding_label": ["Not yielding", "Yielding"],
             "camera_label": ["Can see other person", "Cannot see other person"],
         }
+        axis_title_font = dict(size=font_size, family=font_family)
 
         # ============================
         # Figure 1 — Mean crossing risk vs Distance (legend = camera)
@@ -1926,9 +1938,19 @@ class HMD_helper:
             category_orders=category_orders,
             title="",
         )
-        fig_beh.update_layout(template=plotly_template)
+
+        fig_beh.update_layout(template=plotly_template,
+                              legend=dict(x=0.5,
+                                          y=0.5,
+                                          xanchor="center",
+                                          yanchor="bottom",
+                                          font=axis_title_font,
+                                          title_text=""),
+                              )
+        fig_beh.update_xaxes(title_font=axis_title_font)
+        fig_beh.update_yaxes(title_font=axis_title_font)
+
         _strip_facet_equals(fig_beh)
-        fig_beh.update_layout(legend_title_text="")
 
         # ============================
         # Figure 2 — Q2 vs Distance (legend = camera)
@@ -1945,9 +1967,20 @@ class HMD_helper:
             category_orders=category_orders,
             title="",
         )
-        fig_q2.update_layout(template=plotly_template)
+
+        fig_q2.update_layout(template=plotly_template,
+                             legend=dict(x=0.5,
+                                         y=0.9,
+                                         xanchor="center",
+                                         yanchor="bottom",
+                                         font=axis_title_font,
+                                         title_text=""),
+                             )
+
+        fig_q2.update_xaxes(title_font=axis_title_font)
+        fig_q2.update_yaxes(title_font=axis_title_font)
+
         _strip_facet_equals(fig_q2)
-        fig_q2.update_layout(legend_title_text="")
 
         # ============================
         # EXTRA Figure A — Mean crossing risk vs distance, legend = yielding
@@ -1964,9 +1997,20 @@ class HMD_helper:
             category_orders=category_orders,
             title="",
         )
-        fig_beh_yield.update_layout(template=plotly_template)
+
+        fig_beh_yield.update_layout(template=plotly_template,
+                                    legend=dict(x=0.5,
+                                                y=0.5,
+                                                xanchor="center",
+                                                yanchor="bottom",
+                                                font=axis_title_font,
+                                                title_text=""),
+                                    )
+
+        fig_beh_yield.update_xaxes(title_font=axis_title_font)
+        fig_beh_yield.update_yaxes(title_font=axis_title_font)
+
         _strip_facet_equals(fig_beh_yield)
-        fig_beh_yield.update_layout(legend_title_text="")
 
         # ============================
         # EXTRA Figure B — Mean crossing risk vs distance, legend = eHMI
@@ -1983,9 +2027,19 @@ class HMD_helper:
             category_orders=category_orders,
             title="",
         )
-        fig_beh_ehmi.update_layout(template=plotly_template)
+        fig_beh_ehmi.update_layout(template=plotly_template,
+                                   legend=dict(x=0.5,
+                                               y=0.5,
+                                               xanchor="center",
+                                               yanchor="bottom",
+                                               font=axis_title_font,
+                                               title_text=""),
+                                   )
+
+        fig_beh_ehmi.update_xaxes(title_font=axis_title_font)
+        fig_beh_ehmi.update_yaxes(title_font=axis_title_font)
+
         _strip_facet_equals(fig_beh_ehmi)
-        fig_beh_ehmi.update_layout(legend_title_text="")
 
         # ============================
         # EXTRA Figure C — Q2 vs distance, legend = yielding
@@ -2002,9 +2056,19 @@ class HMD_helper:
             category_orders=category_orders,
             title="",
         )
-        fig_q2_yield.update_layout(template=plotly_template)
+        fig_q2_yield.update_layout(template=plotly_template,
+                                   legend=dict(x=0.5,
+                                               y=0.5,
+                                               xanchor="center",
+                                               yanchor="bottom",
+                                               font=axis_title_font,
+                                               title_text=""),
+                                   )
+
+        fig_q2_yield.update_xaxes(title_font=axis_title_font)
+        fig_q2_yield.update_yaxes(title_font=axis_title_font)
+
         _strip_facet_equals(fig_q2_yield)
-        fig_q2_yield.update_layout(legend_title_text="")
 
         # ============================
         # EXTRA Figure D — Q2 vs distance, legend = eHMI
@@ -2021,9 +2085,19 @@ class HMD_helper:
             category_orders=category_orders,
             title="",
         )
-        fig_q2_ehmi.update_layout(template=plotly_template)
+        fig_q2_ehmi.update_layout(template=plotly_template,
+                                  legend=dict(x=0.5,
+                                              y=0.5,
+                                              xanchor="center",
+                                              yanchor="bottom",
+                                              font=axis_title_font,
+                                              title_text=""),
+                                  )
+
+        fig_q2_ehmi.update_xaxes(title_font=axis_title_font)
+        fig_q2_ehmi.update_yaxes(title_font=axis_title_font)
+
         _strip_facet_equals(fig_q2_ehmi)
-        fig_q2_ehmi.update_layout(legend_title_text="")
 
         # ============================
         # Figure 3 — Mean crossing risk vs Q2 scatter (condition-level)
@@ -2044,10 +2118,23 @@ class HMD_helper:
             xs = np.linspace(x_vals.min(), x_vals.max(), 100)
             ys = b0 + b1 * xs
             fig_scatter.add_trace(
-                go.Scatter(x=xs, y=ys, mode="lines", name="Trend")
+                go.Scatter(
+                    x=xs,
+                    y=ys,
+                    mode="lines",
+                    name="",          # no label text
+                    showlegend=False,
+                    hoverinfo="skip",
+                )
             )
 
-        fig_scatter.update_layout(template=plotly_template)
+        fig_scatter.update_layout(template=plotly_template,
+                                  legend=dict(x=0.5,
+                                              y=0.5,
+                                              xanchor="center",
+                                              yanchor="bottom",
+                                              font=axis_title_font,)
+                                  )
 
         # ============================
         # Figure 4 — NEAR (1–2 m) minus FAR (4–5 m) per context
@@ -2105,7 +2192,7 @@ class HMD_helper:
 
         long_diff["measure"] = long_diff["measure"].map({
             "delta_crossing_risk": "Mean perceived crossing risk (0–100)",
-            "delta_Q2": "Self-reported influence of other pedestrian (0–100)",
+            "delta_Q2": "Self-reported influence of other pedestrian<br>(0–100)",
         })
 
         fig_diff = px.bar(
@@ -2117,7 +2204,37 @@ class HMD_helper:
             labels={**base_labels, "delta": "Near–far difference (0–100)"},
             title="",
         )
-        fig_diff.update_layout(template=plotly_template)
+
+        # Bar labels (numbers on bars)
+        fig_diff.update_traces(
+            texttemplate="%{y:.1f}",     # show y (= delta) with 1 decimal; or "%{delta:.1f}"
+            textposition="outside",      # or "inside" if overlap is an issue
+            textfont=axis_title_font,
+        )
+
+        # Layout: legend + fonts
+        fig_diff.update_layout(
+            template=plotly_template,
+            legend=dict(
+                x=0.88,
+                y=0.85,
+                xanchor="center",
+                yanchor="bottom",
+                font=axis_title_font,
+            ),
+        )
+
+        # Axis titles + tick labels
+        fig_diff.update_xaxes(
+            title_font=axis_title_font,
+            tickfont=axis_title_font,
+        )
+        fig_diff.update_yaxes(
+            title_font=axis_title_font,
+            tickfont=axis_title_font,
+        )
+
+        # Zero line
         fig_diff.add_hline(y=0, line_dash="dash", line_color="black")
 
         # ============================
@@ -2444,10 +2561,11 @@ class HMD_helper:
         # === Build events from mapping_filtered timing columns ===
         events = []
 
-        # Row group 1: yield_start AND yield_stop at the same height (id=1)
+        # Row group 1: all main car events at the same (top) height (id=1)
         first_row_events = [
-            ("yield_start_time_s", "yield_start"),
-            ("yield_stop_time_s",  "yield_stop"),
+            ("yield_start_time_s",   "Car decelerates"),
+            ("yield_stop_time_s",    "Car stops"),
+            ("yield_resume_time_s",  "Car accelerates"),
         ]
         for col_name, label in first_row_events:
             t = _get_mode_time(mapping_filtered, col_name)
@@ -2459,11 +2577,9 @@ class HMD_helper:
                     "annotation": label
                 })
 
-        # Row group 2: yield_resume, yield_end, cross_p2 (id=2)
+        # Row group 2: crossing event on its own lower row (id=2)
         second_row_events = [
-            ("yield_resume_time_s", "yield_resume"),
-            ("yield_end_time_s",    "yield_end"),
-            ("cross_p2_time_s",     "cross_p2"),
+            ("cross_p2_time_s", "Car crosses the 1st pedestrian"),
         ]
         for col_name, label in second_row_events:
             t = _get_mode_time(mapping_filtered, col_name)
@@ -2474,6 +2590,12 @@ class HMD_helper:
                     "end": t,
                     "annotation": label
                 })
+
+        has_top_row = any(ev.get("id") == 1 for ev in events)
+        if not has_top_row:
+            for ev in events:
+                if ev.get("id") is not None:
+                    ev["id"] = 1
 
         # === cross_p1_time_s: per-line time (one marker per plotted line) ===
         cross_p1_times = {}
@@ -2503,20 +2625,20 @@ class HMD_helper:
             xaxis_range=xaxis_range,
             yaxis_range=yaxis_range,
             xaxis_title=xaxis_title,  # type: ignore
-            yaxis_title=yaxis_title,  # type: ignore
+            yaxis_title="Yaw angle, [radians]",
             xaxis_title_offset=-0.047,  # type: ignore
             name_file=f"{name}",
             show_text_labels=True,
             pretty_text=True,
             events=events,
             events_width=2,
-            events_annotations_font_size=common.get_configs("font_size") - 6,
+            events_annotations_font_size=common.get_configs("font_size") - 8,
             stacked=False,
             ttest_signals=ttest_signals,
-            ttest_anova_row_height=0.01,
-            ttest_annotations_font_size=common.get_configs("font_size") - 6,
-            ttest_annotation_x=0.8,  # type: ignore
-            ttest_marker_size=common.get_configs("font_size") - 4,
+            ttest_anova_row_height=0.006,
+            ttest_annotations_font_size=common.get_configs("font_size") - 8,
+            ttest_annotation_x=0.001,  # type: ignore
+            ttest_marker_size=common.get_configs("font_size") - 6,
             xaxis_step=1,
             yaxis_step=0.03,  # type: ignore
             legend_x=0,
