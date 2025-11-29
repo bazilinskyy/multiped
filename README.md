@@ -231,6 +231,14 @@ Participant is in back with car equipped with no eHMI and not yielding
 [![Participant is in back with car equipped with no eHMI and yielding](figures/yaw_second_eHMI_off_yielding.png)](https://htmlpreview.github.io/?https://github.com/bazilinskyy/multiped/blob/main/figures/yaw_second_eHMI_off_yielding.html)
 Participant is in back with car equipped with no eHMI and yielding
 
+[![Participant can see the other person; yaw distribution across all yielding and eHMI conditions](figures/yaw_hist_can_see.png)](https://htmlpreview.github.io/?https://github.com/bazilinskyy/multiped/blob/main/figures/yaw_hist_can_see.html)  
+Participant can see the other person; yaw distribution across all yielding and eHMI conditions
+
+[![Participant cannot see the other person; yaw distribution across all yielding and eHMI conditions](figures/yaw_hist_cannot_see.png)](https://htmlpreview.github.io/?https://github.com/bazilinskyy/multiped/blob/main/figures/yaw_hist_cannot_see.html)  
+Participant cannot see the other person; yaw distribution across all yielding and eHMI conditions
+
+[![Yaw distributions by camera view and distance; 2×5 grid of conditions](figures/yaw_hist_cam_dist.png)](https://htmlpreview.github.io/?https://github.com/bazilinskyy/multiped/blob/main/figures/yaw_hist_cam_dist.html)  
+Yaw distributions by camera view (can / cannot see the other person) and distance; 2×5 grid of conditions
 
 
 ### Response of the participant

@@ -18,6 +18,7 @@ from utils.tools import Tools
 from tqdm import tqdm
 from datetime import datetime
 import ast
+import math
 
 
 logger = CustomLogger(__name__)  # use custom logger
@@ -1476,6 +1477,7 @@ class HMD_helper:
         # Normalize dtypes
         md = mapping_df.copy()
         md["video_id"] = md["video_id"].astype(str)
+
         # Force numerics for times; invalids -> NaN
         md["cross_p1_time_s"] = pd.to_numeric(md["cross_p1_time_s"], errors="coerce")
         md["cross_p2_time_s"] = pd.to_numeric(md["cross_p2_time_s"], errors="coerce")
@@ -2654,4 +2656,454 @@ class HMD_helper:
             flag_trigger=False,
             margin=margin,
             cross_p1_times=cross_p1_times,
+        )
+
+    def plot_yaw_frequencies_by_condition(self, mapping, yaw_files_dir):
+        yaw_files_dir = os.path.abspath(yaw_files_dir)
+
+        # Remove baseline videos and copy to avoid SettingWithCopyWarning
+        mapping = mapping.loc[~mapping["video_id"].isin(["baseline_1", "baseline_2"])].copy()
+
+        # Keys for grouping
+        # case_key: (yielding, eHMIOn)  -> for colour mapping
+
+        mapping["case_key"] = (
+            "y" + mapping["yielding"].astype(str) +
+            "_e" + mapping["eHMIOn"].astype(str)
+        )
+        # condition_key: (yielding, eHMIOn, camera)  -> for the actual curves
+        mapping["condition_key"] = mapping["case_key"] + "_c" + mapping["camera"].astype(str)
+        # Distances (for the 10 subplots)
+        dist_values = sorted(mapping["distPed"].unique())
+
+        if len(dist_values) != 5:
+            logger.warning(
+                f"Expected 5 distinct distPed values, found {len(dist_values)}: {dist_values}"
+            )
+        # G10 colours mapped by case_key so the same case shares colour across all figures
+        colors = px.colors.qualitative.G10
+
+        case_keys = sorted(mapping["case_key"].unique())
+        color_map = {ck: colors[i % len(colors)] for i, ck in enumerate(case_keys)}
+        line_width = 3
+
+        # Histogram settings (no smoothing) in [-90, 90]
+        bins = np.linspace(-90, 90, 181)   # 1° bins from -90 to 90
+
+        bin_centers = 0.5 * (bins[:-1] + bins[1:])
+        # lists to collect curve metrics
+        metrics_cam0 = []
+
+        metrics_cam1 = []
+        metrics_grid = []   # metrics for the 10 (camera, distPed) plots
+
+        def _compute_freq_for_subset(sub_subset, cam_value, metrics_list=None, dist_value=None):
+            """
+
+            Given a subset of mapping (already filtered by camera and possibly distPed),
+            compute frequencies per (yielding, eHMIOn) case, and optionally store metrics.
+            Returns
+            -------
+
+            curves : list of (case_key, cond_label, color, freq_array)
+            local_max : float
+                Maximum frequency value among curves for this subset.
+            """
+            curves = []
+            local_max = 0.0
+            # Group by (yielding, eHMIOn, camera) via condition_key
+            for cond_key, sub in sub_subset.groupby("condition_key", sort=True):
+
+                case_key = sub["case_key"].iloc[0]
+                color = color_map[case_key]
+                # --- Legend label based ONLY on yielding & eHMI ---
+                y_val = int(sub["yielding"].iloc[0])
+
+                e_val = int(sub["eHMIOn"].iloc[0])
+                yielding_label = "No yielding" if y_val == 0 else "Yes yielding"
+                ehmi_label = "eHMI off" if e_val == 0 else "eHMI on"
+
+                cond_label = f"{yielding_label}, {ehmi_label}"
+
+                all_yaws_deg = []
+
+                for video_id in sub["video_id"].unique():
+                    yaw_path = os.path.join(yaw_files_dir, f"yaw_values_{video_id}.txt")
+
+                    if not os.path.exists(yaw_path):
+                        logger.warning(f"Warning: {yaw_path} not found, skipping this video.")
+                        continue
+                    yaws_rad = np.loadtxt(yaw_path)
+                    yaws_rad = np.atleast_1d(yaws_rad)
+
+                    # radians → degrees, wrap to [-180, 180]
+                    yaws_deg = np.degrees(yaws_rad)
+
+                    yaws_deg = (yaws_deg + 180) % 360 - 180
+                    # keep only [-90, 90] observations
+                    mask = (yaws_deg >= -90) & (yaws_deg <= 90)
+
+                    yaws_deg = yaws_deg[mask]
+                    if yaws_deg.size == 0:
+                        continue
+
+                    all_yaws_deg.append(yaws_deg)
+
+                if not all_yaws_deg:
+                    logger.error(f"Warning: no yaw samples for condition '{cond_label}'.")
+
+                    continue
+                all_yaws_deg = np.concatenate(all_yaws_deg)
+
+                counts, _ = np.histogram(all_yaws_deg, bins=bins)
+                if counts.sum() == 0:
+
+                    continue
+                # Frequency (%) – NO smoothing
+                freq = counts / counts.sum() * 100.0
+
+                local_max = max(local_max, freq.max())
+                # Metrics (if a metrics_list is provided)
+                if metrics_list is not None:
+
+                    area_total = freq.sum()  # should be ~100
+                    left_mask = bin_centers < 0
+                    right_mask = bin_centers > 0
+
+                    central_mask = np.abs(bin_centers) <= 15
+                    area_left = freq[left_mask].sum()
+                    area_right = freq[right_mask].sum()
+
+                    area_central = freq[central_mask].sum()
+                    peak_idx = np.argmax(freq)
+                    peak_yaw = bin_centers[peak_idx]
+
+                    peak_freq = freq[peak_idx]
+                    mean_yaw = np.sum(bin_centers * freq) / area_total
+                    var_yaw = np.sum(((bin_centers - mean_yaw) ** 2) * freq) / area_total
+
+                    std_yaw = np.sqrt(var_yaw)
+                    metrics_list.append(
+                        {
+
+                            "camera": cam_value,
+                            "distPed": dist_value,
+                            "condition": cond_label,
+                            "case_key": case_key,
+                            "area_total_pct": area_total,
+                            "area_left_pct": area_left,
+                            "area_right_pct": area_right,
+                            "area_central_±15_pct": area_central,
+                            "peak_yaw_deg": peak_yaw,
+                            "peak_freq_pct": peak_freq,
+                            "mean_yaw_deg": mean_yaw,
+                            "std_yaw_deg": std_yaw,
+                        }
+                    )
+                curves.append((case_key, cond_label, color, freq))
+
+            return curves, local_max
+
+        def build_figure_for_camera(cam_value, metrics_list):
+            sub_cam = mapping[mapping["camera"] == cam_value]
+
+            if sub_cam.empty:
+                return None, 0.0
+            fig = go.Figure()
+            curves, max_y = _compute_freq_for_subset(
+
+                sub_cam,
+                cam_value=cam_value,
+                metrics_list=metrics_list,
+                dist_value=None,  # aggregated across distances
+            )
+            for case_key, cond_label, color, freq in curves:
+                fig.add_trace(
+
+                    go.Scatter(
+                        x=bin_centers,
+                        y=freq,
+                        mode="lines",
+                        name=cond_label,
+                        line=dict(width=line_width, color=color, dash="solid"),
+                    )
+                )
+            return fig, max_y
+
+        # === 1) Build the two main camera-level figures (camera 0, camera 1) ===
+        fig_cam0, max0 = build_figure_for_camera(0, metrics_cam0)
+
+        fig_cam1, max1 = build_figure_for_camera(1, metrics_cam1)
+        if fig_cam0 is None and fig_cam1 is None:
+            raise ValueError("No yaw samples found for any camera.")
+
+        global_max = max(max0, max1)
+        if global_max <= 0:
+
+            raise ValueError("Non-positive maximum frequency encountered.")
+        # Common y-axis range & ticks for main figs: 1, 2, 3, ...
+        ymax_axis = math.ceil(global_max)
+
+        if ymax_axis < 1:
+            ymax_axis = 1  # at least one tick
+        # Log metrics as tables for your report (camera-level)
+        metrics_cam0_df = pd.DataFrame(metrics_cam0)
+
+        metrics_cam1_df = pd.DataFrame(metrics_cam1)
+        if not metrics_cam0_df.empty:
+            logger.info(f"Camera 0 metrics:\n{metrics_cam0_df.to_string(index=False)}")
+        if not metrics_cam1_df.empty:
+            logger.info(f"Camera 1 metrics:\n{metrics_cam1_df.to_string(index=False)}")
+
+        def finalize_figure(fig, cam_value):
+            if fig is None:
+
+                return None
+            # Vertical reference line at 0° (thin, grey, dotted)
+            fig.add_shape(
+
+                type="line",
+                x0=0, x1=0,
+                y0=0, y1=ymax_axis,
+                line=dict(color="gray", dash="dot", width=1.5),
+            )
+            # White background, grids, solid axes, legend inside
+            fig.update_layout(
+
+                template="none",
+                paper_bgcolor="white",
+                plot_bgcolor="white",
+                title="",
+                xaxis_title="Gaze yaw angle (deg)",
+                yaxis_title="Frequency",
+                legend_title=None,
+                legend=dict(
+                    x=0.02,
+                    y=0.98,
+                    xanchor="left",
+                    yanchor="top",
+                    bgcolor="rgba(255,255,255,0.8)",
+                    bordercolor="black",
+                    borderwidth=1,
+                    font=dict(
+                        family="Arial",
+                        size=14,
+                    ),
+                ),
+                xaxis_title_font=dict(family=font_family, size=font_size),
+                yaxis_title_font=dict(family=font_family, size=font_size),
+            )
+            fig.update_xaxes(
+                range=[-90, 90],
+
+                showgrid=True,
+                gridcolor="lightgray",
+                tickmode="array",
+                tickvals=[-90, -60, -30, 30, 60, 90],  # every 30°, excluding 0
+                zeroline=False,                        # no built-in zero line
+                showline=True,
+                linecolor="black",
+                tickfont=dict(family=font_family, size=font_size),
+            )
+            fig.update_yaxes(
+                range=[0, ymax_axis],
+                tick0=1,
+                dtick=1,                               # ticks & grid at 1,2,3,...
+                showgrid=True,
+                gridcolor="lightgray",
+                zeroline=True,
+                zerolinecolor="black",
+                showline=True,
+                linecolor="black",
+                tickfont=dict(family=font_family, size=font_size),
+            )
+            return fig
+
+        fig_cam0 = finalize_figure(fig_cam0, 0)
+        fig_cam1 = finalize_figure(fig_cam1, 1)
+
+        # Save main camera-level figs
+        if fig_cam0 is not None:
+            self.save_plotly(
+                fig_cam0,
+                "yaw_hist_can_see",
+                remove_margins=True,
+                width=1600,
+                height=900,
+                save_final=True,
+            )
+
+        if fig_cam1 is not None:
+            self.save_plotly(
+                fig_cam1,  # <- fixed: use fig_cam1 here
+                "yaw_hist_cannot_see",
+                remove_margins=True,
+                width=1600,
+                height=900,
+                save_final=True,
+            )
+
+        # === 2) Build the additional 10 plots: camera × distPed in a 2×5 grid ===
+
+        # Subplot titles: only show distance on top row, blank on bottom row
+        subplot_titles = []
+        for r in range(2):
+            for dist in dist_values[:5]:
+                if r == 0:
+                    subplot_titles.append(f"Distance = {dist}")
+                else:
+                    subplot_titles.append("")  # no title in second row
+
+        fig_grid = make_subplots(
+            rows=2,
+            cols=5,
+            shared_xaxes=True,
+            shared_yaxes=True,
+            horizontal_spacing=0.03,
+            vertical_spacing=0.10,
+            subplot_titles=subplot_titles,
+        )
+
+        # For grid: fix y_max (you can use 8 if you want stricter cap)
+        grid_ymax = 9
+
+        for r, cam in enumerate([0, 1], start=1):
+            for c, dist in enumerate(dist_values[:5], start=1):
+                sub_camdist = mapping[
+                    (mapping["camera"] == cam) &
+                    (mapping["distPed"] == dist)
+                ]
+                if sub_camdist.empty:
+                    continue
+
+                curves, local_max = _compute_freq_for_subset(
+                    sub_camdist,
+                    cam_value=cam,
+                    metrics_list=metrics_grid,   # collect metrics for grid as well
+                    dist_value=dist,
+                )
+
+                for case_key, cond_label, color, freq in curves:
+                    # Only show legend entry once (top-left subplot),
+                    # but link ALL traces of the same case via legendgroup
+                    show_legend = (r == 1 and c == 1)
+
+                    fig_grid.add_trace(
+                        go.Scatter(
+                            x=bin_centers,
+                            y=freq,
+                            mode="lines",
+                            name=cond_label,
+                            legendgroup=case_key,
+                            line=dict(width=line_width, color=color, dash="solid"),
+                            showlegend=show_legend,
+                        ),
+                        row=r,
+                        col=c,
+                    )
+
+                # Vertical line at 0° for this subplot
+                fig_grid.add_vline(
+                    x=0,
+                    line_dash="dot",
+                    line_color="gray",
+                    line_width=1.5,
+                    row=r,  # type: ignore
+                    col=c,  # type: ignore
+                )
+
+        # Log metrics for the 10 camera×distPed plots
+        metrics_grid_df = pd.DataFrame(metrics_grid)
+        if not metrics_grid_df.empty:
+            logger.info(f"Grid (camera × distPed) metrics:\n{metrics_grid_df.to_string(index=False)}")
+
+        # Common layout for the grid figure
+        fig_grid.update_layout(
+            template="none",
+            paper_bgcolor="white",
+            plot_bgcolor="white",
+            title="",
+            legend_title=None,
+            legend=dict(
+                x=0.87,
+                y=0.99,
+                xanchor="right",
+                yanchor="top",
+                bgcolor="rgba(255,255,255,0.8)",
+                bordercolor="black",
+                borderwidth=1,
+                font=dict(family=font_family, size=font_size),
+            ),
+        )
+
+        # Bigger tick labels for grid
+        fig_grid.update_xaxes(
+            range=[-90, 90],
+            showgrid=True,
+            gridcolor="lightgray",
+            tickmode="array",
+            tickvals=[-90, -60, -30, 30, 60, 90],
+            zeroline=False,
+            showline=True,
+            linecolor="black",
+            tickfont=dict(family=font_family, size=font_size),   # bigger ticks
+        )
+        fig_grid.update_yaxes(
+            range=[0, grid_ymax],
+            tick0=1,
+            dtick=1,
+            showgrid=True,
+            gridcolor="lightgray",
+            zeroline=True,
+            zerolinecolor="black",
+            showline=True,
+            linecolor="black",
+            tickfont=dict(family=font_family, size=font_size),   # bigger ticks
+        )
+
+        # Axis labels for the grid
+        fig_grid.update_yaxes(title_text="Frequency", row=1, col=1)
+        fig_grid.update_yaxes(title_text="Frequency", row=2, col=1)
+        fig_grid.update_xaxes(title_text="Gaze yaw angle (deg)", row=2, col=3)
+
+        # Row labels on extreme left: "Can see the person" / "Cannot see the person"
+        # Use y-axis domains of first column in each row to place the labels nicely
+        # try:
+        #     dom_row1 = fig_grid.layout.yaxis.domain
+        #     dom_row2 = fig_grid.layout.yaxis6.domain  # first yaxis in second row
+        #     y_row1 = 0.5 * (dom_row1[0] + dom_row1[1])
+        #     y_row2 = 0.5 * (dom_row2[0] + dom_row2[1])
+        # except Exception:
+        #     # Fallback approximate positions if domains aren't available
+        #     y_row1, y_row2 = 0.75, 0.25
+
+        # fig_grid.add_annotation(
+        #     xref="paper",
+        #     yref="paper",
+        #     x=-0.04,
+        #     y=y_row1,
+        #     text="Can see the person",
+        #     showarrow=False,
+        #     textangle=-90,
+        #     font=dict(family="Arial", size=14),
+        # )
+        # fig_grid.add_annotation(
+        #     xref="paper",
+        #     yref="paper",
+        #     x=-0.04,
+        #     y=y_row2,
+        #     text="Cannot see the person",
+        #     showarrow=False,
+        #     textangle=-90,
+        #     font=dict(family="Arial", size=14),
+        # )
+
+        # Save grid figure
+        self.save_plotly(
+            fig_grid,
+            "yaw_hist_cam_dist",
+            remove_margins=True,
+            width=1600,
+            height=900,
+            save_final=True,
         )
