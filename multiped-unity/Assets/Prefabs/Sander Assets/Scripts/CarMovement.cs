@@ -93,7 +93,7 @@ public class CarMovement : MonoBehaviour
     public float pedestrian1_distance_x;
     public float pedestrian2_distance_x;
 
-    /// <summary>Estimated car speed (km/h), updated by <see cref="SpeedCalculator"/>.</summary>
+    /// <summary>Estimated car speed (km/h), updated by SpeedCalculator.</summary>
     public float speed;
 
     int counter;                      // Internal counter to gate yield logging events
@@ -127,6 +127,7 @@ public class CarMovement : MonoBehaviour
     // ========================= File logging =========================
 
     string logFilePath; // Absolute path to the text log file
+    bool logInitialized = false;
 
     // ========================= Yield event logging =========================
 
@@ -137,35 +138,67 @@ public class CarMovement : MonoBehaviour
     bool lastYieldingState = false; // For rising/falling edge detection of yielding
     bool isStopped = false;         // Tracks 'stopped' sub-state within yielding
 
+    // ========================= Speed sampling =========================
+
+    [Header("Speed sampling")]
+    [Tooltip("Interval in seconds between speed samples.")]
+    public float speedSampleInterval = 0.5f;
+
+    private Vector3 _lastSpeedSamplePos;
+    private float _lastSpeedSampleTime;
+    private bool _speedInitialized = false;
+
+    // ========================= Speed limiting (non-yield) =========================
+
+    [Header("Speed limit (non-yield)")]
+    [Tooltip("Maximum physical speed the car is allowed to reach in km/h when not yielding.")]
+    public float maxSpeedKmh = 50f;
+
+    [Tooltip("Acceleration toward max speed in km/h per second (non-yield).")]
+    public float accelKmhPerSec = 40f;
+
+    // Internal state for manual movement on FullSpline (non-yield)
+    bool _fullManualActive = false;
+    float _fullT = 0f;               // current param on [0,1] along FullSpline
+    float _currentSpeedMps = 0f;     // current speed in m/s (for movement, not logging)
+
     /// <summary>
-    /// Unity Awake: cache AudioSource reference.
+    /// Unity Awake: cache AudioSource reference and initialize logging.
     /// </summary>
     public void Awake()
     {
         AudioBeep = GetComponent<AudioSource>();
-    }
 
-    /// <summary>
-    /// Unity Start: set up log path, ensure the log file exists, and write a header.
-    /// </summary>
-    void Start()
-    {
-        // Helpful for debugging paths across platforms
-        Debug.Log("Application.dataPath = " + Application.dataPath);
-        Debug.Log("Application.persistentDataPath = " + Application.persistentDataPath);
-
-        // In Editor, write into Assets for convenience; in builds, use persistentDataPath
+        // Initialize logging here, BEFORE any Start() on any script
 #if UNITY_EDITOR
         logFilePath = Path.Combine(Application.dataPath, "CarCrossingLog.txt");
 #else
         logFilePath = Path.Combine(Application.persistentDataPath, "CarCrossingLog.txt");
 #endif
 
-        EnsureLogFileExists();
+        logInitialized = true;
 
-        // Prove we can write immediately
+        EnsureLogFileExists();
         AppendLogToFile("=== Car Crossing Log STARTED ===");
         Debug.Log("Logging to: " + logFilePath);
+    }
+
+    /// <summary>
+    /// Unity Start: initialize speed sampling (logging already initialized in Awake).
+    /// </summary>
+    void Start()
+    {
+        if (distance_cube != null)
+        {
+            _lastSpeedSamplePos = distance_cube.transform.position;
+            _lastSpeedSampleTime = Time.time;
+            _speedInitialized = true;
+        }
+        else
+        {
+            _speedInitialized = false;
+            Debug.LogWarning("CarMovement: distance_cube is not assigned. Speed sampling will be disabled until it is set.");
+        }
     }
 
     /// <summary>
@@ -199,6 +232,13 @@ public class CarMovement : MonoBehaviour
     /// <param name="message">Line to write (no newline required).</param>
     void AppendLogToFile(string message)
     {
+        // Only care that we have a valid path
+        if (string.IsNullOrEmpty(logFilePath))
+        {
+            Debug.LogError("CarMovement: logFilePath is null or empty, cannot write log line.");
+            return;
+        }
+
         try
         {
             using (var sw = new StreamWriter(logFilePath, true))
@@ -216,9 +256,6 @@ public class CarMovement : MonoBehaviour
     /// Unified logger: mirrors to Console, PlayFab buffer (if available), and file.
     /// Adds eHMI state and optionally pedestrian positions.
     /// </summary>
-    /// <param name="msg">Base message.</param>
-    /// <param name="p1">Optional P1 position included in the log line.</param>
-    /// <param name="p2">Optional P2 position included in the log line.</param>
     void LogLine(string msg, Vector3? p1 = null, Vector3? p2 = null)
     {
         string ehmi = (conditionScript != null && conditionScript.eHMIOn == 1) ? "On" : "Off";
@@ -254,7 +291,6 @@ public class CarMovement : MonoBehaviour
         yieldArray = yieldArrayDemo;
         conditionScript = GameObject.Find("ConditionController").GetComponent<ConditionController>();
         StartCoroutine("Wave");
-        StartCoroutine(SpeedCalculator());
     }
 
     /// <summary>
@@ -273,7 +309,7 @@ public class CarMovement : MonoBehaviour
     }
 
     /// <summary>
-    /// Launches a trial run based on the current <see cref="ConditionController"/> settings:
+    /// Launches a trial run based on the current ConditionController settings:
     /// enables/disables eHMI, sets yield target, and starts the wave.
     /// </summary>
     public void StartCar()
@@ -320,11 +356,21 @@ public class CarMovement : MonoBehaviour
     }
 
     /// <summary>
-    /// Unity FixedUpdate: updates distances, estimates speed, detects crossings/yield events,
+    /// Unity FixedUpdate: updates movement, distances, estimates speed, detects crossings/yield events,
     /// and writes relevant logs each physics tick.
     /// </summary>
     public void FixedUpdate()
     {
+        // First, advance manual non-yield motion (if active)
+        if (Yield == 0 && WaveStarted)
+        {
+            UpdateNonYieldMotion();
+        }
+
+        // If conditionScript is not yet assigned, avoid null reference crashes
+        if (conditionScript == null || distance_cube == null)
+            return;
+
         fixedDeltaTime = Time.time - startTime;
 
         // Compute distances (3D and X-axis only) to each pedestrian
@@ -336,8 +382,8 @@ public class CarMovement : MonoBehaviour
         // Car distance along measurement axis (3D)
         carDistance = Vector3.Distance(measuringPoint.transform.position, distance_cube.transform.position);
 
-        // Update speed estimate (0.5s window) in parallel
-        StartCoroutine(SpeedCalculator());
+        // Update speed estimate (sampled every speedSampleInterval seconds)
+        SpeedCalculator();
 
         // Continuous per-tick console log (verbose)
         Debug.Log($"[car_t={(Time.time - startTime):F2}s] continous_pedestrian1_distance= {pedestrian1_distance_x} pedestrian2_distance= {pedestrian2_distance_x}");
@@ -475,7 +521,7 @@ public class CarMovement : MonoBehaviour
     }
 
     /// <summary>
-    /// Main wave coroutine: iterates over <see cref="yieldArray"/>, resets state,
+    /// Main wave coroutine: iterates over yieldArray, resets state,
     /// drives a car per entry, and spaces spawns with audio cues.
     /// </summary>
     IEnumerator Wave()
@@ -506,7 +552,7 @@ public class CarMovement : MonoBehaviour
                         playfabScript.ButtonDataList.Add("(" + (Yield).ToString() + ")"); // Add Yield number to playfab data
                 }
 
-                DriveCar();   // Kick off tweens for the current yield mode
+                DriveCar();   // Kick off tweens or manual movement for the current yield mode
                 carCount += 1;
             }
             else
@@ -552,7 +598,8 @@ public class CarMovement : MonoBehaviour
     }
 
     /// <summary>
-    /// Starts spline tweens and wheel rotations for the current <see cref="Yield"/> mode.
+    /// Starts spline tweens and wheel rotations for the current Yield mode.
+    /// Non-yield case uses manual movement with a physical speed cap.
     /// </summary>
     public void DriveCar()
     {
@@ -573,13 +620,13 @@ public class CarMovement : MonoBehaviour
 
                 // Wheel rotations for both segments
                 WheelSpin0 LF = new WheelSpin0(Lfront, FirstCurve, firstDist, wheelSize); LF.SetupTween(firstAni, 0);
-                WheelSpin0 LR = new WheelSpin0(Lrear, FirstCurve, firstDist, wheelSize);  LR.SetupTween(firstAni, 0);
+                WheelSpin0 LR = new WheelSpin0(Lrear, FirstCurve, firstDist, wheelSize); LR.SetupTween(firstAni, 0);
                 WheelSpin0 RF = new WheelSpin0(Rfront, FirstCurve, firstDist, wheelSize); RF.SetupTween(firstAni, 0);
-                WheelSpin0 RR = new WheelSpin0(Rrear, FirstCurve, firstDist, wheelSize);  RR.SetupTween(firstAni, 0);
-                WheelSpin0 LF2 = new WheelSpin0(Lfront, FirstCurve, secDist, wheelSize);  LF2.SetupTween(secAni, secDel);
-                WheelSpin0 LR2 = new WheelSpin0(Lrear, FirstCurve, secDist, wheelSize);   LR2.SetupTween(secAni, secDel);
-                WheelSpin0 RF2 = new WheelSpin0(Rfront, FirstCurve, secDist, wheelSize);  RF2.SetupTween(secAni, secDel);
-                WheelSpin0 RR2 = new WheelSpin0(Rrear, FirstCurve, secDist, wheelSize);   RR2.SetupTween(secAni, secDel);
+                WheelSpin0 RR = new WheelSpin0(Rrear, FirstCurve, firstDist, wheelSize); RR.SetupTween(firstAni, 0);
+                WheelSpin0 LF2 = new WheelSpin0(Lfront, FirstCurve, secDist, wheelSize); LF2.SetupTween(secAni, secDel);
+                WheelSpin0 LR2 = new WheelSpin0(Lrear, FirstCurve, secDist, wheelSize); LR2.SetupTween(secAni, secDel);
+                WheelSpin0 RF2 = new WheelSpin0(Rfront, FirstCurve, secDist, wheelSize); RF2.SetupTween(secAni, secDel);
+                WheelSpin0 RR2 = new WheelSpin0(Rrear, FirstCurve, secDist, wheelSize); RR2.SetupTween(secAni, secDel);
             }
             if (Yield == 2)
             {
@@ -592,48 +639,182 @@ public class CarMovement : MonoBehaviour
                 secDist = 20;
 
                 // Two-segment route
-                ThirdTween  = Tween.Spline(ThirdSpline,  myObject, 0, 1, true, firstAni, 0, FirstCurve,  Tween.LoopType.None);
-                FourthTween = Tween.Spline(FourthSpline, myObject, 0, 1, true, secAni,  secDel, SecondCurve, Tween.LoopType.None);
+                ThirdTween = Tween.Spline(ThirdSpline, myObject, 0, 1, true, firstAni, 0, FirstCurve, Tween.LoopType.None);
+                FourthTween = Tween.Spline(FourthSpline, myObject, 0, 1, true, secAni, secDel, SecondCurve, Tween.LoopType.None);
 
                 // Wheel rotations for both segments
                 WheelSpin0 LF = new WheelSpin0(Lfront, FirstCurve, firstDist, wheelSize); LF.SetupTween(firstAni, 0);
-                WheelSpin0 LR = new WheelSpin0(Lrear, FirstCurve, firstDist, wheelSize);  LR.SetupTween(firstAni, 0);
+                WheelSpin0 LR = new WheelSpin0(Lrear, FirstCurve, firstDist, wheelSize); LR.SetupTween(firstAni, 0);
                 WheelSpin0 RF = new WheelSpin0(Rfront, FirstCurve, firstDist, wheelSize); RF.SetupTween(firstAni, 0);
-                WheelSpin0 RR = new WheelSpin0(Rrear, FirstCurve, firstDist, wheelSize);  RR.SetupTween(firstAni, 0);
-                WheelSpin0 LF2 = new WheelSpin0(Lfront, FirstCurve, secDist, wheelSize);  LF2.SetupTween(secAni, secDel);
-                WheelSpin0 LR2 = new WheelSpin0(Lrear, FirstCurve, secDist, wheelSize);   LR2.SetupTween(secAni, secDel);
-                WheelSpin0 RF2 = new WheelSpin0(Rfront, FirstCurve, secDist, wheelSize);  RF2.SetupTween(secAni, secDel);
-                WheelSpin0 RR2 = new WheelSpin0(Rrear, FirstCurve, secDist, wheelSize);   RR2.SetupTween(secAni, secDel);
+                WheelSpin0 RR = new WheelSpin0(Rrear, FirstCurve, firstDist, wheelSize); RR.SetupTween(firstAni, 0);
+                WheelSpin0 LF2 = new WheelSpin0(Lfront, FirstCurve, secDist, wheelSize); LF2.SetupTween(secAni, secDel);
+                WheelSpin0 LR2 = new WheelSpin0(Lrear, FirstCurve, secDist, wheelSize); LR2.SetupTween(secAni, secDel);
+                WheelSpin0 RF2 = new WheelSpin0(Rfront, FirstCurve, secDist, wheelSize); RF2.SetupTween(secAni, secDel);
+                WheelSpin0 RR2 = new WheelSpin0(Rrear, FirstCurve, secDist, wheelSize); RR2.SetupTween(secAni, secDel);
             }
         }
         if (Yield == 0)
         {
-            // Single full route with fixed duration
-            FullTween = Tween.Spline(FullSpline, myObject, 0, 1, true, Ani, 0, FullCurve, Tween.LoopType.None);
+            // --- Manual movement along FullSpline with speed cap ---
 
-            // Wheel rotations for full route
+            // Reset manual movement state
+            _fullManualActive = true;
+            _fullT = 0f;
+            _currentSpeedMps = 0f;
+
+            if (FullSpline == null || myObject == null)
+            {
+                Debug.LogError("CarMovement: FullSpline or myObject not assigned, cannot drive non-yield manually.");
+                _fullManualActive = false;
+            }
+            else
+            {
+                // Snap car to start of spline
+                myObject.position = FullSpline.GetPosition(0f);
+                OrientAlongFullSpline(0f);
+            }
+
+            // Keep wheel rotations driven by LeanTween as before
             WheelSpin0 LF = new WheelSpin0(Lfront, FullCurve, Dist, wheelSize); LF.SetupTween(Ani, 0);
-            WheelSpin0 LR = new WheelSpin0(Lrear,  FullCurve, Dist, wheelSize); LR.SetupTween(Ani, 0);
+            WheelSpin0 LR = new WheelSpin0(Lrear, FullCurve, Dist, wheelSize); LR.SetupTween(Ani, 0);
             WheelSpin0 RF = new WheelSpin0(Rfront, FullCurve, Dist, wheelSize); RF.SetupTween(Ani, 0);
-            WheelSpin0 RR = new WheelSpin0(Rrear,  FullCurve, Dist, wheelSize); RR.SetupTween(Ani, 0);
+            WheelSpin0 RR = new WheelSpin0(Rrear, FullCurve, Dist, wheelSize); RR.SetupTween(Ani, 0);
+
+            // IMPORTANT: do NOT call Tween.Spline for FullSpline here anymore.
         }
     }
 
     /// <summary>
-    /// Estimates vehicle speed by sampling the car proxy position over a 0.5s window.
+    /// Manually advances the car along FullSpline in the non-yield case,
+    /// enforcing a physical speed cap in world space.
     /// </summary>
-    IEnumerator SpeedCalculator()
+    void UpdateNonYieldMotion()
     {
-        if (WaveStarted)
-        {
-            Vector3 position1 = distance_cube.transform.position;
-            yield return new WaitForSeconds(0.5f);
-            Vector3 position2 = distance_cube.transform.position;
+        if (!_fullManualActive || FullSpline == null || myObject == null) return;
 
-            // Convert m/0.5s to m/s (×2) then to km/h (×3.6)
-            float distance = Vector3.Distance(position1, position2);
-            speed = distance * 2 * 3.6f;
+        float dt = Time.fixedDeltaTime;
+
+        // Convert config values to m/s and m/s^2
+        float maxSpeedMps = maxSpeedKmh / 3.6f;
+        float accelMps2   = accelKmhPerSec / 3.6f;
+
+        // Accelerate toward max speed, but never exceed it
+        _currentSpeedMps = Mathf.MoveTowards(_currentSpeedMps, maxSpeedMps, accelMps2 * dt);
+
+        // Maximum distance we are allowed to move this frame
+        float allowedStep = _currentSpeedMps * dt; // meters
+        if (allowedStep <= 0f) return;
+
+        float remaining = allowedStep;
+
+        // Start from current point on spline
+        Vector3 currentPos = FullSpline.GetPosition(_fullT);
+
+        // Iterate forward along the spline in small param steps,
+        // without ever exceeding allowedStep in total world distance.
+        const int maxIterations = 8;       // safety bound to avoid heavy work per frame
+        const float paramStep   = 0.02f;   // step in spline param space per iteration
+
+        for (int i = 0; i < maxIterations && remaining > 0f && _fullT < 1f; i++)
+        {
+            float candidateT = Mathf.Min(_fullT + paramStep, 1f);
+            Vector3 candidatePos = FullSpline.GetPosition(candidateT);
+            float segDist = Vector3.Distance(currentPos, candidatePos);
+
+            if (segDist < 0.0001f)
+            {
+                // Degenerate segment, just advance param
+                _fullT = candidateT;
+                continue;
+            }
+
+            if (segDist > remaining)
+            {
+                // We cannot go all the way to candidateT this frame without exceeding allowedStep.
+                // Go only part of the way, along the chord between currentPos and candidatePos.
+                float factor = remaining / segDist;
+                Vector3 finalPos = Vector3.Lerp(currentPos, candidatePos, factor);
+                float finalT = Mathf.Lerp(_fullT, candidateT, factor);
+
+                myObject.position = finalPos;
+                OrientAlongFullSpline(finalT);
+
+                _fullT = finalT;
+                remaining = 0f; // we've used up allowedStep
+            }
+            else
+            {
+                // We can safely move to candidateT this iteration.
+                remaining -= segDist;
+                currentPos = candidatePos;
+                _fullT = candidateT;
+
+                myObject.position = currentPos;
+                OrientAlongFullSpline(_fullT);
+            }
         }
+
+        // If we've reached the end of the spline, stop manual movement.
+        if (_fullT >= 1f)
+        {
+            _fullManualActive = false;
+            _currentSpeedMps = 0f;
+        }
+    }
+
+    /// <summary>
+    /// Orients the car so its forward vector follows the spline tangent at t.
+    /// </summary>
+    void OrientAlongFullSpline(float t)
+    {
+        if (FullSpline == null || myObject == null) return;
+
+        float aheadT = Mathf.Min(t + 0.01f, 1f);
+        Vector3 pos      = FullSpline.GetPosition(t);
+        Vector3 posAhead = FullSpline.GetPosition(aheadT);
+
+        Vector3 dir = (posAhead - pos).normalized;
+        if (dir.sqrMagnitude > 0.0001f)
+        {
+            myObject.position = pos; // ensure we're exactly on the spline
+            myObject.rotation = Quaternion.LookRotation(dir, Vector3.up);
+        }
+    }
+
+    /// <summary>
+    /// Estimates vehicle speed by sampling the car proxy position at a fixed interval.
+    /// Runs every FixedUpdate without coroutines.
+    /// </summary>
+    void SpeedCalculator()
+    {
+        if (!_speedInitialized || distance_cube == null)
+            return;
+
+        // If no car is currently running, keep speed at 0 and reset the sample
+        if (!WaveStarted)
+        {
+            speed = 0f;
+            _lastSpeedSamplePos = distance_cube.transform.position;
+            _lastSpeedSampleTime = Time.time;
+            return;
+        }
+
+        float now = Time.time;
+        float dt = now - _lastSpeedSampleTime;
+
+        // Only update when enough time has passed
+        if (dt < speedSampleInterval)
+            return;
+
+        Vector3 currentPos = distance_cube.transform.position;
+        float distance = Vector3.Distance(_lastSpeedSamplePos, currentPos); // meters
+
+        // m/s = distance / dt, km/h = m/s * 3.6
+        float metersPerSecond = distance / dt;
+        speed = metersPerSecond * 3.6f;
+
+        _lastSpeedSamplePos = currentPos;
+        _lastSpeedSampleTime = now;
     }
 
     /// <summary>
@@ -661,10 +842,6 @@ public class CarMovement : MonoBehaviour
         /// <summary>
         /// Constructs a wheel rotation helper.
         /// </summary>
-        /// <param name="trans">Wheel GameObject.</param>
-        /// <param name="curve">Easing curve.</param>
-        /// <param name="dist">Linear distance for this segment (m).</param>
-        /// <param name="wheel">Wheel diameter (m).</param>
         public WheelSpin0(GameObject trans, AnimationCurve curve, float dist, float wheel)
         {
             Wheel = trans; myAnimation = curve; Distance = dist; WheelDiameter = wheel;
@@ -673,8 +850,6 @@ public class CarMovement : MonoBehaviour
         /// <summary>
         /// Schedules a LeanTween rotateAroundLocal to spin the wheel the appropriate amount.
         /// </summary>
-        /// <param name="duration">Tween duration (seconds).</param>
-        /// <param name="delay">Delay before starting (seconds).</param>
         public void SetupTween(float duration, float delay)
         {
             // Convert linear distance to rotation degrees around local X

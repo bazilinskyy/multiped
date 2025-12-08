@@ -1441,8 +1441,12 @@ class HMD_helper:
     def heat_plot(self, folder_path: str, mapping_df: pd.DataFrame, relation: str = "ratio",
                   colorscale: str = "Viridis", summary_func=np.mean):
         """
-        Compute one summary value per video CSV, rename axes using `mapping_df`,
+        Compute summary values per video CSV, rename axes using `mapping_df`,
         and show a Plotly heatmap of pairwise relations (no numbers, no colorbar).
+
+        Additionally, this function writes a 'trigger_summary.csv' file into
+        `folder_path` with columns:
+            ['label', 'avg_trigger', 'sd_trigger', 'n_samples']
 
         Parameters
         ----------
@@ -1458,12 +1462,13 @@ class HMD_helper:
         colorscale : str
             Plotly colorscale name.
         summary_func : callable
-            Aggregator applied to all numeric values per video (default: np.mean).
+            Aggregator applied to all numeric values per condition (default: np.mean).
+            (Used for `avg_trigger`.)
 
         Returns
         -------
         averages : dict
-            {mapped_label: summary_value}
+            {mapped_label: summary_value}  (means per condition; for compatibility)
         relation_df : pd.DataFrame
             Pairwise matrix (mapped_label × mapped_label)
         fig : plotly.graph_objects.Figure
@@ -1504,6 +1509,7 @@ class HMD_helper:
         def _video_key(fn):
             m = re.search(r"video_(\d+)\.csv$", os.path.basename(fn), flags=re.IGNORECASE)
             return (0, int(m.group(1))) if m else (1, os.path.basename(fn).lower())
+
         file_list = sorted(file_list, key=_video_key)
 
         # ---- Helper: extract video_id from filename ----
@@ -1512,8 +1518,10 @@ class HMD_helper:
             m = re.search(r"(video_\d+)\.csv$", base, flags=re.IGNORECASE)
             return m.group(1) if m else base
 
-        # ---- Compute per-video summary (respecting time cutoff) ----
-        averages = {}
+        # ---- Collect all trigger values per condition label ----
+        # per_label_values[label] = np.array([... trigger values from all files ...])
+        per_label_values: dict[str, np.ndarray] = {}
+
         for file_path in file_list:
             video_id = _extract_video_id(file_path)
             info = mapping_info.get(video_id)
@@ -1578,12 +1586,42 @@ class HMD_helper:
 
             if not all_values:
                 logger.warning(f"⚠️ No numeric values found (after cutoff) in {file_path}; skipping.")
-                continue
+            else:
+                vals = np.array(all_values, dtype=float)
+                if label not in per_label_values:
+                    per_label_values[label] = vals
+                else:
+                    per_label_values[label] = np.concatenate([per_label_values[label], vals])
 
-            averages[label] = float(summary_func(all_values))
-
-        if not averages:
+        if not per_label_values:
             raise ValueError("No valid numeric data found in videos (after applying time cutoffs).")
+
+        # ---- Build trigger summary (mean + SD + n) ----
+        trigger_summary_df = (
+            pd.DataFrame(
+                [
+                    {
+                        "label": label,
+                        "avg_trigger": float(summary_func(vals)),
+                        "sd_trigger": float(np.std(vals, ddof=1)) if len(vals) > 1 else np.nan,
+                        "n_samples": int(len(vals)),
+                    }
+                    for label, vals in per_label_values.items()
+                ]
+            )
+            .sort_values("label")
+            .reset_index(drop=True)
+        )
+
+        # Backwards-compatible dict of means only (for relation matrix)
+        averages = dict(
+            zip(trigger_summary_df["label"], trigger_summary_df["avg_trigger"])
+        )
+
+        # ---- Save trigger_summary.csv ----
+        trigger_summary_path = os.path.join(folder_path, "trigger_summary.csv")
+        trigger_summary_df.to_csv(trigger_summary_path, index=False)
+        logger.info(f"Saved trigger summary (mean + SD) to: {trigger_summary_path}")
 
         # ---- Build pairwise relation matrix ----
         labels = list(averages.keys())
@@ -1650,33 +1688,32 @@ class HMD_helper:
 
         self.save_plotly(fig, 'heatmap', height=2400, width=2400, save_final=True)
 
-        # One row per condition / label with the average trigger value
-        summary_df = pd.DataFrame({
-            "label": list(averages.keys()),
-            "avg_trigger": list(averages.values())
-        }).sort_values("label")
-
-        trigger_summary_path = os.path.join(folder_path, "trigger_summary.csv")
-        summary_df.to_csv(trigger_summary_path, index=False)
-        logger.info(f"Saved trigger averages to: {trigger_summary_path}")
-
         # Optional: also save the pairwise relation matrix
         relation_path = os.path.join(folder_path, "trigger_relation_matrix.csv")
         relation_df.to_csv(relation_path)
         logger.info(f"Saved trigger relation matrix to: {relation_path}")
 
-    def load_and_average_Q2(self, trigger_summary_csv: str, responses_root: str, mapping_df: pd.DataFrame,
-                            n_participants: int = 50, response_col_index: int = 2, save_combined: bool = True):
+        return averages, relation_df, fig
+
+    def load_and_average_Q2(
+        self,
+        trigger_summary_csv: str,
+        responses_root: str,
+        mapping_df: pd.DataFrame,
+        n_participants: int = 50,
+        response_col_index: int = 2,  # column index of Q2 (middle)
+        save_combined: bool = True,
+    ):
         """
-        Combine per-condition trigger averages with averaged Q2 (distance question)
+        Combine per-condition trigger averages with averaged Q1, Q2, Q3
         per condition.
 
         Parameters
         ----------
         trigger_summary_csv : str
             Path to 'trigger_summary.csv' saved by `heat_plot`.
-            Must have columns: ['label', 'avg_trigger'] where 'label' matches
-            mapping_df['condition_name'] (or video_id if you used that as label).
+            Must have columns: ['label', 'avg_trigger', 'sd_trigger'] where 'label'
+            matches mapping_df['condition_name'] (or video_id if you used that as label).
         responses_root : str
             Root folder containing Participant_1, Participant_2, ... subfolders.
         mapping_df : pd.DataFrame
@@ -1684,30 +1721,48 @@ class HMD_helper:
         n_participants : int
             Total number of participants (default 50).
         response_col_index : int
-            Zero-based index of the column containing the distance question (Q2).
-            With lines like 'video_25,0,41,71', index 2 corresponds to 41.
+            Zero-based index of the column containing the distance question Q2.
+            Q1 is assumed to be at response_col_index - 1,
+            Q3 at response_col_index + 1.
+            With lines like 'video_25,0,41,71', index 2 corresponds to Q2=41
+            and we also take Q1=0 (col 1) and Q3=71 (col 3).
         save_combined : bool
             If True, save condition-level summary to
-            responses_root/condition_level_trigger_Q2.csv
+            responses_root/condition_level_trigger_Q123.csv
 
         Returns
         -------
         trial_df : pd.DataFrame
             Trial-level data with columns:
-            ['participant', 'video_id', 'condition_name', 'Q_distance', 'avg_trigger']
+            ['participant', 'video_id', 'condition_name',
+             'Q1', 'Q2', 'Q3',
+             'avg_trigger', 'sd_trigger']
 
         condition_df : pd.DataFrame
             Condition-level summary with columns:
-            ['condition_name', 'avg_trigger', 'mean_Q2', 'std_Q2', 'n_trials']
+            ['condition_name',
+             'avg_trigger', 'std_trigger',
+             'mean_Q1', 'std_Q1',
+             'mean_Q2', 'std_Q2',
+             'mean_Q3', 'std_Q3',
+             'n_trials']
         """
-        # --- Load trigger summary (condition -> avg_trigger) --- #
+        # --- Load trigger summary (condition -> avg_trigger, sd_trigger) --- #
         trigger_df = pd.read_csv(trigger_summary_csv)
 
         if "label" not in trigger_df.columns or "avg_trigger" not in trigger_df.columns:
             raise ValueError(
-                f"trigger_summary_csv must have columns ['label', 'avg_trigger'], "
+                f"trigger_summary_csv must have columns at least ['label', 'avg_trigger'], "
                 f"got {trigger_df.columns.tolist()}"
             )
+
+        # If sd_trigger is missing (e.g., older files), create it as NaN but warn
+        if "sd_trigger" not in trigger_df.columns:
+            logger.warning(
+                "Column 'sd_trigger' not found in trigger_summary.csv; "
+                "filling with NaN. Consider re-running `heat_plot`."
+            )
+            trigger_df["sd_trigger"] = np.nan
 
         # Rename 'label' to 'condition_name' to match mapping_df
         trigger_df = trigger_df.rename(columns={"label": "condition_name"})
@@ -1718,9 +1773,19 @@ class HMD_helper:
         map_df["video_id"] = map_df["video_id"].astype(str)
         map_df["condition_name"] = map_df["condition_name"].astype(str)
 
-        # --- Read all participant response CSVs (no headers) --- #
+        # --- Indices for Q1/Q2/Q3 --- #
+        q1_idx = response_col_index - 1
+        q2_idx = response_col_index
+        q3_idx = response_col_index + 1
+
+        if q1_idx < 1:
+            raise ValueError(
+                f"response_col_index={response_col_index} is too small to infer Q1 at index {q1_idx}."
+            )
+
         all_records = []
 
+        # --- Read all participant response CSVs (no headers) --- #
         for pid in range(1, n_participants + 1):
             participant_folder = os.path.join(responses_root, f"Participant_{pid}")
             if not os.path.isdir(participant_folder):
@@ -1736,16 +1801,17 @@ class HMD_helper:
             for fp in files:
                 df = pd.read_csv(fp, header=None)
 
-                # Need at least: trial_name (col 0) + Q2 column
-                if df.shape[1] <= response_col_index:
+                # Need at least: trial_name (col 0) + Q1/Q2/Q3 columns
+                max_needed_idx = q3_idx
+                if df.shape[1] <= max_needed_idx:
                     logger.warning(
                         f"File {fp} has only {df.shape[1]} columns, "
-                        f"cannot take column index {response_col_index}."
+                        f"cannot take Q1/Q2/Q3 at indices {q1_idx}, {q2_idx}, {q3_idx}."
                     )
                     continue
 
-                tmp = df[[0, response_col_index]].copy()
-                tmp.columns = ["video_id", "Q_distance"]
+                tmp = df[[0, q1_idx, q2_idx, q3_idx]].copy()
+                tmp.columns = ["video_id", "Q1", "Q2", "Q3"]
                 tmp["participant"] = pid
 
                 # Keep only actual trials (video_*) and drop baselines
@@ -1759,6 +1825,10 @@ class HMD_helper:
 
         trial_df = pd.concat(all_records, ignore_index=True)
 
+        # ensure numeric Qs
+        for q_col in ["Q1", "Q2", "Q3"]:
+            trial_df[q_col] = pd.to_numeric(trial_df[q_col], errors="coerce")
+
         # --- Attach condition_name via mapping_df (video_id -> condition_name) --- #
         trial_df["video_id"] = trial_df["video_id"].astype(str)
         trial_df = trial_df.merge(
@@ -1767,53 +1837,56 @@ class HMD_helper:
             how="left",
         )
 
-        # --- Attach avg_trigger per condition_name --- #
+        # --- Attach avg_trigger and sd_trigger per condition_name --- #
         trial_df = trial_df.merge(
-            trigger_df,
+            trigger_df[["condition_name", "avg_trigger", "sd_trigger"]],
             on="condition_name",
             how="left",
         )
 
-        # Now trial_df has:
-        # participant, video_id, Q_distance, condition_name, avg_trigger
-
-        # --- Average Q2 per condition (and pick avg_trigger per condition) --- #
+        # --- Average Q1/Q2/Q3 per condition, keep trigger mean/SD --- #
         condition_df = (
             trial_df
             .groupby("condition_name", as_index=False)
             .agg(
-                avg_trigger=("avg_trigger", "mean"),  # same value repeated; mean is fine
-                mean_Q2=("Q_distance", "mean"),
-                std_Q2=("Q_distance", "std"),
-                n_trials=("Q_distance", "size"),
+                avg_trigger=("avg_trigger", "first"),   # one value per condition
+                std_trigger=("sd_trigger", "first"),    # one value per condition
+                mean_Q1=("Q1", "mean"),
+                std_Q1=("Q1", "std"),
+                mean_Q2=("Q2", "mean"),
+                std_Q2=("Q2", "std"),
+                mean_Q3=("Q3", "mean"),
+                std_Q3=("Q3", "std"),
+                n_trials=("Q2", "size"),
             )
             .sort_values("condition_name")
         )
 
         if save_combined:
-            out_path = os.path.join(output, "condition_level_trigger_Q2.csv")
+            os.makedirs(output, exist_ok=True)  # optional, ensures directory exists
+            out_path = os.path.join(output, "condition_level_trigger_Q123.csv")
             condition_df.to_csv(out_path, index=False)
-            logger.info(f"Saved condition-level trigger + Q2 data to: {out_path}")
+            logger.info(f"Saved condition-level trigger + Q1/Q2/Q3 data to: {out_path}")
 
     def analyze_and_plot_distance_effect_plotly(self, condition_df, mapping_df, out_dir=None):
         """
         Merge condition-level averages with distance, yielding, eHMI, and camera,
-        compute full-factorial summaries, and create Plotly figures.
+        compute full-factorial summaries (means + SDs), and create Plotly figures.
 
         Assumes
         -------
         condition_df has at least:
-            ['condition_name', 'avg_trigger', 'mean_Q2']
-            - avg_trigger: proportion of time trigger was held (unsafe) per condition.
+            ['condition_name', 'avg_trigger', 'std_trigger',
+             'mean_Q1', 'std_Q1',
+             'mean_Q2', 'std_Q2',
+             'mean_Q3', 'std_Q3']
+            - avg_trigger: mean proportion of time trigger was held (unsafe) per condition.
+            - std_trigger: SD of that trigger-based measure per condition.
+            - mean_Q1/Q2/Q3: mean responses per condition (0–100).
+            - std_Q1/Q2/Q3: SD of Q1/Q2/Q3 per condition.
+
         mapping_df has at least:
             ['condition_name', 'distPed', 'yielding', 'eHMIOn', 'camera']
-
-        Interpretation
-        --------------
-        - avg_trigger is scaled to 0–100 and interpreted as:
-            "Mean perceived crossing risk (0–100)".
-        - mean_Q2 is interpreted as:
-            "Self-reported influence of other pedestrian (0–100)".
         """
 
         # Helper: turn "var=value" facet titles into just "value"
@@ -1823,7 +1896,7 @@ class HMD_helper:
             fig.for_each_annotation(
                 lambda a: a.update(
                     text=a.text.split("=", 1)[-1].strip(),
-                    font=facet_font,  # <- make facet titles same size/family
+                    font=facet_font,
                 )
             )
 
@@ -1833,7 +1906,13 @@ class HMD_helper:
         if missing:
             raise ValueError(f"mapping_df missing: {missing}")
 
-        needed_cond_cols = ["condition_name", "avg_trigger", "mean_Q2"]
+        needed_cond_cols = [
+            "condition_name",
+            "avg_trigger", "std_trigger",
+            "mean_Q1", "std_Q1",
+            "mean_Q2", "std_Q2",
+            "mean_Q3", "std_Q3",
+        ]
         missing2 = [c for c in needed_cond_cols if c not in condition_df.columns]
         if missing2:
             raise ValueError(f"condition_df missing: {missing2}")
@@ -1857,6 +1936,7 @@ class HMD_helper:
 
         # Scale trigger to 0–100: "Mean perceived crossing risk (0–100)"
         cond_plot_df["crossing_risk"] = cond_plot_df["avg_trigger"] * 100.0
+        cond_plot_df["crossing_risk_sd"] = cond_plot_df["std_trigger"] * 100.0
 
         # Drop if some factors missing
         cond_plot_df = cond_plot_df.dropna(
@@ -1873,16 +1953,27 @@ class HMD_helper:
         cond_plot_df["camera_label"] = cond_plot_df["camera"].map(label_map_cam)
 
         # ============================
-        # Full-factorial summary (means only, no SE)
+        # Full-factorial summary (means + SD from condition_df)
         # ============================
         group_cols = ["distPed_m", "yielding", "eHMIOn", "camera"]
 
+        # If there are multiple rows per combination (e.g., multiple videos),
+        # they should have identical stats; we take the mean as a safe aggregator.
         by_cond = (
             cond_plot_df
             .groupby(group_cols, as_index=False)
             .agg(
-                mean_crossing_risk=("crossing_risk", "mean"),  # Mean perceived crossing risk
-                Q2_mean=("mean_Q2", "mean"),                   # Self-report (Q2)
+                mean_crossing_risk=("crossing_risk", "mean"),
+                sd_crossing_risk=("crossing_risk_sd", "mean"),
+
+                Q1_mean=("mean_Q1", "mean"),
+                Q1_sd=("std_Q1", "mean"),
+
+                Q2_mean=("mean_Q2", "mean"),
+                Q2_sd=("std_Q2", "mean"),
+
+                Q3_mean=("mean_Q3", "mean"),
+                Q3_sd=("std_Q3", "mean"),
             )
             .sort_values(group_cols)
         )
@@ -1892,9 +1983,9 @@ class HMD_helper:
         by_cond["eHMI_label"] = by_cond["eHMIOn"].map(label_map_ehmi)
         by_cond["camera_label"] = by_cond["camera"].map(label_map_cam)
 
-        logger.info("\n=== Full-factorial condition table (NO SE, 0–100 scales) ===")
+        logger.info("\n=== Full-factorial condition table (MEAN + SD, 0–100 scales) ===")
         logger.info(
-            "\n=== Full-factorial condition table (NO SE, 0–100 scales) ===\n{}",
+            "\n=== Full-factorial condition table (MEAN + SD, 0–100 scales) ===\n{}",
             by_cond.to_string(index=False),
         )
         logger.info("===========================================================\n")
@@ -1902,12 +1993,16 @@ class HMD_helper:
         # Common label mapping for all figures
         base_labels = {
             "distPed_m": "Distance between pedestrians (m)",
-            "crossing_risk": "Mean perceived crossing risk (0–100)",
-            "mean_crossing_risk": "Mean perceived crossing risk (0–100)",
-            "avg_trigger": "Mean perceived crossing risk (0–100)",
+            "crossing_risk": "Mean perceived crossing risk<br>(0–100)",
+            "mean_crossing_risk": "Mean perceived crossing risk<br>(0–100)",
+            "sd_crossing_risk": "SD of perceived crossing risk<br>(0–100)",
 
-            "Q2_mean": "Self-reported influence of other pedestrian<br>(0–100)",
-            "mean_Q2": "Self-reported influence of other pedestrian<br>(0–100)",
+            "Q1_mean": "Q1 (0–100)",
+            "Q1_sd": "SD of Q1 (0–100)",
+            "Q2_mean": "Q2 (0–100)",
+            "Q2_sd": "SD of Q2 (0–100)",
+            "Q3_mean": "Q3 (0–100)",
+            "Q3_sd": "SD of Q3 (0–100)",
 
             "camera_label": "Camera",
             "yielding_label": "Yielding",
@@ -1941,17 +2036,19 @@ class HMD_helper:
             title="",
         )
 
-        fig_beh.update_layout(template=plotly_template,
-                              legend=dict(x=0.5,
-                                          y=0.5,
-                                          xanchor="center",
-                                          yanchor="bottom",
-                                          font=axis_title_font,
-                                          title_text=""),
-                              )
+        fig_beh.update_layout(
+            template=plotly_template,
+            legend=dict(
+                x=0.5,
+                y=0.5,
+                xanchor="center",
+                yanchor="bottom",
+                font=axis_title_font,
+                title_text="",
+            ),
+        )
         fig_beh.update_xaxes(title_font=axis_title_font)
         fig_beh.update_yaxes(title_font=axis_title_font)
-
         _strip_facet_equals(fig_beh)
 
         # ============================
@@ -1970,18 +2067,19 @@ class HMD_helper:
             title="",
         )
 
-        fig_q2.update_layout(template=plotly_template,
-                             legend=dict(x=0.5,
-                                         y=0.9,
-                                         xanchor="center",
-                                         yanchor="bottom",
-                                         font=axis_title_font,
-                                         title_text=""),
-                             )
-
+        fig_q2.update_layout(
+            template=plotly_template,
+            legend=dict(
+                x=0.5,
+                y=0.9,
+                xanchor="center",
+                yanchor="bottom",
+                font=axis_title_font,
+                title_text="",
+            ),
+        )
         fig_q2.update_xaxes(title_font=axis_title_font)
         fig_q2.update_yaxes(title_font=axis_title_font)
-
         _strip_facet_equals(fig_q2)
 
         # ============================
@@ -2000,18 +2098,19 @@ class HMD_helper:
             title="",
         )
 
-        fig_beh_yield.update_layout(template=plotly_template,
-                                    legend=dict(x=0.5,
-                                                y=0.5,
-                                                xanchor="center",
-                                                yanchor="bottom",
-                                                font=axis_title_font,
-                                                title_text=""),
-                                    )
-
+        fig_beh_yield.update_layout(
+            template=plotly_template,
+            legend=dict(
+                x=0.5,
+                y=0.5,
+                xanchor="center",
+                yanchor="bottom",
+                font=axis_title_font,
+                title_text="",
+            ),
+        )
         fig_beh_yield.update_xaxes(title_font=axis_title_font)
         fig_beh_yield.update_yaxes(title_font=axis_title_font)
-
         _strip_facet_equals(fig_beh_yield)
 
         # ============================
@@ -2029,18 +2128,20 @@ class HMD_helper:
             category_orders=category_orders,
             title="",
         )
-        fig_beh_ehmi.update_layout(template=plotly_template,
-                                   legend=dict(x=0.5,
-                                               y=0.5,
-                                               xanchor="center",
-                                               yanchor="bottom",
-                                               font=axis_title_font,
-                                               title_text=""),
-                                   )
 
+        fig_beh_ehmi.update_layout(
+            template=plotly_template,
+            legend=dict(
+                x=0.5,
+                y=0.5,
+                xanchor="center",
+                yanchor="bottom",
+                font=axis_title_font,
+                title_text="",
+            ),
+        )
         fig_beh_ehmi.update_xaxes(title_font=axis_title_font)
         fig_beh_ehmi.update_yaxes(title_font=axis_title_font)
-
         _strip_facet_equals(fig_beh_ehmi)
 
         # ============================
@@ -2058,18 +2159,20 @@ class HMD_helper:
             category_orders=category_orders,
             title="",
         )
-        fig_q2_yield.update_layout(template=plotly_template,
-                                   legend=dict(x=0.5,
-                                               y=0.5,
-                                               xanchor="center",
-                                               yanchor="bottom",
-                                               font=axis_title_font,
-                                               title_text=""),
-                                   )
 
+        fig_q2_yield.update_layout(
+            template=plotly_template,
+            legend=dict(
+                x=0.5,
+                y=0.5,
+                xanchor="center",
+                yanchor="bottom",
+                font=axis_title_font,
+                title_text="",
+            ),
+        )
         fig_q2_yield.update_xaxes(title_font=axis_title_font)
         fig_q2_yield.update_yaxes(title_font=axis_title_font)
-
         _strip_facet_equals(fig_q2_yield)
 
         # ============================
@@ -2087,18 +2190,20 @@ class HMD_helper:
             category_orders=category_orders,
             title="",
         )
-        fig_q2_ehmi.update_layout(template=plotly_template,
-                                  legend=dict(x=0.5,
-                                              y=0.5,
-                                              xanchor="center",
-                                              yanchor="bottom",
-                                              font=axis_title_font,
-                                              title_text=""),
-                                  )
 
+        fig_q2_ehmi.update_layout(
+            template=plotly_template,
+            legend=dict(
+                x=0.5,
+                y=0.5,
+                xanchor="center",
+                yanchor="bottom",
+                font=axis_title_font,
+                title_text="",
+            ),
+        )
         fig_q2_ehmi.update_xaxes(title_font=axis_title_font)
         fig_q2_ehmi.update_yaxes(title_font=axis_title_font)
-
         _strip_facet_equals(fig_q2_ehmi)
 
         # ============================
@@ -2124,19 +2229,22 @@ class HMD_helper:
                     x=xs,
                     y=ys,
                     mode="lines",
-                    name="",          # no label text
+                    name="",
                     showlegend=False,
                     hoverinfo="skip",
                 )
             )
 
-        fig_scatter.update_layout(template=plotly_template,
-                                  legend=dict(x=0.5,
-                                              y=0.5,
-                                              xanchor="center",
-                                              yanchor="bottom",
-                                              font=axis_title_font,)
-                                  )
+        fig_scatter.update_layout(
+            template=plotly_template,
+            legend=dict(
+                x=0.5,
+                y=0.5,
+                xanchor="center",
+                yanchor="bottom",
+                font=axis_title_font,
+            ),
+        )
 
         # ============================
         # Figure 4 — NEAR (1–2 m) minus FAR (4–5 m) per context
@@ -2144,19 +2252,23 @@ class HMD_helper:
         ctx_cols = ["yielding", "eHMIOn", "camera"]
 
         near = (
-            by_cond[by_cond["distPed_m"].isin([1, 2])]
+            by_cond[by_cond["distPed_m"].isin([2, 4])]
             .groupby(ctx_cols, as_index=False)
             .agg(
                 crossing_risk_near=("mean_crossing_risk", "mean"),
+                Q1_near=("Q1_mean", "mean"),
                 Q2_near=("Q2_mean", "mean"),
+                Q3_near=("Q3_mean", "mean"),
             )
         )
         far = (
-            by_cond[by_cond["distPed_m"].isin([4, 5])]
+            by_cond[by_cond["distPed_m"].isin([8, 10])]
             .groupby(ctx_cols, as_index=False)
             .agg(
                 crossing_risk_far=("mean_crossing_risk", "mean"),
+                Q1_far=("Q1_mean", "mean"),
                 Q2_far=("Q2_mean", "mean"),
+                Q3_far=("Q3_mean", "mean"),
             )
         )
 
@@ -2164,7 +2276,9 @@ class HMD_helper:
         diff_df["delta_crossing_risk"] = (
             diff_df["crossing_risk_near"] - diff_df["crossing_risk_far"]
         )
+        diff_df["delta_Q1"] = diff_df["Q1_near"] - diff_df["Q1_far"]
         diff_df["delta_Q2"] = diff_df["Q2_near"] - diff_df["Q2_far"]
+        diff_df["delta_Q3"] = diff_df["Q3_near"] - diff_df["Q3_far"]
 
         # Context string with on/off text instead of 0/1
         diff_df["context"] = diff_df.apply(
@@ -2179,22 +2293,24 @@ class HMD_helper:
         logger.info("\n=== NEAR–FAR differences per context ===")
         logger.info(
             "\n=== NEAR–FAR differences per context ===\n{}",
-            diff_df[["context", "delta_crossing_risk", "delta_Q2"]].to_string(
-                index=False
-            ),
+            diff_df[
+                ["context", "delta_crossing_risk", "delta_Q1", "delta_Q2", "delta_Q3"]
+            ].to_string(index=False),
         )
         logger.info("========================================\n")
 
         long_diff = diff_df.melt(
             id_vars=["context"],
-            value_vars=["delta_crossing_risk", "delta_Q2"],
+            value_vars=["delta_crossing_risk", "delta_Q1", "delta_Q2", "delta_Q3"],
             var_name="measure",
             value_name="delta",
         )
 
         long_diff["measure"] = long_diff["measure"].map({
             "delta_crossing_risk": "Mean perceived crossing risk (0–100)",
-            "delta_Q2": "Self-reported influence of other pedestrian<br>(0–100)",
+            "delta_Q1": "Q1 (0–100)",
+            "delta_Q2": "Q2 (0–100)",
+            "delta_Q3": "Q3 (0–100)",
         })
 
         fig_diff = px.bar(
@@ -2207,14 +2323,12 @@ class HMD_helper:
             title="",
         )
 
-        # Bar labels (numbers on bars)
         fig_diff.update_traces(
-            texttemplate="%{y:.1f}",     # show y (= delta) with 1 decimal; or "%{delta:.1f}"
-            textposition="outside",      # or "inside" if overlap is an issue
+            texttemplate="%{y:.1f}",
+            textposition="outside",
             textfont=axis_title_font,
         )
 
-        # Layout: legend + fonts
         fig_diff.update_layout(
             template=plotly_template,
             legend=dict(
@@ -2225,29 +2339,22 @@ class HMD_helper:
                 font=axis_title_font,
             ),
         )
-
-        # Axis titles + tick labels
-        fig_diff.update_xaxes(
-            title_font=axis_title_font,
-            tickfont=axis_title_font,
-        )
-        fig_diff.update_yaxes(
-            title_font=axis_title_font,
-            tickfont=axis_title_font,
-        )
-
-        # Zero line
+        fig_diff.update_xaxes(title_font=axis_title_font, tickfont=axis_title_font)
+        fig_diff.update_yaxes(title_font=axis_title_font, tickfont=axis_title_font)
         fig_diff.add_hline(y=0, line_dash="dash", line_color="black")
 
         # ============================
         # Stats summary
         # ============================
-        corr = cond_plot_df["crossing_risk"].corr(cond_plot_df["mean_Q2"])
-        logger.info(
-            f"Correlation (Mean perceived crossing risk, Q2): r = {corr:.3f}"
-        )
+        # Correlations with crossing risk
+        for q_label, col in [("Q1", "mean_Q1"), ("Q2", "mean_Q2"), ("Q3", "mean_Q3")]:
+            if col in cond_plot_df.columns:
+                r = cond_plot_df["crossing_risk"].corr(cond_plot_df[col])
+                logger.info(f"Correlation (Mean perceived crossing risk, {q_label}): r = {r:.3f}")
 
         xd = by_cond["distPed_m"].values
+
+        # Slopes vs distance for crossing risk and Q1–Q3
         yd_risk = by_cond["mean_crossing_risk"].values
         slope_risk, intercept_risk = np.polyfit(xd, yd_risk, 1)
         logger.info(
@@ -2255,12 +2362,13 @@ class HMD_helper:
             f"slope = {slope_risk:.4f} (risk units per 1 m)"
         )
 
-        yd_q2 = by_cond["Q2_mean"].values
-        slope_q2, intercept_q2 = np.polyfit(xd, yd_q2, 1)
-        logger.info(
-            "Overall Q2 vs distance: "
-            f"slope = {slope_q2:.4f} (Q2 units per 1 m)"
-        )
+        for q_label, col in [("Q1", "Q1_mean"), ("Q2", "Q2_mean"), ("Q3", "Q3_mean")]:
+            y = by_cond[col].values
+            slope_q, intercept_q = np.polyfit(xd, y, 1)
+            logger.info(
+                f"Overall {q_label} vs distance: "
+                f"slope = {slope_q:.4f} ({q_label} units per 1 m)"
+            )
 
         # ============================
         # Save figures
@@ -2268,7 +2376,7 @@ class HMD_helper:
         self.save_plotly(fig_beh, "crossing_risk_full_factorial", save_final=True)
         self.save_plotly(fig_q2, "Q2_full_factorial", save_final=True)
         self.save_plotly(fig_scatter, "crossing_risk_vs_Q2_scatter", save_final=True)
-        self.save_plotly(fig_diff, "near_minus_far_crossing_risk_vs_Q2", save_final=True)
+        self.save_plotly(fig_diff, "near_minus_far_crossing_risk_vs_Q123", save_final=True)
         self.save_plotly(fig_beh_yield, "crossing_risk_full_factorial_legend_yielding", save_final=True)
         self.save_plotly(fig_beh_ehmi, "crossing_risk_full_factorial_legend_eHMI", save_final=True)
         self.save_plotly(fig_q2_yield, "Q2_full_factorial_legend_yielding", save_final=True)
@@ -2685,7 +2793,7 @@ class HMD_helper:
 
         case_keys = sorted(mapping["case_key"].unique())
         color_map = {ck: colors[i % len(colors)] for i, ck in enumerate(case_keys)}
-        line_width = 3
+        line_width = 6
 
         # Histogram settings (no smoothing) in [-90, 90]
         bins = np.linspace(-90, 90, 181)   # 1° bins from -90 to 90
@@ -2785,7 +2893,6 @@ class HMD_helper:
                     std_yaw = np.sqrt(var_yaw)
                     metrics_list.append(
                         {
-
                             "camera": cam_value,
                             "distPed": dist_value,
                             "condition": cond_label,
@@ -2865,17 +2972,16 @@ class HMD_helper:
                 type="line",
                 x0=0, x1=0,
                 y0=0, y1=ymax_axis,
-                line=dict(color="gray", dash="dot", width=1.5),
+                line=dict(color="gray", dash="dot", width=3.0),
             )
             # White background, grids, solid axes, legend inside
             fig.update_layout(
-
                 template="none",
                 paper_bgcolor="white",
                 plot_bgcolor="white",
                 title="",
-                xaxis_title="Gaze yaw angle (deg)",
-                yaxis_title="Frequency",
+                xaxis_title="</b>Gaze yaw angle (deg)</b>",
+                yaxis_title="</b>Frequency</b>",
                 legend_title=None,
                 legend=dict(
                     x=0.02,
@@ -2886,12 +2992,11 @@ class HMD_helper:
                     bordercolor="black",
                     borderwidth=1,
                     font=dict(
-                        family="Arial",
-                        size=14,
+                        family=font_family, size=font_size+20
                     ),
                 ),
-                xaxis_title_font=dict(family=font_family, size=font_size),
-                yaxis_title_font=dict(family=font_family, size=font_size),
+                xaxis_title_font=dict(family=font_family, size=font_size+20),
+                yaxis_title_font=dict(family=font_family, size=font_size+20),
             )
             fig.update_xaxes(
                 range=[-90, 90],
@@ -2899,11 +3004,11 @@ class HMD_helper:
                 showgrid=True,
                 gridcolor="lightgray",
                 tickmode="array",
-                tickvals=[-90, -60, -30, 30, 60, 90],  # every 30°, excluding 0
+                tickvals=[-90, -60, -30, 0, 30, 60, 90],  # every 30°, excluding 0
                 zeroline=False,                        # no built-in zero line
                 showline=True,
                 linecolor="black",
-                tickfont=dict(family=font_family, size=font_size),
+                tickfont=dict(family=font_family, size=font_size+20),
             )
             fig.update_yaxes(
                 range=[0, ymax_axis],
@@ -2915,7 +3020,7 @@ class HMD_helper:
                 zerolinecolor="black",
                 showline=True,
                 linecolor="black",
-                tickfont=dict(family=font_family, size=font_size),
+                tickfont=dict(family=font_family, size=font_size+8),
             )
             return fig
 
@@ -2927,7 +3032,6 @@ class HMD_helper:
             self.save_plotly(
                 fig_cam0,
                 "yaw_hist_can_see",
-                remove_margins=True,
                 width=1600,
                 height=900,
                 save_final=True,
@@ -2935,9 +3039,8 @@ class HMD_helper:
 
         if fig_cam1 is not None:
             self.save_plotly(
-                fig_cam1,  # <- fixed: use fig_cam1 here
+                fig_cam1,
                 "yaw_hist_cannot_see",
-                remove_margins=True,
                 width=1600,
                 height=900,
                 save_final=True,
@@ -2995,7 +3098,7 @@ class HMD_helper:
                             mode="lines",
                             name=cond_label,
                             legendgroup=case_key,
-                            line=dict(width=line_width, color=color, dash="solid"),
+                            line=dict(width=line_width-3, color=color, dash="solid"),
                             showlegend=show_legend,
                         ),
                         row=r,
@@ -3042,11 +3145,11 @@ class HMD_helper:
             showgrid=True,
             gridcolor="lightgray",
             tickmode="array",
-            tickvals=[-90, -60, -30, 30, 60, 90],
+            tickvals=[-90, -60, -30, 0, 30, 60, 90],
             zeroline=False,
             showline=True,
             linecolor="black",
-            tickfont=dict(family=font_family, size=font_size),   # bigger ticks
+            tickfont=dict(family=font_family, size=font_size),
         )
         fig_grid.update_yaxes(
             range=[0, grid_ymax],
@@ -3058,7 +3161,7 @@ class HMD_helper:
             zerolinecolor="black",
             showline=True,
             linecolor="black",
-            tickfont=dict(family=font_family, size=font_size),   # bigger ticks
+            tickfont=dict(family=font_family, size=font_size),
         )
 
         # Axis labels for the grid

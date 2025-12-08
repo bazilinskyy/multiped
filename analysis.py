@@ -274,7 +274,7 @@ if __name__ == "__main__":
     #     mapping_df=mapping)
 
     # HMD.analyze_and_plot_distance_effect_plotly(
-    #     condition_df=pd.read_csv(os.path.join(output_folder, "condition_level_trigger_Q2.csv")),
+    #     condition_df=pd.read_csv(os.path.join(output_folder, "condition_level_trigger_Q123.csv")),
     #     mapping_df=mapping,
     #     out_dir=output_folder,
     # )
