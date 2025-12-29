@@ -1,6 +1,11 @@
 # Multi-pedestrian interaction with automated vehicle
 Framework for the analysis of crossing behaviour in the interaction between multiple pedestrians and an automated vehicle, from the perspective of one of the pedestrians using a crowdsourcing approach.
 
+## Citation
+If you use the simulator for academic work please cite the following papers:
+
+>  Alam, M. S., Dey, D., Martens, M.H., & Bazilinskyy, P. (2026). You’ll never walk alone: Inter-pedestrian distance, eHMIs, and crossing decisions in virtual reality.
+
 
 ## Getting started
 [![Python Version](https://img.shields.io/badge/python-3.9.11-blue.svg)](https://www.python.org/downloads/release/python-3919/)
@@ -99,6 +104,27 @@ source .venv/bin/activate
 ```command line
 python3 analysis.py
 ```
+
+## Configuration of project
+Configuration of the project needs to be defined in `sound-ev/config`. Please use the `default.config` file for the required structure of the file. If no custom config file is provided, `default.config` is used. The config file has the following parameters:
+* `mapping`: CSV file that contains all data found in the videos.
+* `plotly_template`: Template used to make graphs in the analysis.
+* `output`: Directory where analysis results and intermediate output files will be saved.
+* `figures`: Directory where final figures and plots are stored.
+* `data`: Directory containing all raw and processed data files used in the analysis.
+* `intake_questionnaire`: CSV file containing participant responses from the intake (pre-experiment) questionnaire.
+* `post_experiment_questionnaire`: CSV file containing participant responses from the post-experiment questionnaire.
+* `compare_trial`: Reference trial against which all other trials are compared during t-tests in the analysis.
+* `kp_resolution`: Time bin size, in milliseconds, used for storing keypress data, which controls the resolution of keypress event logs.
+* `yaw_resolution`: Time bin size, in milliseconds, used for storing yaw (head rotation) data, controlling the resolution of HMD orientation data.
+* `smoothen_signal`:  Boolean toggle to enable or disable signal smoothing for data analysis.
+* `freq`: Frequency parameter used by the One Euro Filter for signal smoothing.
+* `mincutoff`: Minimum cutoff frequency for the One Euro Filter.
+* `beta`: Beta value controlling the speed-versus-smoothness tradeoff in the One Euro Filter.
+* `font_family`: Font family to be used in all generated figures for visual consistency.
+* `font_size`: Font size to be applied to all text in generated figures.
+* `p_value`: p-value threshold to be used for statistical significance testing (e.g., in t-tests).
+
 
 
 ## Results
