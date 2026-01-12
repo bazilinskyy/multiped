@@ -106,7 +106,7 @@ python3 analysis.py
 ```
 
 ## Configuration of project
-Configuration of the project needs to be defined in `sound-ev/config`. Please use the `default.config` file for the required structure of the file. If no custom config file is provided, `default.config` is used. The config file has the following parameters:
+Configuration of the project needs to be defined in `multiped/config`. Please use the `default.config` file for the required structure of the file. If no custom config file is provided, `default.config` is used. The config file has the following parameters:
 * `mapping`: CSV file that contains all data found in the videos.
 * `plotly_template`: Template used to make graphs in the analysis.
 * `output`: Directory where analysis results and intermediate output files will be saved.
