@@ -19,12 +19,8 @@ from tqdm import tqdm
 from datetime import datetime
 import ast
 import math
-from typing import Dict, Optional
-
-try:
-    import statsmodels.formula.api as smf
-except Exception:  # pragma: no cover
-    smf = None
+from typing import Dict
+import statsmodels.formula.api as smf
 
 
 logger = CustomLogger(__name__)  # use custom logger
@@ -50,6 +46,30 @@ class HMD_helper:
         self.folder_stats = 'statistics'  # subdirectory to save statistical output
         self.data_folder = common.get_configs("data")  # Get path to participant data
         self.output_folder = common.get_configs("output")
+
+
+    @staticmethod
+    def _distance_code_to_meters(value):
+        """Convert coded distance levels 1..5 to 2..10 m while preserving metre values."""
+        numeric = pd.to_numeric(value, errors="coerce")
+        if pd.isna(numeric):
+            return np.nan
+        numeric = float(numeric)
+        if numeric == 0:
+            return np.nan
+        if numeric in {1.0, 2.0, 3.0, 4.0, 5.0}:
+            return numeric * 2.0
+        return numeric
+
+    @classmethod
+    def _distance_series_to_meters(cls, series):
+        """Vectorised distance conversion for pandas Series."""
+        numeric = pd.to_numeric(series, errors="coerce")
+        mapped = numeric.copy()
+        mask_code = numeric.isin([1, 2, 3, 4, 5])
+        mapped.loc[mask_code] = numeric.loc[mask_code] * 2.0
+        mapped.loc[numeric == 0] = np.nan
+        return mapped
 
     def smoothen_filter(self, signal, type_flter='OneEuroFilter'):
         """Smoothen list with a filter.
@@ -381,11 +401,16 @@ class HMD_helper:
 
         # save as eps
         if save_eps:
-            fig.write_image(os.path.join(path, name + '.eps'), width=width, height=height)
+            try:
+                fig.write_image(os.path.join(path, name + '.eps'), width=width, height=height)
 
-            # also save the final figure
-            if save_final:
-                fig.write_image(os.path.join(path_final, name + '.eps'), width=width, height=height)
+                # also save the final figure
+                if save_final:
+                    fig.write_image(os.path.join(path_final, name + '.eps'), width=width, height=height)
+            except Exception as exc:
+                logger.warning(
+                    f"Skipping EPS export for '{name}' because Plotly/Kaleido could not create the EPS file: {exc}"
+                )
 
         # save as png
         if save_png:
@@ -1795,13 +1820,13 @@ class HMD_helper:
         if n < 4:
             return np.nan, np.nan, np.nan, np.nan, n
         r_val, p_val = pearsonr(df["x"], df["y"])
-        r_val = float(r_val)
-        p_val = float(p_val)
+        r_val = float(r_val)  # type: ignore
+        p_val = float(p_val)  # type: ignore
         if abs(r_val) >= 1:
             return r_val, p_val, r_val, r_val, n
         z = np.arctanh(r_val)
         se = 1.0 / np.sqrt(n - 3)
-        crit = t.ppf(1 - alpha / 2.0, df=n - 1)
+        crit = t.ppf(1 - alpha / 2.0, df=n - 1)  # noqa: F841
         # use normal approx on z scale, crit≈1.96 for moderate n
         z_delta = 1.959963984540054 * se
         lo = float(np.tanh(z - z_delta))
@@ -1949,7 +1974,7 @@ class HMD_helper:
                 if df.shape[1] <= q3_idx:
                     continue
                 tmp = df[[0, q1_idx, q2_idx, q3_idx]].copy()
-                tmp.columns = ["video_id", "Q1", "Q2", "Q3"]
+                tmp.columns = ["video_id", "Q1", "Q2", "Q3"]  # pyright: ignore[reportAttributeAccessIssue]
                 tmp["participant"] = pid
                 tmp["video_id"] = tmp["video_id"].astype(str)
                 tmp = tmp[tmp["video_id"].str.startswith("video_")].copy()
@@ -1974,15 +1999,15 @@ class HMD_helper:
         # fallback from condition-level trigger summary if a participant-level row is missing
         trial_df = trial_df.merge(
             trigger_df[["condition_name", "avg_trigger", "sd_trigger"]].rename(
-                columns={"avg_trigger": "avg_trigger_condition", "sd_trigger": "sd_trigger_condition"}
-            ),
+                columns={"avg_trigger": "avg_trigger_condition", "sd_trigger": "sd_trigger_condition"}),  # type:ignore
             on="condition_name",
             how="left",
         )
         trial_df["avg_trigger"] = trial_df["avg_trigger"].fillna(trial_df["avg_trigger_condition"])
         trial_df["sd_trigger"] = trial_df["sd_trigger"].fillna(trial_df["sd_trigger_condition"])
         trial_df = trial_df.drop(columns=["avg_trigger_condition", "sd_trigger_condition"], errors="ignore")
-        trial_df["distPed_m"] = pd.to_numeric(trial_df["distPed"], errors="coerce") * 2.0
+        trial_df["distPed_m"] = self._distance_series_to_meters(trial_df["distPed"])
+        trial_df["distPed"] = trial_df["distPed_m"]
         trial_df["crossing_risk"] = pd.to_numeric(trial_df["avg_trigger"], errors="coerce") * 100.0
         trial_df["crossing_risk_sd"] = pd.to_numeric(trial_df["sd_trigger"], errors="coerce") * 100.0
 
@@ -2078,8 +2103,10 @@ class HMD_helper:
             how="left",
         )
 
-        # Convert coded distance values to actual meters (1→2 m, 2→4 m, ...)
-        cond_plot_df["distPed_m"] = cond_plot_df["distPed"] * 2
+        # Convert coded distance values to actual metres (2, 4, 6, 8, 10) and
+        # also handle mapping tables that already store metre values.
+        cond_plot_df["distPed_m"] = self._distance_series_to_meters(cond_plot_df["distPed"])
+        cond_plot_df["distPed"] = cond_plot_df["distPed_m"]
 
         # Scale trigger to 0–100: "Mean perceived crossing risk (0–100)"
         cond_plot_df["crossing_risk"] = cond_plot_df["avg_trigger"] * 100.0
@@ -2394,7 +2421,7 @@ class HMD_helper:
         )
 
         # ============================
-        # Figure 4 — NEAR (1–2 m) minus FAR (4–5 m) per context
+        # Figure 4 — NEAR (2–4 m) minus FAR (8–10 m) per context
         # ============================
         ctx_cols = ["yielding", "eHMIOn", "camera"]
 
@@ -2524,10 +2551,13 @@ class HMD_helper:
         os.makedirs(stats_out_dir, exist_ok=True)
 
         corr_records = []
-        corr_source = trial_df if trial_df is not None else cond_plot_df.rename(columns={"mean_Q1": "Q1", "mean_Q2": "Q2", "mean_Q3": "Q3"})
+        corr_source = trial_df if trial_df is not None else cond_plot_df.rename(columns={"mean_Q1": "Q1",
+                                                                                         "mean_Q2": "Q2",
+                                                                                         "mean_Q3": "Q3"})
         for q_label in ["Q1", "Q2", "Q3"]:
             if q_label in corr_source.columns and "crossing_risk" in corr_source.columns:
-                r_val, p_val, ci_lo, ci_hi, n_obs = self._pearson_ci(corr_source["crossing_risk"], corr_source[q_label])
+                r_val, p_val, ci_lo, ci_hi, n_obs = self._pearson_ci(corr_source["crossing_risk"],
+                                                                     corr_source[q_label])
                 corr_records.append({
                     "measure": q_label,
                     "r": r_val,
@@ -2541,7 +2571,8 @@ class HMD_helper:
                     q_label, r_val, p_val, ci_lo, ci_hi, n_obs
                 )
         if corr_records:
-            pd.DataFrame(corr_records).to_csv(os.path.join(stats_out_dir, "condition_level_correlations.csv"), index=False)
+            pd.DataFrame(corr_records).to_csv(os.path.join(stats_out_dir,
+                                                           "condition_level_correlations.csv"), index=False)
 
         near_far_path = os.path.join(stats_out_dir, "near_far_differences.csv")
         diff_df.to_csv(near_far_path, index=False)
@@ -2969,11 +3000,12 @@ class HMD_helper:
         # condition_key: (yielding, eHMIOn, camera)  -> for the actual curves
         mapping["condition_key"] = mapping["case_key"] + "_c" + mapping["camera"].astype(str)
         # Distances (for the 10 subplots)
-        dist_values = sorted(mapping["distPed"].unique())
+        mapping["distPed_m"] = self._distance_series_to_meters(mapping["distPed"])
+        dist_values = sorted(mapping["distPed_m"].dropna().unique())
 
         if len(dist_values) != 5:
             logger.warning(
-                f"Expected 5 distinct distPed values, found {len(dist_values)}: {dist_values}"
+                f"Expected 5 distinct inter-pedestrian distances in metres, found {len(dist_values)}: {dist_values}"
             )
         # G10 colours mapped by case_key so the same case shares colour across all figures
         colors = px.colors.qualitative.G10
@@ -3081,7 +3113,7 @@ class HMD_helper:
                     metrics_list.append(
                         {
                             "camera": cam_value,
-                            "distPed": dist_value,
+                            "distPed_m": dist_value,
                             "condition": cond_label,
                             "case_key": case_key,
                             "area_total_pct": area_total,
@@ -3240,7 +3272,7 @@ class HMD_helper:
         for r in range(2):
             for dist in dist_values[:5]:
                 if r == 0:
-                    subplot_titles.append(f"Distance = {dist}")
+                    subplot_titles.append(f"Distance = {int(dist)} m")
                 else:
                     subplot_titles.append("")  # no title in second row
 
@@ -3261,7 +3293,7 @@ class HMD_helper:
             for c, dist in enumerate(dist_values[:5], start=1):
                 sub_camdist = mapping[
                     (mapping["camera"] == cam) &
-                    (mapping["distPed"] == dist)
+                    (mapping["distPed_m"] == dist)
                 ]
                 if sub_camdist.empty:
                     continue
@@ -3305,7 +3337,7 @@ class HMD_helper:
         # Log metrics for the 10 camera×distPed plots
         metrics_grid_df = pd.DataFrame(metrics_grid)
         if not metrics_grid_df.empty:
-            logger.info(f"Grid (camera × distPed) metrics:\n{metrics_grid_df.to_string(index=False)}")
+            logger.info(f"Grid (camera × distance in metres) metrics:\n{metrics_grid_df.to_string(index=False)}")
 
         # Common layout for the grid figure
         fig_grid.update_layout(

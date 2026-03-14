@@ -6,6 +6,8 @@ import common
 import pandas as pd
 import os
 
+from stats import AdvancedStatsRunner
+
 
 logs(show_level="info", show_color=True)
 logger = CustomLogger(__name__)  # use custom logger
@@ -17,6 +19,10 @@ mapping = pd.read_csv(common.get_configs("mapping"))  # mapping file
 output_folder = common.get_configs("output")
 intake_questionnaire = common.get_configs("intake_questionnaire")   # intake questionnaire
 post_experiment_questionnaire = common.get_configs("post_experiment_questionnaire")  # post-experiment questionnaire
+
+RUN_ADVANCED_STATISTICS = True
+EQUIVALENCE_MARGIN_POINTS = 5.0
+
 
 intake_columns_to_plot = [
     "Do you consent to participate in this study as described in the information provided above?",
@@ -71,199 +77,250 @@ try:
 except Exception as e:
     logger.error(f"Error occurred while creating directory: {e}")
 
+
+def ensure_slider_tables(data_folder: str, mapping_df: pd.DataFrame, output_dir: str) -> None:
+    """Generate slider tables only when they are missing."""
+    expected = [
+        os.path.join(output_dir, "slider_input_behaviour.csv"),
+        os.path.join(output_dir, "slider_input_distance.csv"),
+        os.path.join(output_dir, "slider_input_intention.csv"),
+    ]
+
+    missing = [path for path in expected if not os.path.isfile(path)]
+    if not missing:
+        logger.info("Slider input tables found. Reusing existing files.")
+        return
+
+    logger.info("Generating missing slider input tables.")
+    for path in missing:
+        logger.info(f"Missing slider table: {path}")
+
+    HMD.read_slider_data(data_folder, mapping_df, output_dir)
+
+    for path in expected:
+        if os.path.isfile(path):
+            logger.info(f"Slider table ready: {path}")
+        else:
+            logger.warning(f"Expected slider table was not created: {path}")
+
+
+def run_advanced_statistics(trial_level_df: pd.DataFrame) -> None:
+    """Run the added statistical analyses on top of the existing pipeline output."""
+    if not RUN_ADVANCED_STATISTICS:
+        logger.info("Advanced statistics disabled.")
+        return
+
+    logger.info("Running advanced statistics and extra figure generation.")
+    runner = AdvancedStatsRunner(
+        helper=HMD,
+        mapping_df=mapping,
+        output_dir=output_folder,
+        data_root=data_folder,
+    )
+    runner.run_all(
+        trial_df=trial_level_df,
+        equivalence_margin=EQUIVALENCE_MARGIN_POINTS,
+    )
+
+
 # Execute analysis
 if __name__ == "__main__":
     logger.info("Analysis started.")
 
+    logger.info("Preparing cached inputs and outputs.")
+    ensure_slider_tables(data_folder, mapping, output_folder)
+
     # Information on participants
-    # HMD.plot_gender_by_nationality(intake_questionnaire,
-    #                                gender_col="What is your gender?",
-    #                                nationality_col="What is your nationality?")
+    HMD.plot_gender_by_nationality(intake_questionnaire,
+                                   gender_col="What is your gender?",
+                                   nationality_col="What is your nationality?")
 
-    # HMD.plot_column_distribution(intake_questionnaire,
-    #                              intake_columns_to_plot,
-    #                              output_folder="output",
-    #                              save_file=True,
-    #                              tag="intake")
+    HMD.plot_column_distribution(intake_questionnaire,
+                                 intake_columns_to_plot,
+                                 output_folder="output",
+                                 save_file=True,
+                                 tag="intake")
 
-    # HMD.plot_column_distribution(post_experiment_questionnaire,
-    #                              post_columns_to_plot,
-    #                              output_folder="output",
-    #                              save_file=True,
-    #                              tag="post")
+    HMD.plot_column_distribution(post_experiment_questionnaire,
+                                 post_columns_to_plot,
+                                 output_folder="output",
+                                 save_file=True,
+                                 tag="post")
 
-    # HMD.distribution_plots(intake_questionnaire,
-    #                        intake_columns_distribution_to_plot,
-    #                        output_folder="output",
-    #                        save_file=True)
+    HMD.distribution_plots(intake_questionnaire,
+                           intake_columns_distribution_to_plot,
+                           output_folder="output",
+                           save_file=True)
 
-    # HMD.distribution_plots(post_experiment_questionnaire,
-    #                        post_columns_distribution_to_plot,
-    #                        output_folder="output",
-    #                        save_file=True)
+    HMD.distribution_plots(post_experiment_questionnaire,
+                           post_columns_distribution_to_plot,
+                           output_folder="output",
+                           save_file=True)
 
-    # # Read and process data
-    # HMD.read_slider_data(data_folder, mapping, output_folder)
+    # Read and process data
+    HMD.read_slider_data(data_folder, mapping, output_folder)
 
-    # # Keypress data for yielding criteria
-    # HMD.plot_column(mapping,
-    #                 parameter=None,
-    #                 xaxis_range=[0, 18],
-    #                 compare_trial="video_1",
-    #                 xaxis_title="Time, [s]",
-    #                 yaxis_title="Percentage of trials with trigger key pressed",
-    #                 name="all_values_with_yielding",
-    #                 margin=dict(l=120, r=2, t=12, b=12))
+    # Keypress data for yielding criteria
+    HMD.plot_column(mapping,
+                    parameter=None,
+                    xaxis_range=[0, 18],
+                    compare_trial="video_1",
+                    xaxis_title="Time, [s]",
+                    yaxis_title="Percentage of trials with trigger key pressed",
+                    name="all_values_with_yielding",
+                    margin=dict(l=120, r=2, t=12, b=12))
 
-    # HMD.plot_column(mapping,
-    #                 parameter=None,
-    #                 xaxis_range=[0, 11],
-    #                 compare_trial="video_21",
-    #                 xaxis_title="Time, [s]",
-    #                 yaxis_title="Percentage of trials with trigger key pressed",
-    #                 name="all_values_without_yielding",
-    #                 margin=dict(l=120, r=2, t=12, b=12))
+    HMD.plot_column(mapping,
+                    parameter=None,
+                    xaxis_range=[0, 11],
+                    compare_trial="video_21",
+                    xaxis_title="Time, [s]",
+                    yaxis_title="Percentage of trials with trigger key pressed",
+                    name="all_values_without_yielding",
+                    margin=dict(l=120, r=2, t=12, b=12))
 
-    # # Keypress data for yielding and eHMI criteria
-    # HMD.plot_column(mapping,
-    #                 parameter="eHMIOn",
-    #                 parameter_value=0,
-    #                 xaxis_range=[0, 18],
-    #                 compare_trial="video_1",
-    #                 xaxis_title="Time, [s]",
-    #                 yaxis_title="Percentage of trials with trigger key pressed",
-    #                 name="eHMI_off_yielding",
-    #                 margin=dict(l=120, r=2, t=12, b=12))
+    # Keypress data for yielding and eHMI criteria
+    HMD.plot_column(mapping,
+                    parameter="eHMIOn",
+                    parameter_value=0,
+                    xaxis_range=[0, 18],
+                    compare_trial="video_1",
+                    xaxis_title="Time, [s]",
+                    yaxis_title="Percentage of trials with trigger key pressed",
+                    name="eHMI_off_yielding",
+                    margin=dict(l=120, r=2, t=12, b=12))
 
-    # HMD.plot_column(mapping,
-    #                 parameter="eHMIOn",
-    #                 parameter_value=1,
-    #                 xaxis_range=[0, 18],
-    #                 compare_trial="video_11",
-    #                 xaxis_title="Time, [s]",
-    #                 yaxis_title="Percentage of trials with trigger key pressed",
-    #                 name="eHMI_on_yielding",
-    #                 margin=dict(l=120, r=2, t=12, b=12))
+    HMD.plot_column(mapping,
+                    parameter="eHMIOn",
+                    parameter_value=1,
+                    xaxis_range=[0, 18],
+                    compare_trial="video_11",
+                    xaxis_title="Time, [s]",
+                    yaxis_title="Percentage of trials with trigger key pressed",
+                    name="eHMI_on_yielding",
+                    margin=dict(l=120, r=2, t=12, b=12))
 
-    # HMD.plot_column(mapping,
-    #                 parameter="eHMIOn",
-    #                 parameter_value=0,
-    #                 xaxis_range=[0, 11],
-    #                 compare_trial="video_31",
-    #                 xaxis_title="Time, [s]",
-    #                 yaxis_title="Percentage of trials with trigger key pressed",
-    #                 name="eHMI_off_non-yielding",
-    #                 margin=dict(l=120, r=2, t=12, b=12))
+    HMD.plot_column(mapping,
+                    parameter="eHMIOn",
+                    parameter_value=0,
+                    xaxis_range=[0, 11],
+                    compare_trial="video_31",
+                    xaxis_title="Time, [s]",
+                    yaxis_title="Percentage of trials with trigger key pressed",
+                    name="eHMI_off_non-yielding",
+                    margin=dict(l=120, r=2, t=12, b=12))
 
-    # HMD.plot_column(mapping,
-    #                 parameter="eHMIOn",
-    #                 parameter_value=1,
-    #                 xaxis_range=[0, 11],
-    #                 compare_trial="video_21",
-    #                 xaxis_title="Time, [s]",
-    #                 yaxis_title="Percentage of trials with trigger key pressed",
-    #                 name="eHMI_on_non-yielding",
-    #                 margin=dict(l=120, r=2, t=12, b=12))
+    HMD.plot_column(mapping,
+                    parameter="eHMIOn",
+                    parameter_value=1,
+                    xaxis_range=[0, 11],
+                    compare_trial="video_21",
+                    xaxis_title="Time, [s]",
+                    yaxis_title="Percentage of trials with trigger key pressed",
+                    name="eHMI_on_non-yielding",
+                    margin=dict(l=120, r=2, t=12, b=12))
 
-    # # Keypress data for yielding, eHMI and position criteria
+    # Keypress data for yielding, eHMI and position criteria
 
-    # # First person view
-    # HMD.plot_column(mapping,
-    #                 parameter="eHMIOn",
-    #                 parameter_value=1,
-    #                 additional_parameter="camera",
-    #                 additional_parameter_value=0,
-    #                 xaxis_range=[0, 11],
-    #                 compare_trial="video_21",
-    #                 xaxis_title="Time, [s]",
-    #                 yaxis_title="Percentage of trials with trigger key pressed",
-    #                 name="first_eHMI_on_non-yielding",
-    #                 margin=dict(l=120, r=2, t=12, b=12))
+    # First person view
+    HMD.plot_column(mapping,
+                    parameter="eHMIOn",
+                    parameter_value=1,
+                    additional_parameter="camera",
+                    additional_parameter_value=0,
+                    xaxis_range=[0, 11],
+                    compare_trial="video_21",
+                    xaxis_title="Time, [s]",
+                    yaxis_title="Percentage of trials with trigger key pressed",
+                    name="first_eHMI_on_non-yielding",
+                    margin=dict(l=120, r=2, t=12, b=12))
 
-    # HMD.plot_column(mapping,
-    #                 parameter="eHMIOn",
-    #                 parameter_value=1,
-    #                 additional_parameter="camera",
-    #                 additional_parameter_value=0,
-    #                 xaxis_range=[0, 18],
-    #                 compare_trial="video_11",
-    #                 xaxis_title="Time, [s]",
-    #                 yaxis_title="Percentage of trials with trigger key pressed",
-    #                 name="first_eHMI_on_yielding",
-    #                 margin=dict(l=120, r=2, t=12, b=12))
+    HMD.plot_column(mapping,
+                    parameter="eHMIOn",
+                    parameter_value=1,
+                    additional_parameter="camera",
+                    additional_parameter_value=0,
+                    xaxis_range=[0, 18],
+                    compare_trial="video_11",
+                    xaxis_title="Time, [s]",
+                    yaxis_title="Percentage of trials with trigger key pressed",
+                    name="first_eHMI_on_yielding",
+                    margin=dict(l=120, r=2, t=12, b=12))
 
-    # HMD.plot_column(mapping,
-    #                 parameter="eHMIOn",
-    #                 parameter_value=0,
-    #                 additional_parameter="camera",
-    #                 additional_parameter_value=0,
-    #                 xaxis_range=[0, 11],
-    #                 compare_trial="video_31",
-    #                 xaxis_title="Time, [s]",
-    #                 yaxis_title="Percentage of trials with trigger key pressed",
-    #                 name="first_eHMI_off_non-yielding",
-    #                 margin=dict(l=120, r=2, t=12, b=12))
+    HMD.plot_column(mapping,
+                    parameter="eHMIOn",
+                    parameter_value=0,
+                    additional_parameter="camera",
+                    additional_parameter_value=0,
+                    xaxis_range=[0, 11],
+                    compare_trial="video_31",
+                    xaxis_title="Time, [s]",
+                    yaxis_title="Percentage of trials with trigger key pressed",
+                    name="first_eHMI_off_non-yielding",
+                    margin=dict(l=120, r=2, t=12, b=12))
 
-    # HMD.plot_column(mapping,
-    #                 parameter="eHMIOn",
-    #                 parameter_value=0,
-    #                 additional_parameter="camera",
-    #                 additional_parameter_value=0,
-    #                 xaxis_range=[0, 18],
-    #                 compare_trial="video_1",
-    #                 xaxis_title="Time, [s]",
-    #                 yaxis_title="Percentage of trials with trigger key pressed",
-    #                 name="first_eHMI_off_yielding",
-    #                 margin=dict(l=120, r=2, t=12, b=12))
+    HMD.plot_column(mapping,
+                    parameter="eHMIOn",
+                    parameter_value=0,
+                    additional_parameter="camera",
+                    additional_parameter_value=0,
+                    xaxis_range=[0, 18],
+                    compare_trial="video_1",
+                    xaxis_title="Time, [s]",
+                    yaxis_title="Percentage of trials with trigger key pressed",
+                    name="first_eHMI_off_yielding",
+                    margin=dict(l=120, r=2, t=12, b=12))
 
-    # # Second-person view
-    # HMD.plot_column(mapping,
-    #                 parameter="eHMIOn",
-    #                 parameter_value=1,
-    #                 additional_parameter="camera",
-    #                 additional_parameter_value=1,
-    #                 xaxis_range=[0, 11],
-    #                 compare_trial="video_26",
-    #                 xaxis_title="Time, [s]",
-    #                 yaxis_title="Percentage of trials with trigger key pressed",
-    #                 name="second_eHMI_on_non-yielding",
-    #                 margin=dict(l=120, r=2, t=12, b=12))
+    # Second-person view
+    HMD.plot_column(mapping,
+                    parameter="eHMIOn",
+                    parameter_value=1,
+                    additional_parameter="camera",
+                    additional_parameter_value=1,
+                    xaxis_range=[0, 11],
+                    compare_trial="video_26",
+                    xaxis_title="Time, [s]",
+                    yaxis_title="Percentage of trials with trigger key pressed",
+                    name="second_eHMI_on_non-yielding",
+                    margin=dict(l=120, r=2, t=12, b=12))
 
-    # HMD.plot_column(mapping,
-    #                 parameter="eHMIOn",
-    #                 parameter_value=1,
-    #                 additional_parameter="camera",
-    #                 additional_parameter_value=1,
-    #                 xaxis_range=[0, 18],
-    #                 compare_trial="video_16",
-    #                 xaxis_title="Time, [s]",
-    #                 yaxis_title="Percentage of trials with trigger key pressed",
-    #                 name="second_eHMI_on_yielding",
-    #                 margin=dict(l=120, r=2, t=12, b=12))
+    HMD.plot_column(mapping,
+                    parameter="eHMIOn",
+                    parameter_value=1,
+                    additional_parameter="camera",
+                    additional_parameter_value=1,
+                    xaxis_range=[0, 18],
+                    compare_trial="video_16",
+                    xaxis_title="Time, [s]",
+                    yaxis_title="Percentage of trials with trigger key pressed",
+                    name="second_eHMI_on_yielding",
+                    margin=dict(l=120, r=2, t=12, b=12))
 
-    # HMD.plot_column(mapping,
-    #                 parameter="eHMIOn",
-    #                 parameter_value=0,
-    #                 additional_parameter="camera",
-    #                 additional_parameter_value=1,
-    #                 xaxis_range=[0, 11],
-    #                 compare_trial="video_36",
-    #                 xaxis_title="Time, [s]",
-    #                 yaxis_title="Percentage of trials with trigger key pressed",
-    #                 name="second_eHMI_off_non-yielding",
-    #                 margin=dict(l=120, r=2, t=12, b=12))
+    HMD.plot_column(mapping,
+                    parameter="eHMIOn",
+                    parameter_value=0,
+                    additional_parameter="camera",
+                    additional_parameter_value=1,
+                    xaxis_range=[0, 11],
+                    compare_trial="video_36",
+                    xaxis_title="Time, [s]",
+                    yaxis_title="Percentage of trials with trigger key pressed",
+                    name="second_eHMI_off_non-yielding",
+                    margin=dict(l=120, r=2, t=12, b=12))
 
-    # HMD.plot_column(mapping,
-    #                 parameter="eHMIOn",
-    #                 parameter_value=0,
-    #                 additional_parameter="camera",
-    #                 additional_parameter_value=1,
-    #                 xaxis_range=[0, 18],
-    #                 compare_trial="video_6",
-    #                 xaxis_title="Time, [s]",
-    #                 yaxis_title="Percentage of trials with trigger key pressed",
-    #                 name="second_eHMI_off_yielding",
-    #                 margin=dict(l=120, r=2, t=12, b=12))
+    HMD.plot_column(mapping,
+                    parameter="eHMIOn",
+                    parameter_value=0,
+                    additional_parameter="camera",
+                    additional_parameter_value=1,
+                    xaxis_range=[0, 18],
+                    compare_trial="video_6",
+                    xaxis_title="Time, [s]",
+                    yaxis_title="Percentage of trials with trigger key pressed",
+                    name="second_eHMI_off_yielding",
+                    margin=dict(l=120, r=2, t=12, b=12))
+
+    logger.info("Running heat plot and distance analysis.")
 
     # Heatplot
     HMD.heat_plot(folder_path=output_folder, mapping_df=mapping)
@@ -279,6 +336,8 @@ if __name__ == "__main__":
         trial_df=trial_level_df,
         condition_df=condition_level_df,
     )
+
+    logger.info("Running violin plots for behaviour, distance, and intention ratings.")
 
     # Violin plots
     HMD.plot_2x4_violins(
@@ -298,6 +357,8 @@ if __name__ == "__main__":
         mapping=mapping,
         name="intention_of_the_vehicle"
     )
+
+    logger.info("Running head rotation analysis plots.")
 
     # Head rotation
     HMD.plot_yaw(mapping,
@@ -468,3 +529,6 @@ if __name__ == "__main__":
         mapping=mapping,
         yaw_files_dir=output_folder
         )
+
+    run_advanced_statistics(trial_level_df)
+    logger.info("Analysis finished.")

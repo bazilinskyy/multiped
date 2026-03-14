@@ -136,6 +136,12 @@ Condition-wise relationship between behavioural trigger and Q2 across all distan
 [![near_minus_far_behaviour_vs_Q2](figures/near_minus_far_crossing_risk_vs_Q2.png)](https://htmlpreview.github.io/?https://github.com/bazilinskyy/multiped/blob/main/figures/near_minus_far_crossing_risk_vs_Q2.html)
 Near (1–2 m) minus far (4–5 m) differences in trigger and Q2 for each yielding × eHMI × position context.
 
+[![equivalence_near_far_crossing_risk](figures/equivalence_near_vs_far_crossing_risk.png)](https://htmlpreview.github.io/?https://github.com/bazilinskyy/multiped/blob/main/figures/equivalence_near_vs_far_crossing_risk.html)
+Equivalence test for the near (2–4 m) versus far (8–10 m) contrast in perceived crossing risk, shown overall and for each yielding × eHMI × position context.
+
+[![within_between_crossing_risk_coefficients](figures/within_between_crossing_risk_coefficients.png)](https://htmlpreview.github.io/?https://github.com/bazilinskyy/multiped/blob/main/figures/within_between_crossing_risk_coefficients.html)
+Within-participant and between-participant coefficients relating behavioural trigger to Q1, Q2, and Q3.
+
 [![behaviour_full_factorial](figures/crossing_risk_full_factorial.png)](https://htmlpreview.github.io/?https://github.com/bazilinskyy/multiped/blob/main/figures/crossing_risk_full_factorial.html)
 Behavioural trigger (0–100) across distance, split by yielding, eHMI, and participant position.
 
@@ -211,6 +217,12 @@ Participant is in back with car equipped with no eHMI and yielding
 
 [![Ratio-based heatplot showing relationships between yielding, eHMI, and pedestrian distance conditions](figures/heatmap.png)](https://htmlpreview.github.io/?https://github.com/bazilinskyy/multiped/blob/main/figures/heatmap.html)
 Ratio-based heatplot showing relationships between yielding, eHMI, and pedestrian distance conditions.
+
+[![trigger_feature_distance_profiles](figures/trigger_feature_distance_profiles.png)](https://htmlpreview.github.io/?https://github.com/bazilinskyy/multiped/blob/main/figures/trigger_feature_distance_profiles.html)
+Distance profiles for additional trigger-based features, including peak trigger, area under the curve, switch count, first press latency, and unsafe proportion, across the five pedestrian spacing levels (2, 4, 6, 8, and 10 m).
+
+[![trigger_feature_model_coefficients](figures/trigger_feature_model_coefficients.png)](https://htmlpreview.github.io/?https://github.com/bazilinskyy/multiped/blob/main/figures/trigger_feature_model_coefficients.html)
+Mixed model coefficients for the additional trigger features as a function of yielding, eHMI, visibility, and inter-pedestrian distance.
 
 
 ### Head movement from the participant
@@ -359,4 +371,4 @@ Overall experience rating
 
 
 ## Contact
-If you have any questions or suggestions, feel free to reach out to md_shadab_alam@outlook.com and 
+If you have any questions or suggestions, feel free to reach out to md_shadab_alam@outlook.com.

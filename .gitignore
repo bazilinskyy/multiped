@@ -130,3 +130,6 @@ multiped-unity/Assets/*.csv
 # Saved files
 /output
 /data
+
+# Logs
+logs.txt
