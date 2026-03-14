@@ -12,13 +12,19 @@ import common
 from custom_logger import CustomLogger
 import re
 import numpy as np
-from scipy.stats import ttest_rel, ttest_ind
+from scipy.stats import ttest_rel, ttest_ind, pearsonr, t
 from utils.HMD_helper import HMD_yaw
 from utils.tools import Tools
 from tqdm import tqdm
 from datetime import datetime
 import ast
 import math
+from typing import Dict, Optional
+
+try:
+    import statsmodels.formula.api as smf
+except Exception:  # pragma: no cover
+    smf = None
 
 
 logger = CustomLogger(__name__)  # use custom logger
@@ -312,7 +318,7 @@ class HMD_helper:
 
             # Add average row at the end (ignoring participant_id)
             avg_values = df.iloc[:, 1:].mean(skipna=True)
-            avg_row = pd.DataFrame([["average"] + avg_values.tolist()], columns=df.columns)
+            avg_row = pd.DataFrame([["average"] + avg_values.tolist()], columns=df.columns)  # type: ignore
             df = pd.concat([df, avg_row], ignore_index=True)
 
             # Save the aggregated slider data to CSV
@@ -1167,11 +1173,8 @@ class HMD_helper:
                     ).round(2)
 
                     quats_by_time = (
-                        df.groupby("Timestamp")[
-                            ["HMDRotationW", "HMDRotationX", "HMDRotationY", "HMDRotationZ"]
-                        ]
-                        .apply(lambda g: g.values.tolist())
-                        .to_dict()
+                        df.groupby("Timestamp")[["HMDRotationW", "HMDRotationX", "HMDRotationY", "HMDRotationZ"]]
+                        .apply(lambda g: g.values.tolist()).to_dict()  # type: ignore
                     )
 
                     participant_matrix[f"P{participant_id}"] = quats_by_time
@@ -1520,7 +1523,7 @@ class HMD_helper:
 
         # ---- Collect all trigger values per condition label ----
         # per_label_values[label] = np.array([... trigger values from all files ...])
-        per_label_values: dict[str, np.ndarray] = {}
+        per_label_values: Dict[str, np.ndarray] = {}
 
         for file_path in file_list:
             video_id = _extract_video_id(file_path)
@@ -1551,9 +1554,9 @@ class HMD_helper:
             else:
                 # Coerce Timestamp to numeric seconds, drop rows with invalid timestamps
                 ts = pd.to_numeric(df["Timestamp"], errors="coerce")
-                valid = ts.notna()
+                valid = ts.notna()  # type: ignore
                 df = df.loc[valid].copy()
-                ts = ts.loc[valid]
+                ts = ts.loc[valid]  # type: ignore
 
                 if cutoff is not None and np.isfinite(cutoff):
                     mask = ts <= float(cutoff)
@@ -1695,162 +1698,300 @@ class HMD_helper:
 
         return averages, relation_df, fig
 
+    @staticmethod
+    def _extract_numeric_values_from_cell(value):
+        """Parse a matrix cell containing a string-encoded list and return finite numeric values."""
+        if value is None or (isinstance(value, float) and np.isnan(value)):
+            return []
+        try:
+            parsed = ast.literal_eval(value) if isinstance(value, str) else value
+        except Exception:
+            return []
+        if not isinstance(parsed, list):
+            return []
+        out = []
+        for item in parsed:
+            if isinstance(item, (int, float)) and np.isfinite(item):
+                out.append(float(item))
+        return out
+
+    def _compute_trial_level_trigger_summary(self, output_dir, mapping_df):
+        """Build participant x video trigger summaries from exported participant trigger matrices."""
+        mapping_info = mapping_df.copy()
+        for col in ["video_id", "condition_name"]:
+            mapping_info[col] = mapping_info[col].astype(str)
+        for col in ["camera", "cross_p1_time_s", "cross_p2_time_s", "distPed", "yielding", "eHMIOn"]:
+            if col in mapping_info.columns:
+                mapping_info[col] = pd.to_numeric(mapping_info[col], errors="coerce")
+
+        records = []
+        pattern = os.path.join(output_dir, "participant_TriggerValueRight_video_*.csv")
+        for fp in sorted(glob.glob(pattern)):
+            base = os.path.basename(fp)
+            m = re.search(r"(video_\d+)\.csv$", base, flags=re.IGNORECASE)
+            if not m:
+                continue
+            video_id = m.group(1)
+            map_row = mapping_info.loc[mapping_info["video_id"] == video_id]
+            if map_row.empty:
+                continue
+            row0 = map_row.iloc[0]
+            cutoff = None
+            camera = row0.get("camera")
+            if pd.notna(camera):
+                camera = int(camera)
+                if camera == 0 and pd.notna(row0.get("cross_p1_time_s")):
+                    cutoff = float(row0["cross_p1_time_s"])
+                elif camera == 1 and pd.notna(row0.get("cross_p2_time_s")):
+                    cutoff = float(row0["cross_p2_time_s"])
+
+            df = pd.read_csv(fp)
+            if "Timestamp" in df.columns:
+                df["Timestamp"] = pd.to_numeric(df["Timestamp"], errors="coerce")
+                df = df.dropna(subset=["Timestamp"])
+                if cutoff is not None and np.isfinite(cutoff):
+                    df = df[df["Timestamp"] <= cutoff]
+
+            participant_cols = [c for c in df.columns if c != "Timestamp"]
+            for participant_col in participant_cols:
+                pm = re.search(r"P(\d+)", str(participant_col))
+                if not pm:
+                    continue
+                participant = int(pm.group(1))
+                values = []
+                for cell in df[participant_col].tolist():
+                    values.extend(self._extract_numeric_values_from_cell(cell))
+                if not values:
+                    mean_trigger = np.nan
+                    sd_trigger = np.nan
+                    n_samples = 0
+                else:
+                    arr = np.asarray(values, dtype=float)
+                    mean_trigger = float(np.mean(arr))
+                    sd_trigger = float(np.std(arr, ddof=1)) if len(arr) > 1 else np.nan
+                    n_samples = int(len(arr))
+
+                records.append({
+                    "participant": participant,
+                    "video_id": video_id,
+                    "condition_name": str(row0["condition_name"]),
+                    "avg_trigger": mean_trigger,
+                    "sd_trigger": sd_trigger,
+                    "n_trigger_samples": n_samples,
+                })
+
+        if not records:
+            raise ValueError(
+                "No participant-level trigger matrices were found. Run plot_column/heat_plot first so "
+                "participant_TriggerValueRight_video_*.csv files exist in the output folder."
+            )
+        return pd.DataFrame.from_records(records)
+
+    @staticmethod
+    def _pearson_ci(x, y, alpha=0.05):
+        """Pearson r with p value and Fisher-z confidence interval."""
+        df = pd.DataFrame({"x": pd.to_numeric(x, errors="coerce"), "y": pd.to_numeric(y, errors="coerce")}).dropna()
+        n = len(df)
+        if n < 4:
+            return np.nan, np.nan, np.nan, np.nan, n
+        r_val, p_val = pearsonr(df["x"], df["y"])
+        r_val = float(r_val)
+        p_val = float(p_val)
+        if abs(r_val) >= 1:
+            return r_val, p_val, r_val, r_val, n
+        z = np.arctanh(r_val)
+        se = 1.0 / np.sqrt(n - 3)
+        crit = t.ppf(1 - alpha / 2.0, df=n - 1)
+        # use normal approx on z scale, crit≈1.96 for moderate n
+        z_delta = 1.959963984540054 * se
+        lo = float(np.tanh(z - z_delta))
+        hi = float(np.tanh(z + z_delta))
+        return r_val, p_val, lo, hi, n
+
+    @staticmethod
+    def _pretty_mixed_term(term):
+        mapping = {
+            "Intercept": "Intercept",
+            "C(yielding)[T.1]": "Yielding",
+            "C(eHMIOn)[T.1]": "eHMI on",
+            "C(camera)[T.1]": "Other pedestrian not visible",
+            "distPed_m": "Distance (m)",
+            "C(yielding)[T.1]:C(eHMIOn)[T.1]": "Yielding × eHMI on",
+            "C(yielding)[T.1]:C(camera)[T.1]": "Yielding × other pedestrian not visible",
+            "C(eHMIOn)[T.1]:C(camera)[T.1]": "eHMI on × other pedestrian not visible",
+            "Group Var": "Random intercept variance",
+        }
+        return mapping.get(term, term)
+
+    def _run_mixed_effects_model(self, trial_df, outcome, out_dir=None):
+        """Fit a random-intercept mixed model for one outcome and save raw and manuscript-ready outputs."""
+        if smf is None:
+            logger.warning("statsmodels is not available; skipping mixed model for {}", outcome)
+            return None, None
+
+        model_df = trial_df.copy()
+        model_df[outcome] = pd.to_numeric(model_df[outcome], errors="coerce")
+        needed = ["participant", outcome, "yielding", "eHMIOn", "camera", "distPed_m"]
+        model_df = model_df.dropna(subset=needed)
+        if model_df.empty:
+            logger.warning("No data available for mixed model outcome {}", outcome)
+            return None, None
+
+        formula = (
+            f"{outcome} ~ C(yielding) + C(eHMIOn) + C(camera) + distPed_m + "
+            f"C(yielding):C(eHMIOn) + C(yielding):C(camera) + C(eHMIOn):C(camera)"
+        )
+        try:
+            fit = smf.mixedlm(
+                formula,
+                model_df,
+                groups=model_df["participant"]
+            ).fit(reml=False, method="lbfgs", maxiter=200, disp=False)
+        except Exception as e:
+            logger.warning("Mixed model failed for {} with full formula: {}", outcome, e)
+            try:
+                formula = f"{outcome} ~ C(yielding) + C(eHMIOn) + C(camera) + distPed_m"
+                fit = smf.mixedlm(
+                    formula,
+                    model_df,
+                    groups=model_df["participant"]
+                ).fit(reml=False, method="lbfgs", maxiter=200, disp=False)
+            except Exception as e2:
+                logger.error("Mixed model failed for {} with fallback formula: {}", outcome, e2)
+                return None, None
+
+        coef_df = pd.DataFrame({
+            "term": fit.params.index,
+            "estimate": fit.params.values,
+            "std_error": fit.bse.values,
+            "z_value": fit.tvalues.values,
+            "p_value": fit.pvalues.values,
+        })
+        conf = fit.conf_int()
+        coef_df["ci_lower"] = conf.iloc[:, 0].values
+        coef_df["ci_upper"] = conf.iloc[:, 1].values
+        coef_df["predictor"] = coef_df["term"].map(self._pretty_mixed_term)
+        coef_df["ci_95"] = coef_df.apply(
+            lambda r: "[{:.2f}, {:.2f}]".format(r["ci_lower"], r["ci_upper"]),
+            axis=1,
+        )
+
+        logger.info("\n=== Mixed model: {} ===", outcome)
+        logger.info("Formula: {}", formula)
+        logger.info(
+            "{}",
+            coef_df[["predictor", "estimate", "ci_lower", "ci_upper", "p_value"]].to_string(index=False),
+        )
+        logger.info("=======================\n")
+
+        save_dir = out_dir or self.output_folder
+        os.makedirs(save_dir, exist_ok=True)
+        coef_df.to_csv(os.path.join(save_dir, "mixed_model_coefficients_{}.csv".format(outcome)), index=False)
+
+        term_df = coef_df[["term", "predictor", "estimate", "ci_lower", "ci_upper", "p_value"]].copy()
+        term_df.insert(0, "outcome", outcome)
+        term_df.to_csv(os.path.join(save_dir, "mixed_model_terms_{}.csv".format(outcome)), index=False)
+
+        manuscript_df = coef_df.loc[
+            coef_df["term"] != "Group Var",
+            ["predictor", "estimate", "ci_lower", "ci_upper", "ci_95", "p_value"],
+        ].copy()
+        manuscript_df.to_csv(os.path.join(save_dir, "mixed_model_table_{}.csv".format(outcome)), index=False)
+        return fit, coef_df
+
     def load_and_average_Q2(
         self,
         trigger_summary_csv: str,
         responses_root: str,
         mapping_df: pd.DataFrame,
         n_participants: int = 50,
-        response_col_index: int = 2,  # column index of Q2 (middle)
+        response_col_index: int = 2,
         save_combined: bool = True,
     ):
-        """
-        Combine per-condition trigger averages with averaged Q1, Q2, Q3
-        per condition.
-
-        Parameters
-        ----------
-        trigger_summary_csv : str
-            Path to 'trigger_summary.csv' saved by `heat_plot`.
-            Must have columns: ['label', 'avg_trigger', 'sd_trigger'] where 'label'
-            matches mapping_df['condition_name'] (or video_id if you used that as label).
-        responses_root : str
-            Root folder containing Participant_1, Participant_2, ... subfolders.
-        mapping_df : pd.DataFrame
-            Must contain at least ['video_id', 'condition_name'].
-        n_participants : int
-            Total number of participants (default 50).
-        response_col_index : int
-            Zero-based index of the column containing the distance question Q2.
-            Q1 is assumed to be at response_col_index - 1,
-            Q3 at response_col_index + 1.
-            With lines like 'video_25,0,41,71', index 2 corresponds to Q2=41
-            and we also take Q1=0 (col 1) and Q3=71 (col 3).
-        save_combined : bool
-            If True, save condition-level summary to
-            responses_root/condition_level_trigger_Q123.csv
-
-        Returns
-        -------
-        trial_df : pd.DataFrame
-            Trial-level data with columns:
-            ['participant', 'video_id', 'condition_name',
-             'Q1', 'Q2', 'Q3',
-             'avg_trigger', 'sd_trigger']
-
-        condition_df : pd.DataFrame
-            Condition-level summary with columns:
-            ['condition_name',
-             'avg_trigger', 'std_trigger',
-             'mean_Q1', 'std_Q1',
-             'mean_Q2', 'std_Q2',
-             'mean_Q3', 'std_Q3',
-             'n_trials']
-        """
-        # --- Load trigger summary (condition -> avg_trigger, sd_trigger) --- #
+        """Create trial-level and condition-level tables merging trigger risk with Q1/Q2/Q3."""
         trigger_df = pd.read_csv(trigger_summary_csv)
-
-        if "label" not in trigger_df.columns or "avg_trigger" not in trigger_df.columns:
+        if "label" in trigger_df.columns and "condition_name" not in trigger_df.columns:
+            trigger_df = trigger_df.rename(columns={"label": "condition_name"})
+        if "condition_name" not in trigger_df.columns or "avg_trigger" not in trigger_df.columns:
             raise ValueError(
-                f"trigger_summary_csv must have columns at least ['label', 'avg_trigger'], "
-                f"got {trigger_df.columns.tolist()}"
+                "trigger_summary_csv must contain condition_name or label, plus avg_trigger."
             )
-
-        # If sd_trigger is missing (e.g., older files), create it as NaN but warn
         if "sd_trigger" not in trigger_df.columns:
-            logger.warning(
-                "Column 'sd_trigger' not found in trigger_summary.csv; "
-                "filling with NaN. Consider re-running `heat_plot`."
-            )
             trigger_df["sd_trigger"] = np.nan
-
-        # Rename 'label' to 'condition_name' to match mapping_df
-        trigger_df = trigger_df.rename(columns={"label": "condition_name"})
         trigger_df["condition_name"] = trigger_df["condition_name"].astype(str)
 
-        # --- Prepare mapping: video_id -> condition_name --- #
-        map_df = mapping_df[["video_id", "condition_name"]].copy()
+        map_cols = [
+            "video_id", "condition_name", "distPed", "yielding", "eHMIOn", "camera",
+            "cross_p1_time_s", "cross_p2_time_s"
+        ]
+        missing_map = [c for c in map_cols if c not in mapping_df.columns]
+        if missing_map:
+            raise ValueError("mapping_df missing required columns: {}".format(missing_map))
+        map_df = mapping_df[map_cols].copy()
         map_df["video_id"] = map_df["video_id"].astype(str)
         map_df["condition_name"] = map_df["condition_name"].astype(str)
 
-        # --- Indices for Q1/Q2/Q3 --- #
         q1_idx = response_col_index - 1
         q2_idx = response_col_index
         q3_idx = response_col_index + 1
-
         if q1_idx < 1:
-            raise ValueError(
-                f"response_col_index={response_col_index} is too small to infer Q1 at index {q1_idx}."
-            )
+            raise ValueError("response_col_index is too small to infer Q1/Q2/Q3")
 
         all_records = []
-
-        # --- Read all participant response CSVs (no headers) --- #
         for pid in range(1, n_participants + 1):
-            participant_folder = os.path.join(responses_root, f"Participant_{pid}")
+            participant_folder = os.path.join(responses_root, "Participant_{}".format(pid))
             if not os.path.isdir(participant_folder):
-                logger.warning(f"Participant folder not found: {participant_folder}")
                 continue
-
-            pattern = os.path.join(participant_folder, f"Participant_{pid}_*.csv")
+            pattern = os.path.join(participant_folder, "Participant_{}_*.csv".format(pid))
             files = glob.glob(pattern)
-            if not files:
-                logger.warning(f"No response CSVs for Participant {pid} with pattern {pattern}")
-                continue
-
             for fp in files:
                 df = pd.read_csv(fp, header=None)
-
-                # Need at least: trial_name (col 0) + Q1/Q2/Q3 columns
-                max_needed_idx = q3_idx
-                if df.shape[1] <= max_needed_idx:
-                    logger.warning(
-                        f"File {fp} has only {df.shape[1]} columns, "
-                        f"cannot take Q1/Q2/Q3 at indices {q1_idx}, {q2_idx}, {q3_idx}."
-                    )
+                if df.shape[1] <= q3_idx:
                     continue
-
                 tmp = df[[0, q1_idx, q2_idx, q3_idx]].copy()
                 tmp.columns = ["video_id", "Q1", "Q2", "Q3"]
                 tmp["participant"] = pid
-
-                # Keep only actual trials (video_*) and drop baselines
-                mask = tmp["video_id"].astype(str).str.startswith("video_")
-                tmp = tmp.loc[mask]
-
+                tmp["video_id"] = tmp["video_id"].astype(str)
+                tmp = tmp[tmp["video_id"].str.startswith("video_")].copy()
                 all_records.append(tmp)
 
         if not all_records:
-            raise ValueError("No participant response data found. Check paths / patterns.")
+            raise ValueError("No participant response data found. Check responses_root and file patterns.")
 
-        trial_df = pd.concat(all_records, ignore_index=True)
-
-        # ensure numeric Qs
+        ratings_df = pd.concat(all_records, ignore_index=True)
         for q_col in ["Q1", "Q2", "Q3"]:
-            trial_df[q_col] = pd.to_numeric(trial_df[q_col], errors="coerce")
+            ratings_df[q_col] = pd.to_numeric(ratings_df[q_col], errors="coerce")
 
-        # --- Attach condition_name via mapping_df (video_id -> condition_name) --- #
-        trial_df["video_id"] = trial_df["video_id"].astype(str)
+        output_dir = os.path.dirname(trigger_summary_csv) or self.output_folder
+        participant_trigger_df = self._compute_trial_level_trigger_summary(output_dir, map_df)
+
+        trial_df = ratings_df.merge(map_df, on="video_id", how="left")
         trial_df = trial_df.merge(
-            map_df,
-            on="video_id",
+            participant_trigger_df[["participant", "video_id", "avg_trigger", "sd_trigger", "n_trigger_samples"]],
+            on=["participant", "video_id"],
             how="left",
         )
-
-        # --- Attach avg_trigger and sd_trigger per condition_name --- #
+        # fallback from condition-level trigger summary if a participant-level row is missing
         trial_df = trial_df.merge(
-            trigger_df[["condition_name", "avg_trigger", "sd_trigger"]],
+            trigger_df[["condition_name", "avg_trigger", "sd_trigger"]].rename(
+                columns={"avg_trigger": "avg_trigger_condition", "sd_trigger": "sd_trigger_condition"}
+            ),
             on="condition_name",
             how="left",
         )
+        trial_df["avg_trigger"] = trial_df["avg_trigger"].fillna(trial_df["avg_trigger_condition"])
+        trial_df["sd_trigger"] = trial_df["sd_trigger"].fillna(trial_df["sd_trigger_condition"])
+        trial_df = trial_df.drop(columns=["avg_trigger_condition", "sd_trigger_condition"], errors="ignore")
+        trial_df["distPed_m"] = pd.to_numeric(trial_df["distPed"], errors="coerce") * 2.0
+        trial_df["crossing_risk"] = pd.to_numeric(trial_df["avg_trigger"], errors="coerce") * 100.0
+        trial_df["crossing_risk_sd"] = pd.to_numeric(trial_df["sd_trigger"], errors="coerce") * 100.0
 
-        # --- Average Q1/Q2/Q3 per condition, keep trigger mean/SD --- #
         condition_df = (
             trial_df
             .groupby("condition_name", as_index=False)
             .agg(
-                avg_trigger=("avg_trigger", "first"),   # one value per condition
-                std_trigger=("sd_trigger", "first"),    # one value per condition
+                avg_trigger=("avg_trigger", "mean"),
+                std_trigger=("avg_trigger", "std"),
                 mean_Q1=("Q1", "mean"),
                 std_Q1=("Q1", "std"),
                 mean_Q2=("Q2", "mean"),
@@ -1860,15 +2001,21 @@ class HMD_helper:
                 n_trials=("Q2", "size"),
             )
             .sort_values("condition_name")
+            .reset_index(drop=True)
         )
 
         if save_combined:
-            os.makedirs(output, exist_ok=True)  # optional, ensures directory exists
-            out_path = os.path.join(output, "condition_level_trigger_Q123.csv")
-            condition_df.to_csv(out_path, index=False)
-            logger.info(f"Saved condition-level trigger + Q1/Q2/Q3 data to: {out_path}")
+            os.makedirs(output_dir, exist_ok=True)
+            trial_path = os.path.join(output_dir, "trial_level_trigger_Q123.csv")
+            cond_path = os.path.join(output_dir, "condition_level_trigger_Q123.csv")
+            trial_df.to_csv(trial_path, index=False)
+            condition_df.to_csv(cond_path, index=False)
+            logger.info("Saved trial-level trigger + Q1/Q2/Q3 data to: {}", trial_path)
+            logger.info("Saved condition-level trigger + Q1/Q2/Q3 data to: {}", cond_path)
 
-    def analyze_and_plot_distance_effect_plotly(self, condition_df, mapping_df, out_dir=None):
+        return trial_df, condition_df
+
+    def analyze_and_plot_distance_effect_plotly(self, mapping_df, condition_df, out_dir=None, trial_df=None):
         """
         Merge condition-level averages with distance, yielding, eHMI, and camera,
         compute full-factorial summaries (means + SDs), and create Plotly figures.
@@ -2371,6 +2518,44 @@ class HMD_helper:
             )
 
         # ============================
+        # Stats summary
+        # ============================
+        stats_out_dir = out_dir or self.output_folder
+        os.makedirs(stats_out_dir, exist_ok=True)
+
+        corr_records = []
+        corr_source = trial_df if trial_df is not None else cond_plot_df.rename(columns={"mean_Q1": "Q1", "mean_Q2": "Q2", "mean_Q3": "Q3"})
+        for q_label in ["Q1", "Q2", "Q3"]:
+            if q_label in corr_source.columns and "crossing_risk" in corr_source.columns:
+                r_val, p_val, ci_lo, ci_hi, n_obs = self._pearson_ci(corr_source["crossing_risk"], corr_source[q_label])
+                corr_records.append({
+                    "measure": q_label,
+                    "r": r_val,
+                    "p_value": p_val,
+                    "ci_lower": ci_lo,
+                    "ci_upper": ci_hi,
+                    "n": n_obs,
+                })
+                logger.info(
+                    "Correlation (crossing risk, {}): r = {:.3f}, p = {:.4g}, 95% CI [{:.3f}, {:.3f}], n = {}",
+                    q_label, r_val, p_val, ci_lo, ci_hi, n_obs
+                )
+        if corr_records:
+            pd.DataFrame(corr_records).to_csv(os.path.join(stats_out_dir, "condition_level_correlations.csv"), index=False)
+
+        near_far_path = os.path.join(stats_out_dir, "near_far_differences.csv")
+        diff_df.to_csv(near_far_path, index=False)
+
+        by_cond.to_csv(os.path.join(stats_out_dir, "distance_effect_cell_summary.csv"), index=False)
+        by_cond.to_csv(os.path.join(stats_out_dir, "table_descriptives_full_factorial.csv"), index=False)
+
+        if trial_df is not None and not trial_df.empty:
+            self._run_mixed_effects_model(trial_df, "crossing_risk", stats_out_dir)
+            self._run_mixed_effects_model(trial_df, "Q1", stats_out_dir)
+            self._run_mixed_effects_model(trial_df, "Q2", stats_out_dir)
+            self._run_mixed_effects_model(trial_df, "Q3", stats_out_dir)
+
+        # ============================
         # Save figures
         # ============================
         self.save_plotly(fig_beh, "crossing_risk_full_factorial", save_final=True)
@@ -2381,6 +2566,8 @@ class HMD_helper:
         self.save_plotly(fig_beh_ehmi, "crossing_risk_full_factorial_legend_eHMI", save_final=True)
         self.save_plotly(fig_q2_yield, "Q2_full_factorial_legend_yielding", save_final=True)
         self.save_plotly(fig_q2_ehmi, "Q2_full_factorial_legend_eHMI", save_final=True)
+
+        return by_cond, cond_plot_df, diff_df
 
     def plot_2x4_violins(self, responses_csv: str, mapping, name):
         """
