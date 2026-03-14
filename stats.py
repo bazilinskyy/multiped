@@ -18,7 +18,14 @@ from scipy.stats import ttest_rel
 import common
 from custom_logger import CustomLogger
 
-import statsmodels.formula.api as smf
+import warnings
+
+try:
+    import statsmodels.formula.api as smf
+    from statsmodels.tools.sm_exceptions import ConvergenceWarning
+except ImportError:  # pragma: no cover
+    smf = None  # type: ignore
+    ConvergenceWarning = Warning  # type: ignore
 
 
 # Create a module level logger so every save and model fitting step is traceable.
@@ -166,7 +173,6 @@ class AdvancedStatsRunner:
         if "distPed" in self.mapping_df.columns:
             self.mapping_df["distPed_m"] = self._distance_series_to_meters(self.mapping_df["distPed"])
 
-
     @staticmethod
     def _distance_code_to_meters(value) -> float:
         """Convert coded distance levels 1..5 to 2..10 m while preserving metre values."""
@@ -184,9 +190,9 @@ class AdvancedStatsRunner:
     def _distance_series_to_meters(cls, series: pd.Series) -> pd.Series:
         """Vectorised distance conversion for pandas Series."""
         numeric = pd.to_numeric(series, errors="coerce")
-        mapped = numeric.copy()
-        mask_code = numeric.isin([1, 2, 3, 4, 5])
-        mapped.loc[mask_code] = numeric.loc[mask_code] * 2.0
+        mapped = numeric.copy()  # pyright: ignore[reportAttributeAccessIssue]
+        mask_code = numeric.isin([1, 2, 3, 4, 5])  # type: ignore
+        mapped.loc[mask_code] = numeric.loc[mask_code] * 2.0  # type: ignore
         mapped.loc[numeric == 0] = np.nan
         return mapped
 
@@ -637,10 +643,9 @@ class AdvancedStatsRunner:
         feature_df.to_csv(out_csv, index=False)
 
         logger.info(
-            "Built trigger feature table with %s rows across %s participants and %s videos",
-            len(feature_df),
-            feature_df["participant"].nunique(),
-            feature_df["video_id"].nunique(),
+            f"Built trigger feature table with {len(feature_df)} rows across "
+            f"{feature_df['participant'].nunique()} participants and "
+            f"{feature_df['video_id'].nunique()} videos"
         )
         logger.info(f"Saved table: {out_csv}")
         return feature_df
@@ -778,6 +783,7 @@ class AdvancedStatsRunner:
             margin_high=float(high_eq),
         )
 
+
     def run_equivalence_tests(self, trial_df: pd.DataFrame, outcome: str = "crossing_risk",
                               low_distances_m: Tuple[int, int] = (2, 4),
                               high_distances_m: Tuple[int, int] = (8, 10), equivalence_margin: float = 5.0,
@@ -802,26 +808,19 @@ class AdvancedStatsRunner:
         Raises:
             ValueError: If no valid data remains after filtering.
         """
-        # Work on a copy so the source trial table remains untouched.
-        # ------------------------------------------------------------------
         df = trial_df.copy()
-        # Coerce the key analysis columns to numeric and discard incomplete rows.
         if "distPed_m" not in df.columns:
             if "distPed" not in df.columns:
                 raise ValueError("Neither 'distPed_m' nor 'distPed' is available in the trial table.")
             df["distPed_m"] = self._distance_series_to_meters(df["distPed"])
         else:
             df["distPed_m"] = self._distance_series_to_meters(df["distPed_m"])
+
         df[outcome] = pd.to_numeric(df[outcome], errors="coerce")
         df = df.dropna(subset=["participant", "distPed_m", outcome, "yielding", "eHMIOn", "camera"])
         if df.empty:
             raise ValueError(f"No valid rows are available for equivalence testing of {outcome}.")
 
-        # NumPy 2.x is stricter about mixing string and float dtypes in np.where.
-        # Build this as an object column so unmatched rows can stay missing safely.
-        # ------------------------------------------------------------------
-        # Create an object typed distance band column to avoid dtype coercion issues.
-        # ------------------------------------------------------------------
         df["distance_band"] = pd.Series(pd.NA, index=df.index, dtype="object")
         df.loc[df["distPed_m"].isin(low_distances_m), "distance_band"] = "near"
         df.loc[df["distPed_m"].isin(high_distances_m), "distance_band"] = "far"
@@ -829,14 +828,17 @@ class AdvancedStatsRunner:
         if df.empty:
             raise ValueError("No near/far rows remained after distance band selection.")
 
-        # Collect the overall and context specific TOST summaries in a flat record list.
+        def _yield_label(val: object) -> str:
+            return "Yielding" if int(val) == 1 else "Not yielding"
+
+        def _ehmi_label(val: object) -> str:
+            return "eHMI on" if int(val) == 1 else "eHMI off"
+
+        def _visibility_label(val: object) -> str:
+            return "Other pedestrian not visible" if int(val) == 1 else "Other pedestrian visible"
+
         result_records: List[Dict[str, object]] = []
 
-        # First compare near versus far after averaging within participant across all contexts.
-        # Overall
-        # ------------------------------------------------------------------
-        # Aggregate to one near and one far mean per participant for the overall test.
-        # ------------------------------------------------------------------
         overall = (
             df.groupby(["participant", "distance_band"], as_index=False)[outcome]
             .mean()
@@ -854,6 +856,10 @@ class AdvancedStatsRunner:
                 **tost.__dict__,
                 "label": "Overall",
                 "context": "Overall",
+                "display_label": "Overall",
+                "yielding": np.nan,
+                "eHMIOn": np.nan,
+                "camera": np.nan,
             })
             logger.info(
                 f"Overall TOST for {outcome}: mean diff = {tost.mean_diff:.3f}, "
@@ -861,12 +867,7 @@ class AdvancedStatsRunner:
                 f"equivalent = {tost.equivalent}"
             )
 
-        # Repeat the same paired near versus far comparison separately for each context.
-        # By context
         ctx_cols = ["yielding", "eHMIOn", "camera"]
-        # ------------------------------------------------------------------
-        # Repeat the paired comparison within each scenario context.
-        # ------------------------------------------------------------------
         for ctx, ctx_df in df.groupby(ctx_cols):
             pivot = (
                 ctx_df.groupby(["participant", "distance_band"], as_index=False)[outcome]
@@ -876,6 +877,7 @@ class AdvancedStatsRunner:
             )
             if pivot.empty:
                 continue
+
             tost = self._paired_tost(
                 pivot["near"] - pivot["far"],
                 low_eq=-equivalence_margin,
@@ -883,10 +885,15 @@ class AdvancedStatsRunner:
                 alpha=alpha,
             )
             label = f"Y{int(ctx[0])} H{int(ctx[1])} C{int(ctx[2])}"
+            display_label = f"{_yield_label(ctx[0])}, {_ehmi_label(ctx[1])}, {_visibility_label(ctx[2])}"
             result_records.append({
                 **tost.__dict__,
                 "label": label,
                 "context": label,
+                "display_label": display_label,
+                "yielding": int(ctx[0]),
+                "eHMIOn": int(ctx[1]),
+                "camera": int(ctx[2]),
             })
             logger.info(
                 f"Context {label} TOST for {outcome}: mean diff = {tost.mean_diff:.3f}, "
@@ -894,74 +901,167 @@ class AdvancedStatsRunner:
                 f"equivalent = {tost.equivalent}"
             )
 
-        # Turn the accumulated summaries into a table for export and plotting.
-        # ------------------------------------------------------------------
-        # Convert all equivalence summaries into a tidy export table.
-        # ------------------------------------------------------------------
         results_df = pd.DataFrame(result_records)
         if results_df.empty:
             raise ValueError("No equivalence results could be computed.")
 
-        out_name = f"equivalence_near_vs_far_{outcome}.csv"
-        self._save_table(results_df, out_name)
+        self._save_table(results_df, f"equivalence_near_vs_far_{outcome}.csv")
 
-        # Build a forest style equivalence plot where the shaded band represents the
-        # equivalence region.
         # ------------------------------------------------------------------
-        # Prepare an ordered copy for the equivalence summary plot.
+        # Build a faceted equivalence figure.
+        # Rows separate visibility, columns separate eHMI, and each panel shows
+        # two yielding states. This keeps labels short and publication friendly.
         # ------------------------------------------------------------------
-        plot_df = results_df.copy()
-        plot_df = plot_df.sort_values(["label"], ascending=[True]).reset_index(drop=True)
-        fig = go.Figure()
-        fig.add_vrect(
-            x0=-equivalence_margin,
-            x1=equivalence_margin,
-            fillcolor="rgba(50, 50, 50, 0.08)",
-            line_width=0,
+        fig = make_subplots(
+            rows=3,
+            cols=2,
+            specs=[[{"colspan": 2}, None], [{}, {}], [{}, {}]],
+            subplot_titles=[
+                "Overall",
+                "Other pedestrian visible | eHMI off",
+                "Other pedestrian visible | eHMI on",
+                "Other pedestrian not visible | eHMI off",
+                "Other pedestrian not visible | eHMI on",
+            ],
+            shared_xaxes=True,
+            shared_yaxes=False,
+            vertical_spacing=0.12,
+            horizontal_spacing=0.10,
+            row_heights=[0.20, 0.40, 0.40],
         )
-        fig.add_vline(x=0, line_dash="dash", line_color="black")
 
-        # Plot one point and its 90 percent confidence interval for each comparison.
-        # ------------------------------------------------------------------
-        # Add one point estimate and confidence interval per comparison row.
-        # ------------------------------------------------------------------
-        for _, row in plot_df.iterrows():
+        plot_df = results_df.copy()
+        finite_bounds = pd.concat(
+            [plot_df["ci90_low"], plot_df["ci90_high"], plot_df["mean_diff"]],
+            ignore_index=True,
+        )
+        finite_bounds = pd.to_numeric(finite_bounds, errors="coerce")
+        finite_bounds = finite_bounds[np.isfinite(finite_bounds)]
+        if finite_bounds.empty:
+            x_limit = float(equivalence_margin + 1.0)
+        else:
+            x_limit = float(max(equivalence_margin, np.abs(finite_bounds).max()))
+            x_limit += max(1.0, 0.08 * x_limit)
+
+        panel_positions = [(1, 1), (2, 1), (2, 2), (3, 1), (3, 2)]
+        for row_idx, col_idx in panel_positions:
+            fig.add_vrect(
+                x0=-equivalence_margin,
+                x1=equivalence_margin,
+                fillcolor="rgba(50, 50, 50, 0.08)",
+                line_width=0,
+                row=row_idx,
+                col=col_idx,
+            )
+            fig.add_vline(x=0, line_dash="dash", line_color="black", row=row_idx, col=col_idx)
+            fig.update_xaxes(range=[-x_limit, x_limit], row=row_idx, col=col_idx)
+
+        overall_df = plot_df.loc[plot_df["label"] == "Overall"]
+        if not overall_df.empty:
+            row = overall_df.iloc[0]
             fig.add_trace(
                 go.Scatter(
                     x=[row["mean_diff"]],
-                    y=[row["label"]],
+                    y=["Overall"],
                     mode="markers",
-                    marker=dict(size=10, symbol="circle-open" if not row["equivalent"] else "circle"),
+                    marker=dict(size=12, symbol="diamond-open" if not row["equivalent"] else "diamond"),
                     error_x=dict(
                         type="data",
                         symmetric=False,
                         array=[row["ci90_high"] - row["mean_diff"]],
                         arrayminus=[row["mean_diff"] - row["ci90_low"]],
-                        thickness=1.5,
+                        thickness=1.8,
                         width=0,
                     ),
                     showlegend=False,
                     hovertemplate=(
-                        "<b>%{y}</b><br>Near - Far: %{x:.2f}<br>"
+                        "<b>Overall</b><br>Near minus far: %{x:.2f}<br>"
                         f"TOST p: {row['p_tost']:.4g}<br>"
                         f"Equivalent: {row['equivalent']}<extra></extra>"
                     ),
-                )
+                ),
+                row=1,
+                col=1,
             )
-        # ------------------------------------------------------------------
-        # Apply consistent layout styling before exporting the figure.
-        # ------------------------------------------------------------------
+            fig.update_yaxes(
+                categoryorder="array",
+                categoryarray=["Overall"],
+                row=1,
+                col=1,
+            )
+
+        context_df = plot_df.loc[plot_df["label"] != "Overall"].copy()
+        context_df["yield_label"] = context_df["yielding"].map(_yield_label)
+        context_df["panel_row"] = context_df["camera"].map({0: 2, 1: 3})
+        context_df["panel_col"] = context_df["eHMIOn"].map({0: 1, 1: 2})
+
+        for _, row in context_df.iterrows():
+            fig.add_trace(
+                go.Scatter(
+                    x=[row["mean_diff"]],
+                    y=[row["yield_label"]],
+                    mode="markers",
+                    marker=dict(size=11, symbol="circle-open" if not row["equivalent"] else "circle"),
+                    error_x=dict(
+                        type="data",
+                        symmetric=False,
+                        array=[row["ci90_high"] - row["mean_diff"]],
+                        arrayminus=[row["mean_diff"] - row["ci90_low"]],
+                        thickness=1.6,
+                        width=0,
+                    ),
+                    showlegend=False,
+                    hovertemplate=(
+                        f"<b>{row['display_label']}</b><br>Near minus far: %{{x:.2f}}<br>"
+                        f"TOST p: {row['p_tost']:.4g}<br>"
+                        f"Equivalent: {row['equivalent']}<extra></extra>"
+                    ),
+                ),
+                row=int(row["panel_row"]),
+                col=int(row["panel_col"]),
+            )
+
+        for r in [2, 3]:
+            for c in [1, 2]:
+                fig.update_yaxes(
+                    categoryorder="array",
+                    categoryarray=["Not yielding", "Yielding"],
+                    row=r,
+                    col=c,
+                )
+
         fig.update_layout(
             template=self.template,
             title="",
-            xaxis_title=f"Near - Far difference in {outcome}",
-            yaxis_title="Context",
-            font=dict(family=self.font_family, size=self.font_size),
-            margin=dict(l=140, r=30, t=30, b=60),
-            height=480 + 40 * len(plot_df),
+            font=dict(family=self.font_family, size=self.font_size + 2),
+            margin=dict(l=90, r=30, t=70, b=80),
+            height=900,
         )
-        self._save_plot(fig, f"equivalence_near_vs_far_{outcome}", width=1180,
-                        height=max(600, 320 + 40 * len(plot_df)))
+        fig.update_annotations(font=dict(family=self.font_family, size=self.font_size + 4))
+
+        # Only the left panels need a y axis title.
+        fig.update_yaxes(title_text="Scenario", title_font=dict(family=self.font_family, size=self.font_size + 10),
+                         tickfont=dict(family=self.font_family, size=self.font_size + 6), row=1, col=1)
+        fig.update_yaxes(title_text="Yielding", title_font=dict(family=self.font_family, size=self.font_size + 8),
+                         tickfont=dict(family=self.font_family, size=self.font_size + 6), row=2, col=1)
+        fig.update_yaxes(title_text="Yielding", title_font=dict(family=self.font_family, size=self.font_size + 8),
+                         tickfont=dict(family=self.font_family, size=self.font_size + 6), row=3, col=1)
+        fig.update_yaxes(tickfont=dict(family=self.font_family, size=self.font_size + 6), row=2, col=2)
+        fig.update_yaxes(tickfont=dict(family=self.font_family, size=self.font_size + 6), row=3, col=2)
+
+        for r in [1, 2, 3]:
+            for c in [1, 2]:
+                fig.update_xaxes(
+                    title_font=dict(family=self.font_family, size=self.font_size + 10),
+                    tickfont=dict(family=self.font_family, size=self.font_size + 6),
+                    automargin=True,
+                    row=r,
+                    col=c,
+                )
+        fig.update_xaxes(title_text=f"Near minus far difference in {outcome}", row=3, col=1)
+        fig.update_xaxes(title_text=f"Near minus far difference in {outcome}", row=3, col=2)
+
+        self._save_plot(fig, f"equivalence_near_vs_far_{outcome}", width=1300, height=900)
         return results_df
 
     @staticmethod
@@ -994,6 +1094,33 @@ class AdvancedStatsRunner:
         }
         return mapping.get(term, term)
 
+    @staticmethod
+    def _collect_convergence_messages(caught_warnings: List[warnings.WarningMessage]) -> List[str]:
+
+        """Extract statsmodels convergence warning messages from a warning list."""
+        messages: List[str] = []
+        for warning_obj in caught_warnings:
+            if issubclass(warning_obj.category, ConvergenceWarning):
+                messages.append(str(warning_obj.message))
+        return messages
+
+    @staticmethod
+    def _has_hard_convergence_failure(fit, warning_messages: List[str]) -> bool:
+
+        """Decide whether a fitted mixed model should be treated as failed."""
+        converged = bool(getattr(fit, "converged", False))
+        if not converged:
+            return True
+
+        lowered = [msg.lower() for msg in warning_messages]
+        hard_markers = [
+            "failed to converge",
+            "optimization failed",
+            "gradient optimization failed",
+            "check mle_retvals",
+        ]
+        return any(marker in msg for marker in hard_markers for msg in lowered)
+
     def _fit_model(self, df: pd.DataFrame, formula: str, group_col: str = "participant",
                    re_formula: Optional[str] = None):
 
@@ -1009,18 +1136,38 @@ class AdvancedStatsRunner:
             The fitted statsmodels result object.
 
         Raises:
-            RuntimeError: If statsmodels is unavailable.
+            RuntimeError: If statsmodels is unavailable or the model does not converge.
         """
         # Guard modelling code when statsmodels is unavailable in the runtime.
         # ------------------------------------------------------------------
         if smf is None:
             raise RuntimeError("statsmodels is not available in this environment.")
-        fit = smf.mixedlm(formula, df, groups=df[group_col], re_formula=re_formula).fit(
-            reml=False,
-            method="lbfgs",
-            maxiter=300,
-            disp=False,
-        )
+
+        model = smf.mixedlm(formula, df, groups=df[group_col], re_formula=re_formula)
+
+        with warnings.catch_warnings(record=True) as caught:
+            warnings.simplefilter("always", ConvergenceWarning)
+            fit = model.fit(
+                reml=False,
+                method=["lbfgs", "bfgs", "cg"],
+                maxiter=500,
+                disp=False,
+            )
+
+        warning_messages = self._collect_convergence_messages(caught)
+        if self._has_hard_convergence_failure(fit, warning_messages):
+            raise RuntimeError(
+                "MixedLM did not converge "
+                f"(re_formula={re_formula!r}, warnings={warning_messages}, "
+                f"mle_retvals={getattr(fit, 'mle_retvals', None)})"
+            )
+
+        if warning_messages:
+            logger.warning(
+                f"MixedLM converged with warnings for formula '{formula}' "
+                f"(re_formula={re_formula}): {warning_messages}"
+            )
+
         return fit
 
     def _fit_model_with_fallbacks(self, df: pd.DataFrame, formula: str, group_col: str = "participant",
@@ -1048,11 +1195,12 @@ class AdvancedStatsRunner:
             return None, None
 
         # Prepare the ordered list of model fitting strategies.
+        # Prefer the simpler random intercept model first because the random
+        # slope on distance is the part most likely to be numerically unstable.
         # ------------------------------------------------------------------
-        attempts = []
+        attempts = [("mixed_random_intercept", None)]
         if re_formula is not None:
             attempts.append(("mixed_random_slope", re_formula))
-        attempts.append(("mixed_random_intercept", None))
 
         # ------------------------------------------------------------------
         # Try each modelling strategy until one converges successfully.
@@ -1062,7 +1210,9 @@ class AdvancedStatsRunner:
                 fit = self._fit_model(df=df, formula=formula, group_col=group_col, re_formula=current_re_formula)
                 return fit, model_name
             except Exception as exc:
-                logger.warning(f"Model attempt failed ({model_name}): {exc}")
+                logger.warning(
+                    f"Model attempt failed ({model_name}, re_formula={current_re_formula}): {exc}"
+                )
 
         # If all mixed models fail, fall back to clustered OLS so the analysis can still produce
         # coefficient estimates with participant level dependence accounted for.
@@ -1070,6 +1220,9 @@ class AdvancedStatsRunner:
             fit = smf.ols(formula, data=df).fit(
                 cov_type="cluster",
                 cov_kwds={"groups": df[group_col]},
+            )
+            logger.warning(
+                f"Falling back to clustered OLS for formula '{formula}' after mixed model failures."
             )
             return fit, "ols_clustered"
         except Exception as exc:
@@ -1417,10 +1570,6 @@ class AdvancedStatsRunner:
             self._save_table(summary_df, "trigger_feature_distance_profiles.csv")
 
         # ------------------------------------------------------------------
-        # Collapse scenario columns into a compact plotting label.
-        # ------------------------------------------------------------------
-            summary_df["context"] = summary_df.apply(self._context_label, axis=1)
-        # ------------------------------------------------------------------
         # Define human readable labels for the requested trigger features.
         # ------------------------------------------------------------------
             feature_labels = {
@@ -1431,49 +1580,236 @@ class AdvancedStatsRunner:
                 "unsafe_prop_pct": "Unsafe time (%)",
             }
             summary_df["feature_label"] = summary_df["feature"].map(feature_labels).fillna(summary_df["feature"])
+            summary_df["yielding_label"] = summary_df["yielding"].map({0: "Not yielding", 1: "Yielding"})
+            summary_df["eHMI_label"] = summary_df["eHMIOn"].map({0: "eHMI off", 1: "eHMI on"})
+            summary_df["visibility_label"] = summary_df["camera"].map(
+                {0: "Other pedestrian visible", 1: "Other pedestrian not visible"}
+            )
+            summary_df["panel_title"] = summary_df["visibility_label"].str.replace(
+                "Other pedestrian ", "", regex=False
+            ) + " | " + summary_df["eHMI_label"]
+
+            # --------------------------------------------------------------
+            # Log compact descriptive insights that help interpret the profile figure.
+            # --------------------------------------------------------------
+            for feat in feature_outcomes:
+                feat_summary = summary_df.loc[summary_df["feature"] == feat].copy()
+                feat_trials = trial_df.copy()
+                feat_trials[feat] = pd.to_numeric(feat_trials[feat], errors="coerce")
+                feat_trials = feat_trials.dropna(
+                    subset=[feat, "yielding", "eHMIOn", "camera", "distPed_m", "participant"]
+                )
+                if feat_summary.empty or feat_trials.empty:
+                    continue
+
+                feature_name = feature_labels.get(feat, feat)
+                distances = sorted(pd.to_numeric(feat_summary["distPed_m"], errors="coerce").dropna().unique().tolist())
+                if not distances:
+                    continue
+                near_dist = float(distances[0])
+                far_dist = float(distances[-1])
+
+                overall_mean = float(feat_trials[feat].mean())
+                overall_sd = float(feat_trials[feat].std(ddof=1)) if len(feat_trials) > 1 else float("nan")
+                overall_min = float(feat_trials[feat].min())
+                overall_max = float(feat_trials[feat].max())
+                logger.info(
+                    f"{feature_name} profile summary: n={len(feat_trials)} trials, "
+                    f"{feat_trials['participant'].nunique()} participants, "
+                    f"distances={[int(d) if float(d).is_integer() else float(d) for d in distances]}, "
+                    f"mean={overall_mean:.3f}, sd={overall_sd:.3f}, "
+                    f"min={overall_min:.3f}, max={overall_max:.3f}"
+                )
+
+                nearest_mean = float(feat_summary.loc[feat_summary["distPed_m"] == near_dist, feat].mean())
+                farthest_mean = float(feat_summary.loc[feat_summary["distPed_m"] == far_dist, feat].mean())
+                logger.info(
+                    f"{feature_name} distance contrast: nearest {near_dist:.1f} m "
+                    f"mean={nearest_mean:.3f}, farthest {far_dist:.1f} m "
+                    f"mean={farthest_mean:.3f}, far minus near={farthest_mean - nearest_mean:.3f}"
+                )
+
+                scenario_changes = []
+                for (yielding_value, ehmi_value, camera_value), ctx_df in feat_summary.groupby(["yielding", "eHMIOn", "camera"]):
+                    ctx_df = ctx_df.sort_values("distPed_m")
+                    if ctx_df.empty:
+                        continue
+                    first_val = float(ctx_df.iloc[0][feat])
+                    last_val = float(ctx_df.iloc[-1][feat])
+                    delta = last_val - first_val
+                    scenario_changes.append({
+                        "yielding": int(yielding_value),
+                        "eHMIOn": int(ehmi_value),
+                        "camera": int(camera_value),
+                        "start": first_val,
+                        "end": last_val,
+                        "delta": delta,
+                    })
+                if scenario_changes:
+                    strongest = max(scenario_changes, key=lambda row: abs(row["delta"]))
+                    yielding_txt = "Yielding" if strongest["yielding"] == 1 else "Not yielding"
+                    ehmi_txt = "eHMI on" if strongest["eHMIOn"] == 1 else "eHMI off"
+                    vis_txt = (
+                        "Other pedestrian not visible"
+                        if strongest["camera"] == 1 else "Other pedestrian visible"
+                    )
+                    logger.info(
+                        f"{feature_name} strongest profile change: {yielding_txt}, "
+                        f"{ehmi_txt}, {vis_txt} changed by {strongest['delta']:.3f} "
+                        f"from {strongest['start']:.3f} to {strongest['end']:.3f} across distance"
+                    )
+
+                yielding_means = feat_summary.groupby("yielding", as_index=False)[feat].mean()
+                if set(yielding_means["yielding"].tolist()) == {0, 1}:
+                    not_yielding_mean = float(yielding_means.loc[yielding_means["yielding"] == 0, feat].iloc[0])
+                    yielding_mean = float(yielding_means.loc[yielding_means["yielding"] == 1, feat].iloc[0])
+                    logger.info(
+                        f"{feature_name} yielding contrast: yielding mean={yielding_mean:.3f}, "
+                        f"not yielding mean={not_yielding_mean:.3f}, "
+                        f"difference={yielding_mean - not_yielding_mean:.3f}"
+                    )
 
         # ------------------------------------------------------------------
-        # Respect the requested feature order when building the subplot grid.
+        # Build a faceted profile plot so each panel only contains two lines.
         # ------------------------------------------------------------------
             feature_order = [
                 feat for feat in feature_outcomes if feat in summary_df["feature"].unique().tolist()
             ]
-            if feature_order:
-                subplot_titles = [feature_labels.get(feat, feat) for feat in feature_order]
-                fig = make_subplots(rows=len(feature_order), cols=1, shared_xaxes=True, subplot_titles=subplot_titles)
+            panel_order = [
+                {"eHMIOn": 0, "camera": 0, "title": "Visible | eHMI off"},
+                {"eHMIOn": 1, "camera": 0, "title": "Visible | eHMI on"},
+                {"eHMIOn": 0, "camera": 1, "title": "Not visible | eHMI off"},
+                {"eHMIOn": 1, "camera": 1, "title": "Not visible | eHMI on"},
+            ]
+            yielding_styles = {
+                0: {
+                    "name": "Not yielding",
+                    "color": "rgba(85, 98, 112, 0.95)",
+                    "dash": "dot",
+                    "symbol": "circle-open",
+                },
+                1: {
+                    "name": "Yielding",
+                    "color": "rgba(31, 119, 180, 0.95)",
+                    "dash": "solid",
+                    "symbol": "circle",
+                },
+            }
 
-        # ------------------------------------------------------------------
-        # Create one subplot row for each retained trigger feature.
-        # ------------------------------------------------------------------
+            if feature_order:
+                subplot_titles = []
+                for row_idx, _ in enumerate(feature_order, start=1):
+                    if row_idx == 1:
+                        subplot_titles.extend([panel["title"] for panel in panel_order])
+                    else:
+                        subplot_titles.extend([""] * len(panel_order))
+
+                fig = make_subplots(
+                    rows=len(feature_order),
+                    cols=len(panel_order),
+                    shared_xaxes=True,
+                    horizontal_spacing=0.05,
+                    vertical_spacing=0.08,
+                    subplot_titles=subplot_titles,
+                )
+
+                tickvals = sorted(pd.to_numeric(summary_df["distPed_m"], errors="coerce").dropna().unique().tolist())
+
                 for row_idx, feat in enumerate(feature_order, start=1):
                     feat_df = summary_df.loc[summary_df["feature"] == feat].copy()
 
-        # ------------------------------------------------------------------
-        # Draw one distance profile per scenario context inside the current subplot.
-        # ------------------------------------------------------------------
-                    for context, ctx_df in feat_df.groupby("context"):
-                        fig.add_trace(
-                            go.Scatter(
-                                x=ctx_df["distPed_m"],
-                                y=ctx_df[feat],
-                                mode="lines+markers",
-                                name=context,
-                                legendgroup=context,
-                                showlegend=row_idx == 1,
-                            ),
+                    for col_idx, panel in enumerate(panel_order, start=1):
+                        panel_df = feat_df.loc[
+                            (feat_df["eHMIOn"] == panel["eHMIOn"]) &
+                            (feat_df["camera"] == panel["camera"])
+                        ].copy()
+                        if panel_df.empty:
+                            continue
+
+                        for yielding_value in [0, 1]:
+                            trace_df = panel_df.loc[panel_df["yielding"] == yielding_value].copy()
+                            if trace_df.empty:
+                                continue
+                            trace_df = trace_df.sort_values("distPed_m")
+                            style = yielding_styles[yielding_value]
+
+                            fig.add_trace(
+                                go.Scatter(
+                                    x=trace_df["distPed_m"],
+                                    y=trace_df[feat],
+                                    mode="lines+markers",
+                                    name=style["name"],
+                                    legendgroup=style["name"],
+                                    showlegend=(row_idx == 1 and col_idx == 1),
+                                    line=dict(color=style["color"], dash=style["dash"], width=2.5),
+                                    marker=dict(color=style["color"], symbol=style["symbol"], size=8),
+                                    hovertemplate=(
+                                        f"<b>{feature_labels.get(feat, feat)}</b><br>"
+                                        f"{panel['title']}<br>"
+                                        f"{style['name']}<br>"
+                                        "Distance: %{x:.0f} m<br>"
+                                        "Value: %{y:.2f}<extra></extra>"
+                                    ),
+                                ),
+                                row=row_idx,
+                                col=col_idx,
+                            )
+
+                        fig.update_xaxes(
+                            tickmode="array",
+                            tickvals=tickvals,
+                            tickfont=dict(family=self.font_family, size=self.font_size + 2),
                             row=row_idx,
-                            col=1,
+                            col=col_idx,
                         )
-                    fig.update_yaxes(title_text=feature_labels.get(feat, feat), row=row_idx, col=1)
-                fig.update_xaxes(title_text="Distance between pedestrians (m)", row=len(feature_order), col=1)
+                        fig.update_yaxes(
+                            tickfont=dict(family=self.font_family, size=self.font_size + 2),
+                            row=row_idx,
+                            col=col_idx,
+                        )
+
+                    fig.update_yaxes(
+                        title_text=feature_labels.get(feat, feat),
+                        title_font=dict(family=self.font_family, size=self.font_size + 8),
+                        title_standoff=24,
+                        automargin=True,
+                        row=row_idx,
+                        col=1,
+                    )
+
+                for col_idx in range(1, len(panel_order) + 1):
+                    fig.update_xaxes(
+                        title_text="Distance between pedestrians (m)",
+                        title_font=dict(family=self.font_family, size=self.font_size + 8),
+                        row=len(feature_order),
+                        col=col_idx,
+                    )
+
                 fig.update_layout(
                     template=self.template,
-                    height=max(750, 260 * len(feature_order)),
+                    title="",
+                    height=max(950, 260 * len(feature_order)),
                     font=dict(family=self.font_family, size=self.font_size),
-                    legend=dict(title_text="Context"),
+                    margin=dict(l=190, r=70, t=80, b=90),
+                    legend=dict(
+                        title_text="Scenario yielding state",
+                        orientation="h",
+                        x=0.5,
+                        xanchor="center",
+                        y=1.04,
+                        yanchor="bottom",
+                    ),
                 )
-                self._save_plot(fig, "trigger_feature_distance_profiles", width=1200,
-                                height=max(750, 260 * len(feature_order)))
+
+                for annotation in fig.layout.annotations:
+                    annotation.font = dict(family=self.font_family, size=self.font_size + 4)
+
+                self._save_plot(
+                    fig,
+                    "trigger_feature_distance_profiles",
+                    width=2100,
+                    height=max(950, 260 * len(feature_order)),
+                )
 
         # ------------------------------------------------------------------
         # Stop with a clear error when every feature model fails.
