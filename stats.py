@@ -371,31 +371,6 @@ class AdvancedStatsRunner:
         logger.info(f"Saved table: {path}")
         return path
 
-    def _save_plot(self, fig: go.Figure, filename: str, width: int = 1320, height: int = 780) -> None:
-
-        """Persist a Plotly figure using the shared project helper.
-
-        Args:
-            fig: Plotly figure to save.
-            filename: Output file stem.
-            width: Output figure width in pixels.
-            height: Output figure height in pixels.
-
-        Returns:
-            None
-        """
-        # Delegate figure saving to the existing helper so this class stays aligned with the
-        # rest of the project's Plotly export conventions.
-        self.helper.save_plotly(
-            fig=fig,
-            name=filename,
-            width=width,
-            height=height,
-            save_final=True,
-            open_browser=True,
-        )
-        logger.info(f"Saved figure set for: {filename}")
-
     def build_trigger_feature_table(
         self,
         column_name: str = "TriggerValueRight",
@@ -783,7 +758,6 @@ class AdvancedStatsRunner:
             margin_high=float(high_eq),
         )
 
-
     def run_equivalence_tests(self, trial_df: pd.DataFrame, outcome: str = "crossing_risk",
                               low_distances_m: Tuple[int, int] = (2, 4),
                               high_distances_m: Tuple[int, int] = (8, 10), equivalence_margin: float = 5.0,
@@ -829,13 +803,13 @@ class AdvancedStatsRunner:
             raise ValueError("No near/far rows remained after distance band selection.")
 
         def _yield_label(val: object) -> str:
-            return "Yielding" if int(val) == 1 else "Not yielding"
+            return "Yielding" if int(val) == 1 else "Not yielding"  # pyright: ignore[reportArgumentType]
 
         def _ehmi_label(val: object) -> str:
-            return "eHMI on" if int(val) == 1 else "eHMI off"
+            return "eHMI on" if int(val) == 1 else "eHMI off"  # pyright: ignore[reportArgumentType]
 
         def _visibility_label(val: object) -> str:
-            return "Other pedestrian not visible" if int(val) == 1 else "Other pedestrian visible"
+            return "Other pedestrian not visible" if int(val) == 1 else "Other pedestrian visible"  # type: ignore
 
         result_records: List[Dict[str, object]] = []
 
@@ -950,10 +924,10 @@ class AdvancedStatsRunner:
                 x1=equivalence_margin,
                 fillcolor="rgba(50, 50, 50, 0.08)",
                 line_width=0,
-                row=row_idx,
-                col=col_idx,
+                row=row_idx,  # pyright: ignore[reportArgumentType]
+                col=col_idx,  # pyright: ignore[reportArgumentType]
             )
-            fig.add_vline(x=0, line_dash="dash", line_color="black", row=row_idx, col=col_idx)
+            fig.add_vline(x=0, line_dash="dash", line_color="black", row=row_idx, col=col_idx)  # type: ignore
             fig.update_xaxes(range=[-x_limit, x_limit], row=row_idx, col=col_idx)
 
         overall_df = plot_df.loc[plot_df["label"] == "Overall"]
@@ -1040,11 +1014,11 @@ class AdvancedStatsRunner:
         fig.update_annotations(font=dict(family=self.font_family, size=self.font_size + 4))
 
         # Only the left panels need a y axis title.
-        fig.update_yaxes(title_text="Scenario", title_font=dict(family=self.font_family, size=self.font_size + 10),
+        fig.update_yaxes(title_text="", title_font=dict(family=self.font_family, size=self.font_size + 10),
                          tickfont=dict(family=self.font_family, size=self.font_size + 6), row=1, col=1)
-        fig.update_yaxes(title_text="Yielding", title_font=dict(family=self.font_family, size=self.font_size + 8),
+        fig.update_yaxes(title_text="", title_font=dict(family=self.font_family, size=self.font_size + 8),
                          tickfont=dict(family=self.font_family, size=self.font_size + 6), row=2, col=1)
-        fig.update_yaxes(title_text="Yielding", title_font=dict(family=self.font_family, size=self.font_size + 8),
+        fig.update_yaxes(title_text="", title_font=dict(family=self.font_family, size=self.font_size + 8),
                          tickfont=dict(family=self.font_family, size=self.font_size + 6), row=3, col=1)
         fig.update_yaxes(tickfont=dict(family=self.font_family, size=self.font_size + 6), row=2, col=2)
         fig.update_yaxes(tickfont=dict(family=self.font_family, size=self.font_size + 6), row=3, col=2)
@@ -1058,11 +1032,34 @@ class AdvancedStatsRunner:
                     row=r,
                     col=c,
                 )
-        fig.update_xaxes(title_text=f"Near minus far difference in {outcome}", row=3, col=1)
-        fig.update_xaxes(title_text=f"Near minus far difference in {outcome}", row=3, col=2)
+        pretty_outcome = self._pretty_outcome_label(outcome)
+        fig.update_xaxes(title_text=f"Near minus far difference in {pretty_outcome}", row=3, col=1)
+        fig.update_xaxes(title_text=f"Near minus far difference in {pretty_outcome}", row=3, col=2)
 
-        self._save_plot(fig, f"equivalence_near_vs_far_{outcome}", width=1300, height=900)
+        self.helper.save_plotly(
+            fig=fig,
+            name=f"equivalence_near_vs_far_{outcome}",
+            width=1300,
+            height=900,
+            save_final=True,
+            open_browser=True,
+        )
+        logger.info(f"Saved figure set for: equivalence_near_vs_far_{outcome}")
         return results_df
+
+    @staticmethod
+    def _pretty_outcome_label(outcome: str) -> str:
+
+        """Convert raw outcome column names into human readable labels."""
+        mapping = {
+            "crossing_risk": "crossing risk",
+            "unsafe_prop_pct": "unsafe time (%)",
+            "first_press_latency_s": "first press latency (s)",
+            "peak_trigger_pct": "peak trigger (0–100)",
+            "auc_trigger_pct_s": "Trigger AUC",
+            "switch_count": "switch count",
+        }
+        return mapping.get(outcome, outcome.replace("_", " "))
 
     @staticmethod
     def _pretty_term(term: str) -> str:
@@ -1200,7 +1197,7 @@ class AdvancedStatsRunner:
         # ------------------------------------------------------------------
         attempts = [("mixed_random_intercept", None)]
         if re_formula is not None:
-            attempts.append(("mixed_random_slope", re_formula))
+            attempts.append(("mixed_random_slope", re_formula))  # pyright: ignore[reportArgumentType]
 
         # ------------------------------------------------------------------
         # Try each modelling strategy until one converges successfully.
@@ -1385,7 +1382,15 @@ class AdvancedStatsRunner:
         )
         fig.add_vline(x=0, line_dash="dash", line_color="black")
         fig.update_layout(font=dict(family=self.font_family, size=self.font_size))
-        self._save_plot(fig, "within_between_crossing_risk_coefficients", width=1100, height=650)
+        self.helper.save_plotly(
+            fig=fig,
+            name="within_between_crossing_risk_coefficients",
+            width=1100,
+            height=650,
+            save_final=True,
+            open_browser=True,
+        )
+        logger.info("Saved figure set for: within_between_crossing_risk_coefficients")
         return results_df
 
     def merge_trigger_features(self, trial_df: pd.DataFrame, feature_df: Optional[pd.DataFrame] = None,
@@ -1603,7 +1608,8 @@ class AdvancedStatsRunner:
                     continue
 
                 feature_name = feature_labels.get(feat, feat)
-                distances = sorted(pd.to_numeric(feat_summary["distPed_m"], errors="coerce").dropna().unique().tolist())
+                distances = sorted(pd.to_numeric(feat_summary["distPed_m"],
+                                                 errors="coerce").dropna().unique().tolist())
                 if not distances:
                     continue
                 near_dist = float(distances[0])
@@ -1630,8 +1636,9 @@ class AdvancedStatsRunner:
                 )
 
                 scenario_changes = []
-                for (yielding_value, ehmi_value, camera_value), ctx_df in feat_summary.groupby(["yielding", "eHMIOn", "camera"]):
-                    ctx_df = ctx_df.sort_values("distPed_m")
+                for (yielding_value, ehmi_value, camera_value), ctx_df in feat_summary.groupby(["yielding",
+                                                                                                "eHMIOn", "camera"]):
+                    ctx_df = ctx_df.sort_values("distPed_m")  # pyright: ignore[reportCallIssue]
                     if ctx_df.empty:
                         continue
                     first_val = float(ctx_df.iloc[0][feat])
@@ -1713,7 +1720,8 @@ class AdvancedStatsRunner:
                     subplot_titles=subplot_titles,
                 )
 
-                tickvals = sorted(pd.to_numeric(summary_df["distPed_m"], errors="coerce").dropna().unique().tolist())
+                tickvals = sorted(pd.to_numeric(summary_df["distPed_m"],
+                                                errors="coerce").dropna().unique().tolist())  # type: ignore
 
                 for row_idx, feat in enumerate(feature_order, start=1):
                     feat_df = summary_df.loc[summary_df["feature"] == feat].copy()
@@ -1801,15 +1809,18 @@ class AdvancedStatsRunner:
                     ),
                 )
 
-                for annotation in fig.layout.annotations:
+                for annotation in fig.layout.annotations:  # type: ignore
                     annotation.font = dict(family=self.font_family, size=self.font_size + 4)
 
-                self._save_plot(
-                    fig,
-                    "trigger_feature_distance_profiles",
+                self.helper.save_plotly(
+                    fig=fig,
+                    name="trigger_feature_distance_profiles",
                     width=2100,
                     height=max(950, 260 * len(feature_order)),
+                    save_final=True,
+                    open_browser=True,
                 )
+                logger.info("Saved figure set for: trigger_feature_distance_profiles")
 
         # ------------------------------------------------------------------
         # Stop with a clear error when every feature model fails.
@@ -1843,7 +1854,15 @@ class AdvancedStatsRunner:
         )
         fig_coef.add_vline(x=0, line_dash="dash", line_color="black")
         fig_coef.update_layout(font=dict(family=self.font_family, size=self.font_size))
-        self._save_plot(fig_coef, "trigger_feature_model_coefficients", width=1150, height=700)
+        self.helper.save_plotly(
+            fig=fig_coef,
+            name="trigger_feature_model_coefficients",
+            width=1150,
+            height=700,
+            save_final=True,
+            open_browser=True,
+        )
+        logger.info("Saved figure set for: trigger_feature_model_coefficients")
         return coef_df
 
     def run_all(self, trial_df: pd.DataFrame, equivalence_margin: float = 5.0) -> Dict[str, pd.DataFrame]:

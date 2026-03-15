@@ -2457,9 +2457,9 @@ class HMD_helper:
         # Context string with on/off text instead of 0/1
         diff_df["context"] = diff_df.apply(
             lambda r: (
-                f"Y{'on' if r['yielding'] == 1 else 'off'}_"
-                f"H{'on' if r['eHMIOn'] == 1 else 'off'}_"
-                f"C{int(r['camera'])}"
+                f"{'Yielding' if r['yielding'] == 1 else 'Non yielding'}, "
+                f"eHMI {'on' if r['eHMIOn'] == 1 else 'off'}, "
+                f"{'other visible' if int(r['camera']) == 0 else 'other not visible'}"
             ),
             axis=1,
         )
