@@ -387,7 +387,10 @@ class AdvancedStatsRunner:
 
         Args:
             column_name: Name of the exported trigger matrix variant to load.
-            threshold: Threshold used to mark a timestamp bin as pressed.
+            threshold: Trigger values strictly greater than this threshold mark
+                a timestamp bin as pressed. The default of 0.05 is used because
+                the trigger was pressure-sensitive and light contact could
+                produce small values.
             force: Whether to ignore a cached feature table and rebuild it.
 
         Returns:
@@ -405,8 +408,15 @@ class AdvancedStatsRunner:
         # ------------------------------------------------------------------
         out_csv = os.path.join(self.stats_dir, "trigger_time_series_features.csv")
         if os.path.isfile(out_csv) and not force:
-            logger.info(f"Loading cached trigger feature table: {out_csv}")
-            return pd.read_csv(out_csv)
+            cached = pd.read_csv(out_csv)
+            if "trigger_threshold" in cached.columns:
+                cached_thresholds = pd.to_numeric(cached["trigger_threshold"], errors="coerce").dropna().unique()
+                if len(cached_thresholds) == 1 and np.isclose(cached_thresholds[0], threshold):
+                    logger.info(f"Loading cached trigger feature table: {out_csv}")
+                    return cached
+            logger.info(
+                "Cached trigger feature table was built with a different or unknown threshold; rebuilding."
+            )
 
         # Discover all participant by video matrices that match the requested trigger column.
         # ------------------------------------------------------------------
@@ -590,6 +600,7 @@ class AdvancedStatsRunner:
                     "analysis_duration_s": total_duration,
                     "n_bins": int(len(ts_used)),
                     "n_trigger_samples": n_samples,
+                    "trigger_threshold": float(threshold),
                     "mean_trigger_raw": mean_raw,
                     "mean_trigger_pct": mean_raw * 100.0 if pd.notna(mean_raw) else np.nan,
                     "peak_trigger_raw": peak_raw,
@@ -803,13 +814,13 @@ class AdvancedStatsRunner:
             raise ValueError("No near/far rows remained after distance band selection.")
 
         def _yield_label(val: object) -> str:
-            return "Yielding" if int(val) == 1 else "Not yielding"  # pyright: ignore[reportArgumentType]
+            return "Yielding" if int(val) == 1 else "Non-yielding"  # pyright: ignore[reportArgumentType]
 
         def _ehmi_label(val: object) -> str:
-            return "eHMI on" if int(val) == 1 else "eHMI off"  # pyright: ignore[reportArgumentType]
+            return "eHMI" if int(val) == 1 else "No eHMI"  # pyright: ignore[reportArgumentType]
 
         def _visibility_label(val: object) -> str:
-            return "Other pedestrian not visible" if int(val) == 1 else "Other pedestrian visible"  # type: ignore
+            return "Co-pedestrian not visible" if int(val) == 1 else "Co-pedestrian visible"  # type: ignore
 
         result_records: List[Dict[str, object]] = []
 
@@ -892,10 +903,10 @@ class AdvancedStatsRunner:
             specs=[[{"colspan": 2}, None], [{}, {}], [{}, {}]],
             subplot_titles=[
                 "Overall",
-                "Other pedestrian visible | eHMI off",
-                "Other pedestrian visible | eHMI on",
-                "Other pedestrian not visible | eHMI off",
-                "Other pedestrian not visible | eHMI on",
+                "Co-pedestrian visible | No eHMI",
+                "Co-pedestrian visible | eHMI",
+                "Co-pedestrian not visible | No eHMI",
+                "Co-pedestrian not visible | eHMI",
             ],
             shared_xaxes=True,
             shared_yaxes=False,
@@ -999,7 +1010,7 @@ class AdvancedStatsRunner:
             for c in [1, 2]:
                 fig.update_yaxes(
                     categoryorder="array",
-                    categoryarray=["Not yielding", "Yielding"],
+                    categoryarray=["Non-yielding", "Yielding"],
                     row=r,
                     col=c,
                 )
@@ -1079,15 +1090,15 @@ class AdvancedStatsRunner:
         mapping = {
             "Intercept": "Intercept",
             "C(yielding)[T.1]": "Yielding",
-            "C(eHMIOn)[T.1]": "eHMI on",
-            "C(camera)[T.1]": "Other pedestrian not visible",
+            "C(eHMIOn)[T.1]": "eHMI",
+            "C(camera)[T.1]": "Co-pedestrian not visible",
             "distPed_m": "Distance (m)",
             "within_score": "Within participant",
             "between_score": "Between participant",
             "Group Var": "Random intercept variance",
-            "C(yielding)[T.1]:C(eHMIOn)[T.1]": "Yielding × eHMI on",
-            "C(yielding)[T.1]:C(camera)[T.1]": "Yielding × visibility",
-            "C(eHMIOn)[T.1]:C(camera)[T.1]": "eHMI on × visibility",
+            "C(yielding)[T.1]:C(eHMIOn)[T.1]": "Yielding × eHMI",
+            "C(yielding)[T.1]:C(camera)[T.1]": "Yielding × co-pedestrian visibility",
+            "C(eHMIOn)[T.1]:C(camera)[T.1]": "eHMI × co-pedestrian visibility",
         }
         return mapping.get(term, term)
 
@@ -1394,7 +1405,7 @@ class AdvancedStatsRunner:
         return results_df
 
     def merge_trigger_features(self, trial_df: pd.DataFrame, feature_df: Optional[pd.DataFrame] = None,
-                               save: bool = True) -> pd.DataFrame:
+                               save: bool = True, trigger_threshold: float = 0.05) -> pd.DataFrame:
 
         """Merge derived trigger features onto a trial level table.
 
@@ -1402,6 +1413,7 @@ class AdvancedStatsRunner:
             trial_df: Base trial level DataFrame.
             feature_df: Optional precomputed trigger feature table.
             save: Whether to write the merged table to disk.
+            trigger_threshold: Threshold used if feature_df needs to be built on demand.
 
         Returns:
             The enriched trial level DataFrame.
@@ -1410,7 +1422,7 @@ class AdvancedStatsRunner:
         # Generate trigger features on demand when they were not supplied.
         # ------------------------------------------------------------------
         if feature_df is None:
-            feature_df = self.build_trigger_feature_table()
+            feature_df = self.build_trigger_feature_table(threshold=trigger_threshold)
 
         # ------------------------------------------------------------------
         # Copy both input tables to avoid mutating caller owned DataFrames.
@@ -1451,6 +1463,7 @@ class AdvancedStatsRunner:
             "dt_seconds",
             "n_bins",
             "n_trigger_samples",
+            "trigger_threshold",
         ]
 
         keep_cols = [c for c in merge_cols if c in right.columns]
@@ -1463,6 +1476,24 @@ class AdvancedStatsRunner:
             on=["participant", "video_id"],
             how="left",
         )
+
+        # ------------------------------------------------------------------
+        # Keep the primary outcome definition consistent across the pipeline.
+        # The manuscript defines crossing risk as the percentage of analysed
+        # time bins where the pressure-sensitive trigger exceeded the threshold,
+        # not as the mean trigger pressure. If unsafe_prop_pct is available, it
+        # is therefore the authoritative crossing_risk value. The incoming value
+        # is preserved for auditing.
+        # ------------------------------------------------------------------
+        if "unsafe_prop_pct" in enriched.columns:
+            unsafe_pct = pd.to_numeric(enriched["unsafe_prop_pct"], errors="coerce")
+            if "crossing_risk" in enriched.columns:
+                incoming_risk = pd.to_numeric(enriched["crossing_risk"], errors="coerce")
+                enriched["crossing_risk_input"] = incoming_risk
+                enriched["crossing_risk"] = unsafe_pct.combine_first(incoming_risk)
+            else:
+                enriched["crossing_risk"] = unsafe_pct
+            logger.info("Set crossing_risk from unsafe_prop_pct where available.")
 
         # ------------------------------------------------------------------
         # Persist the enriched table when the caller requests an output file.
@@ -1585,13 +1616,13 @@ class AdvancedStatsRunner:
                 "unsafe_prop_pct": "Unsafe time (%)",
             }
             summary_df["feature_label"] = summary_df["feature"].map(feature_labels).fillna(summary_df["feature"])
-            summary_df["yielding_label"] = summary_df["yielding"].map({0: "Not yielding", 1: "Yielding"})
-            summary_df["eHMI_label"] = summary_df["eHMIOn"].map({0: "eHMI off", 1: "eHMI on"})
+            summary_df["yielding_label"] = summary_df["yielding"].map({0: "Non-yielding", 1: "Yielding"})
+            summary_df["eHMI_label"] = summary_df["eHMIOn"].map({0: "No eHMI", 1: "eHMI"})
             summary_df["visibility_label"] = summary_df["camera"].map(
-                {0: "Other pedestrian visible", 1: "Other pedestrian not visible"}
+                {0: "Co-pedestrian visible", 1: "Co-pedestrian not visible"}
             )
             summary_df["panel_title"] = summary_df["visibility_label"].str.replace(
-                "Other pedestrian ", "", regex=False
+                "Co-pedestrian ", "", regex=False
             ) + " | " + summary_df["eHMI_label"]
 
             # --------------------------------------------------------------
@@ -1654,11 +1685,11 @@ class AdvancedStatsRunner:
                     })
                 if scenario_changes:
                     strongest = max(scenario_changes, key=lambda row: abs(row["delta"]))
-                    yielding_txt = "Yielding" if strongest["yielding"] == 1 else "Not yielding"
-                    ehmi_txt = "eHMI on" if strongest["eHMIOn"] == 1 else "eHMI off"
+                    yielding_txt = "Yielding" if strongest["yielding"] == 1 else "Non-yielding"
+                    ehmi_txt = "eHMI" if strongest["eHMIOn"] == 1 else "No eHMI"
                     vis_txt = (
-                        "Other pedestrian not visible"
-                        if strongest["camera"] == 1 else "Other pedestrian visible"
+                        "Co-pedestrian not visible"
+                        if strongest["camera"] == 1 else "Co-pedestrian visible"
                     )
                     logger.info(
                         f"{feature_name} strongest profile change: {yielding_txt}, "
@@ -1683,14 +1714,14 @@ class AdvancedStatsRunner:
                 feat for feat in feature_outcomes if feat in summary_df["feature"].unique().tolist()
             ]
             panel_order = [
-                {"eHMIOn": 0, "camera": 0, "title": "Visible | eHMI off"},
-                {"eHMIOn": 1, "camera": 0, "title": "Visible | eHMI on"},
-                {"eHMIOn": 0, "camera": 1, "title": "Not visible | eHMI off"},
-                {"eHMIOn": 1, "camera": 1, "title": "Not visible | eHMI on"},
+                {"eHMIOn": 0, "camera": 0, "title": "Co-pedestrian visible | No eHMI"},
+                {"eHMIOn": 1, "camera": 0, "title": "Co-pedestrian visible | eHMI"},
+                {"eHMIOn": 0, "camera": 1, "title": "Co-pedestrian not visible | No eHMI"},
+                {"eHMIOn": 1, "camera": 1, "title": "Co-pedestrian not visible | eHMI"},
             ]
             yielding_styles = {
                 0: {
-                    "name": "Not yielding",
+                    "name": "Non-yielding",
                     "color": "rgba(85, 98, 112, 0.95)",
                     "dash": "dot",
                     "symbol": "circle-open",
@@ -1800,7 +1831,7 @@ class AdvancedStatsRunner:
                     font=dict(family=self.font_family, size=self.font_size),
                     margin=dict(l=190, r=70, t=80, b=90),
                     legend=dict(
-                        title_text="Scenario yielding state",
+                        title_text="AV behaviour",
                         orientation="h",
                         x=0.5,
                         xanchor="center",
@@ -1865,7 +1896,7 @@ class AdvancedStatsRunner:
         logger.info("Saved figure set for: trigger_feature_model_coefficients")
         return coef_df
 
-    def run_all(self, trial_df: pd.DataFrame, equivalence_margin: float = 5.0) -> Dict[str, pd.DataFrame]:
+    def run_all(self, trial_df: pd.DataFrame, equivalence_margin: float = 5.0, trigger_threshold: float = 0.05) -> Dict[str, pd.DataFrame]:
 
         """Run the full advanced statistics pipeline end to end.
 
@@ -1873,6 +1904,8 @@ class AdvancedStatsRunner:
             trial_df: Trial level input DataFrame.
             equivalence_margin: Symmetric equivalence margin used in the
                 near versus far TOST comparison.
+            trigger_threshold: Threshold on the 0..1 pressure-sensitive trigger
+                signal used to define a binary pressed/risk state.
 
         Returns:
             A dictionary containing the main intermediate and final result
@@ -1886,7 +1919,7 @@ class AdvancedStatsRunner:
         # ------------------------------------------------------------------
         # Step 1: derive participant by video trigger features.
         # ------------------------------------------------------------------
-        feature_df = self.build_trigger_feature_table()
+        feature_df = self.build_trigger_feature_table(threshold=trigger_threshold)
         enriched_trial_df = self.merge_trigger_features(trial_df, feature_df=feature_df, save=True)  # type: ignore
 
         # ------------------------------------------------------------------

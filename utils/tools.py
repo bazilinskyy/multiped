@@ -78,6 +78,52 @@ class Tools():
         # Return the results as a new DataFrame
         return pd.DataFrame(result)
 
+    @staticmethod
+    def _cell_to_list(value):
+        """
+        Convert one matrix cell into a list of values.
+
+        The exported participant matrices may contain either string-encoded lists
+        after reading from CSV, for example "[0.0, 1.0]", or actual Python lists
+        when a DataFrame has already been processed in memory. This helper keeps
+        both cases valid and treats missing or malformed cells as empty lists.
+        """
+        if value is None:
+            return []
+
+        # Some code paths already provide Python lists, which should not be
+        # passed to ast.literal_eval again.
+        if isinstance(value, list):
+            return value
+        if isinstance(value, tuple):
+            return list(value)
+        if isinstance(value, np.ndarray):
+            return value.tolist()
+
+        # Scalar missing values should be treated as empty cells.
+        if isinstance(value, float) and pd.isna(value):
+            return []
+
+        if isinstance(value, str):
+            stripped = value.strip()
+            if stripped == "" or stripped.lower() in {"nan", "none"}:
+                return []
+            try:
+                parsed_value = ast.literal_eval(stripped)
+            except (ValueError, SyntaxError):
+                return []
+            if isinstance(parsed_value, list):
+                return parsed_value
+            if isinstance(parsed_value, tuple):
+                return list(parsed_value)
+            return [parsed_value]
+
+        # A numeric scalar should still contribute one value rather than crash.
+        if isinstance(value, (int, float, np.integer, np.floating)):
+            return [] if pd.isna(value) else [float(value)]
+
+        return []
+
     def extract_time_series_values(self, df):
         """
         Extracts a list of lists from a DataFrame where each inner list contains
@@ -85,7 +131,7 @@ class Tools():
 
         Parameters:
             df (pd.DataFrame): The input DataFrame, expected to have a 'Timestamp' column
-                               and other columns containing string-encoded lists.
+                               and other columns containing lists or string-encoded lists.
 
         Returns:
             list of list: A list where each inner list contains all values (flattened)
@@ -93,27 +139,16 @@ class Tools():
         """
         all_values_by_timestep = []
 
-        # Iterate through each row in the DataFrame
         for _, row in df.iterrows():
-            row_values = []  # Collect all values for the current timestamp
+            row_values = []
 
-            # Loop over all columns except 'Timestamp'
             for col in df.columns:
                 if col == 'Timestamp':
-                    continue  # Skip the 'Timestamp' column
+                    continue
 
-                value = row[col]
-                if pd.isna(value):
-                    # If value is NaN, treat as an empty list (alternatively, fill with [None] or [0])
-                    parsed_list = []
-                else:
-                    # Convert the string representation of a list to an actual list
-                    parsed_list = ast.literal_eval(value)
-
-                # Flatten the list values into the row_values list
+                parsed_list = self._cell_to_list(row[col])
                 row_values.extend(parsed_list)
 
-            # Append the flattened values for this row/timestamp to the result list
             all_values_by_timestep.append(row_values)
 
         return all_values_by_timestep

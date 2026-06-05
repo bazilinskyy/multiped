@@ -19,7 +19,7 @@ from tqdm import tqdm
 from datetime import datetime
 import ast
 import math
-from typing import Dict
+from typing import Dict, Optional
 import statsmodels.formula.api as smf
 
 
@@ -47,6 +47,89 @@ class HMD_helper:
         self.data_folder = common.get_configs("data")  # Get path to participant data
         self.output_folder = common.get_configs("output")
 
+    @staticmethod
+    def _short_kp_file_stem(name):
+        """Return a short, stable filename stem for keypress condition plots.
+
+        The older keypress filenames were long, for example
+        ``all_videos_kp_slider_plot_eHMI_off_yielding``. This helper keeps
+        the saved files easier to scan and avoids path length problems while
+        preserving the condition meaning in a compact form.
+        """
+        short_names = {
+            "all_values_with_yielding": "kp_all_y",
+            "all_values_without_yielding": "kp_all_ny",
+            "eHMI_off_yielding": "kp_e0_y",
+            "eHMI_on_yielding": "kp_e1_y",
+            "eHMI_off_non-yielding": "kp_e0_ny",
+            "eHMI_on_non-yielding": "kp_e1_ny",
+            "first_eHMI_on_non-yielding": "kp_p1_e1_ny",
+            "first_eHMI_on_yielding": "kp_p1_e1_y",
+            "first_eHMI_off_non-yielding": "kp_p1_e0_ny",
+            "first_eHMI_off_yielding": "kp_p1_e0_y",
+            "second_eHMI_on_non-yielding": "kp_p2_e1_ny",
+            "second_eHMI_on_yielding": "kp_p2_e1_y",
+            "second_eHMI_off_non-yielding": "kp_p2_e0_ny",
+            "second_eHMI_off_yielding": "kp_p2_e0_y",
+        }
+        if name in short_names:
+            return short_names[name]
+
+        safe_name = str(name or "kp").strip()
+        safe_name = re.sub(r"[^0-9A-Za-z]+", "_", safe_name).strip("_")
+        return f"kp_{safe_name[:35]}" if safe_name else "kp_plot"
+
+    @staticmethod
+    def _short_question_file_stem(column_name, tag=None):
+        """Return short, stable filenames for questionnaire figures.
+
+        Long survey questions used to become long filenames. This mapping keeps
+        the exported HTML/PNG/EPS names compact while preserving the meaning of
+        each questionnaire item. Unknown columns still fall back to a short,
+        sanitised stem.
+        """
+        short_names = {
+            "Do you consent to participate in this study as described in the information provided above?": "consent",
+            "Have you read and understood the above instructions?": "instructions",
+            "What is your gender?": "gender",
+            "Are you wearing any seeing aids during the experiments?": "seeing_aids",
+            "Do you have problems with hearing?": "hearing",
+            "How often in the last month have you experienced virtual reality?": "vr_exp",
+            "I am comfortable with walking in areas with dense traffic.": "comfort_traffic",
+            "The presence of another pedestrian reduces my willingness to cross the street when a car is driving towards me.": "ped_reduces_crossing",
+            "What is your primary mode of transportation?": "transport",
+            "On average, how often did you drive a vehicle in the last 12 months?": "driving_freq",
+            "About how many kilometers did you drive in last 12 months?": "driving_km",
+            "How often do you do the following?: Becoming angered by a particular type of driver, and indicate your hostility by whatever means you can.": "driver_anger",
+            "How often do you do the following?: Disregarding the speed limit on a motorway.": "speed_motorway",
+            "How often do you do the following?: Disregarding the speed limit on a residential road. ": "speed_residential",
+            "How many accidents were you involved in when driving a car in the last 3 years? (please include all accidents, regardless of how they were caused, how slight they were, or where they happened)": "accidents",
+            "How often do you do the following?: Driving so close to the car in front that it would be difficult to stop in an emergency. ": "tailgating",
+            "How often do you do the following?: Racing away from traffic lights with the intention of beating the driver next to you. ": "racing_lights",
+            "How often do you do the following?: Sounding your horn to indicate your annoyance with another road user. ": "horn",
+            "How often do you do the following?: Using a mobile phone without a hands free kit.": "mobile_phone",
+            "How often do you do the following?: Doing my best not to be obstacle for other drivers.": "not_obstacle",
+            "I would like to communicate with other road users while crossing the road (for instance, using eye contact, gestures, verbal communication, etc.).": "road_user_comm",
+            "I trust an automated car more than a manually driven car.": "trust_av",
+            "The presence of another pedestrian influenced my willingness to cross the road.": "ped_influence",
+            "The type of car (with eHMI or without eHMI) affected my decision to cross the road.": "car_type_effect",
+            "What is your age (in years)?": "age",
+            "At what age did you obtain your first license for driving a car or motorcycle?": "licence_age",
+            "How stressful did you feel during the experiment?": "stress",
+            "How anxious did you feel during the experiment?": "anxiety",
+            "How realistic did you find the experiment?": "realism",
+            "How would you rate your overall experience in this experiment?": "overall_experience",
+        }
+
+        key = str(column_name).strip()
+        stem = short_names.get(key) or short_names.get(str(column_name))
+        if stem is None:
+            stem = re.sub(r"[^0-9A-Za-z]+", "_", key.lower()).strip("_")
+            stem = stem[:45] if stem else "question"
+
+        if tag:
+            return f"{stem}_{tag}"
+        return stem
 
     @staticmethod
     def _distance_code_to_meters(value):
@@ -128,12 +211,7 @@ class HMD_helper:
 
             # Save or display
             if save_file:
-                # Replace spaces with underscores, remove question marks, strip final periods
-                filename = column.strip()  # remove leading/trailing whitespace
-                filename = re.sub(r"[^\w\s-]", "", filename)  # remove punctuation except underscores/hyphens
-                filename = filename.replace(" ", "_").lower()
-                if tag:
-                    filename = f"{filename}_{tag}"
+                filename = self._short_question_file_stem(column, tag=tag)
                 self.save_plotly(fig, filename, save_final=True)
             else:
                 fig.show()
@@ -204,10 +282,7 @@ class HMD_helper:
 
             # Save or display
             if save_file:
-                # Replace spaces with underscores, remove question marks, strip final periods
-                filename = column_name.strip()  # remove leading/trailing whitespace
-                filename = re.sub(r"[^\w\s-]", "", filename)  # remove punctuation except underscores/hyphens
-                filename = filename.replace(" ", "_").lower()
+                filename = self._short_question_file_stem(column_name)
                 self.save_plotly(fig, filename, save_final=True)
             else:
                 fig.show()
@@ -348,52 +423,57 @@ class HMD_helper:
     def save_plotly(self, fig, name, remove_margins=False, width=1320, height=680, save_eps=True, save_png=True,
                     save_html=True, open_browser=True, save_mp4=False, save_final=False):
         """
-        Helper function to save figure as html file.
+        Save a Plotly figure as HTML and image files.
 
-        Args:
-            fig (plotly figure): figure object.
-            name (str): name of html file.
-            path (str): folder for saving file.
-            remove_margins (bool, optional): remove white margins around EPS figure.
-            width (int, optional): width of figures to be saved.
-            height (int, optional): height of figures to be saved.
-            save_eps (bool, optional): save image as EPS file.
-            save_png (bool, optional): save image as PNG file.
-            save_html (bool, optional): save image as html file.
-            open_browser (bool, optional): open figure in the browse.
-            save_mp4 (bool, optional): save video as MP4 file.
-            save_final (bool, optional): whether to save the "good" final figure.
+        The ``name`` argument may include subdirectories, for example
+        ``kp_threshold_sensitivity/threshold_05pct/my_figure``. Any missing
+        output folders are created automatically.
         """
         # disable mathjax globally for Kaleido
         pio.kaleido.scope.mathjax = None
-        # build path
-        path = os.path.join(common.get_configs("output"))
-        if not os.path.exists(path):
-            os.makedirs(path)
 
-        # build path for final figure
-        path_final = self.folder_figures
-        if save_final and not os.path.exists(path_final):
-            os.makedirs(path_final)
+        output_root = os.path.join(common.get_configs("output"))
+        final_root = self.folder_figures
+        os.makedirs(output_root, exist_ok=True)
+        if save_final:
+            os.makedirs(final_root, exist_ok=True)
 
-        # limit name to max 200 char (for Windows)
-        if len(path) + len(name) > 195 or len(path_final) + len(name) > 195:
-            name = name[:200 - len(path) - 5]
+        # Keep only safe path components while preserving intentional folders.
+        name = str(name).replace("\\", os.sep).replace("/", os.sep)
+        name = os.path.normpath(name)
+        if name.startswith("..") or os.path.isabs(name):
+            raise ValueError(f"Figure name must be a relative path, got: {name}")
+
+        output_base = os.path.join(output_root, name)
+        final_base = os.path.join(final_root, name)
+        os.makedirs(os.path.dirname(output_base), exist_ok=True)
+        if save_final:
+            os.makedirs(os.path.dirname(final_base), exist_ok=True)
+
+        # Limit only the file stem when paths become too long.
+        output_dir = os.path.dirname(output_base)
+        final_dir = os.path.dirname(final_base)
+        stem = os.path.basename(output_base)
+        max_dir_len = max(len(output_dir), len(final_dir))
+        if max_dir_len + len(stem) > 195:
+            safe_len = max(20, 190 - max_dir_len)
+            stem = stem[:safe_len]
+            output_base = os.path.join(output_dir, stem)
+            final_base = os.path.join(final_dir, stem)
 
         # save as html
         if save_html:
+            output_html = output_base + '.html'
             if open_browser:
-                # open in browser
-                py.offline.plot(fig, filename=os.path.join(path, name + '.html'))
-                # also save the final figure
-                if save_final:
-                    py.offline.plot(fig, filename=os.path.join(path_final, name + '.html'), auto_open=False)
+                py.offline.plot(fig, filename=output_html)
             else:
-                # do not open in browser
-                py.offline.plot(fig, filename=os.path.join(path, name + '.html'), auto_open=False)
-                # also save the final figure
-                if save_final:
-                    py.offline.plot(fig, filename=os.path.join(path_final, name + '.html'), auto_open=False)
+                py.offline.plot(fig, filename=output_html, auto_open=False)
+            logger.info(f"Saved figure: {output_html}")
+
+            if save_final:
+                final_html = final_base + '.html'
+                py.offline.plot(fig, filename=final_html, auto_open=False)
+                logger.info(f"Saved figure: {final_html}")
 
         # remove white margins
         if remove_margins:
@@ -402,11 +482,14 @@ class HMD_helper:
         # save as eps
         if save_eps:
             try:
-                fig.write_image(os.path.join(path, name + '.eps'), width=width, height=height)
+                output_eps = output_base + '.eps'
+                fig.write_image(output_eps, width=width, height=height)
+                logger.info(f"Saved figure: {output_eps}")
 
-                # also save the final figure
                 if save_final:
-                    fig.write_image(os.path.join(path_final, name + '.eps'), width=width, height=height)
+                    final_eps = final_base + '.eps'
+                    fig.write_image(final_eps, width=width, height=height)
+                    logger.info(f"Saved figure: {final_eps}")
             except Exception as exc:
                 logger.warning(
                     f"Skipping EPS export for '{name}' because Plotly/Kaleido could not create the EPS file: {exc}"
@@ -414,15 +497,30 @@ class HMD_helper:
 
         # save as png
         if save_png:
-            fig.write_image(os.path.join(path, name + '.png'), width=width, height=height)
+            try:
+                output_png = output_base + '.png'
+                fig.write_image(output_png, width=width, height=height)
+                logger.info(f"Saved figure: {output_png}")
 
-            # also save the final figure
-            if save_final:
-                fig.write_image(os.path.join(path_final, name + '.png'), width=width, height=height)
+                if save_final:
+                    final_png = final_base + '.png'
+                    fig.write_image(final_png, width=width, height=height)
+                    logger.info(f"Saved figure: {final_png}")
+            except Exception as exc:
+                logger.warning(
+                    f"Skipping PNG export for '{name}' because Plotly/Kaleido could not create the PNG file: {exc}"
+                )
 
         # save as mp4
         if save_mp4:
-            fig.write_image(os.path.join(path, name + '.mp4'), width=width, height=height)
+            try:
+                output_mp4 = output_base + '.mp4'
+                fig.write_image(output_mp4, width=width, height=height)
+                logger.info(f"Saved figure: {output_mp4}")
+            except Exception as exc:
+                logger.warning(
+                    f"Skipping MP4 export for '{name}' because Plotly/Kaleido could not create the MP4 file: {exc}"
+                )
 
     def plot_kp(self, df, y: list, y_legend_kp=None, x=None, events=None, events_width=1,
                 events_dash='dot', events_colour='black', events_annotations_font_size=20,
@@ -905,12 +1003,22 @@ class HMD_helper:
                     signal_1=comp['signal_1'], signal_2=comp['signal_2'], paired=comp['paired']
                 )  # type: ignore
 
-                # Save csv
-                # TODO: rounding to 2 is hardcoded and wrong?
+                # Save csv. Keep nested plot output folders intact when name_file
+                # contains a subdirectory, for example:
+                #   kp_threshold_sensitivity/threshold_05pct/all_videos_...
+                # The statistics file is then saved as:
+                #   _output/statistics/kp_threshold_sensitivity/threshold_05pct/video_2_all_videos_....csv
+                # instead of accidentally creating a directory called
+                #   video_2_kp_threshold_sensitivity/...
                 times_csv = [round(i * resolution, 2) for i in range(len(comp['signal_1']))]
+                name_dir = os.path.dirname(name_file)
+                name_base = os.path.basename(name_file)
+                stats_name_file = f"{comp['label']}_{name_base}.csv"
+                if name_dir:
+                    stats_name_file = os.path.join(name_dir, stats_name_file)
                 self.save_stats_csv(t=times_csv,
                                     p_values=p_vals,
-                                    name_file=f"{comp['label']}_{name_file}.csv")
+                                    name_file=stats_name_file)
 
                 if any(sig):
                     xs, ys = [], []
@@ -971,16 +1079,22 @@ class HMD_helper:
         Args:
             t (list): list of time slices.
             p_values (list): list of p values.
-            name_file (str): name of file.
+            name_file (str): name of file. This may include a relative
+                subdirectory, for example
+                ``kp_threshold_sensitivity/threshold_05pct/file.csv``.
         """
         path = os.path.join(common.get_configs("output"), self.folder_stats)  # where to save csv
-        # build path
-        if not os.path.exists(path):
-            os.makedirs(path)
         df = pd.DataFrame(columns=['t', 'p-value'])  # dataframe to save to csv
         df['t'] = t
         df['p-value'] = p_values
-        df.to_csv(os.path.join(path, name_file))
+
+        out_path = os.path.join(path, name_file)
+        out_dir = os.path.dirname(out_path)
+        if out_dir:
+            os.makedirs(out_dir, exist_ok=True)
+
+        df.to_csv(out_path, index=False)
+        logger.info(f"Saved statistical test CSV: {out_path}")
 
     @staticmethod
     def draw_events(fig, yaxis_range, events, events_width, events_dash, events_colour,
@@ -1229,7 +1343,8 @@ class HMD_helper:
     def plot_column(self, mapping, column_name="TriggerValueRight", parameter=None, parameter_value=None,
                     additional_parameter=None, additional_parameter_value=None,
                     compare_trial="video_1", xaxis_title=None, yaxis_title=None, xaxis_range=None,
-                    yaxis_range=[0, 100], margin=None, name=None):
+                    yaxis_range=[0, 100], margin=None, name=None,
+                    trigger_threshold=0.05, output_subdir=None, save_final=True):
         """
         Generate a comparison plot of keypress data (or other time-series columns) and subjective slider ratings
         across multiple video trials relative to a test/reference condition.
@@ -1248,6 +1363,13 @@ class HMD_helper:
             xaxis_range (list, optional): x-axis [min, max] limits for the plot.
             yaxis_range (list, optional): y-axis [min, max] limits for the plot.
             margin (dict, optional): Custom plot margin dictionary.
+            trigger_threshold (float, optional): Trigger values strictly greater
+                than this threshold are coded as pressed. The default, 0.05,
+                is used for pressure-sensitive trigger data.
+            output_subdir (str, optional): Relative subdirectory inside the
+                output and figures folders where the plot should be saved.
+            save_final (bool, optional): Whether to also save a copy in the
+                configured figures folder.
         """
 
         # make yaxis_range mutable if it's a tuple
@@ -1294,9 +1416,14 @@ class HMD_helper:
             mapping=mapping_filtered
         )
 
-        # Read matrix and extract time-series for the test trial
+        # Read matrix, threshold pressure-sensitive trigger values, and extract
+        # the binary pressed-state time series for the reference trial.
         test_raw_df = pd.read_csv(test_output_csv)
-        test_matrix = extra_class.extract_time_series_values(test_raw_df)
+        if column_name == "TriggerValueRight":
+            test_raw_df_for_analysis = self._threshold_trigger_matrix(test_raw_df, trigger_threshold)
+        else:
+            test_raw_df_for_analysis = test_raw_df
+        test_matrix = extra_class.extract_time_series_values(test_raw_df_for_analysis)
 
         # === Loop through each trial (including reference) ===
         for video in plot_videos:
@@ -1317,13 +1444,19 @@ class HMD_helper:
                 mapping=mapping_filtered
             )
 
-            # Read and process the trigger matrix to extract time series for this trial
+            # Read and process the trigger matrix to extract time series for this trial.
+            # For pressure-sensitive trigger data, convert each participant-time bin
+            # to 1 when any value exceeds the threshold and 0 otherwise.
             trial_raw_df = pd.read_csv(trial_output_csv)
-            trial_matrix = extra_class.extract_time_series_values(trial_raw_df)
+            if column_name == "TriggerValueRight":
+                trial_raw_df_for_analysis = self._threshold_trigger_matrix(trial_raw_df, trigger_threshold)
+            else:
+                trial_raw_df_for_analysis = trial_raw_df
+            trial_matrix = extra_class.extract_time_series_values(trial_raw_df_for_analysis)
 
-            # Compute participant-averaged time series (by timestamp) for this trial
+            # Compute participant-averaged pressed-state time series by timestamp.
             avg_df = extra_class.average_dataframe_vectors_with_timestamp(
-                trial_raw_df,
+                trial_raw_df_for_analysis,
                 column_name=f"{column_name}"
             )
 
@@ -1426,6 +1559,9 @@ class HMD_helper:
                 custom_line_dashes.append("solid")
 
         # === Generate the main plot (delegated to plot_kp helper) ===
+        base_name = self._short_kp_file_stem(name)
+        name_file = os.path.join(output_subdir, base_name) if output_subdir else base_name
+
         self.plot_kp(
             df=combined_df,
             y=all_labels,
@@ -1436,7 +1572,7 @@ class HMD_helper:
             yaxis_title=yaxis_title,  # type: ignore
             xaxis_title_offset=-0.04,  # type: ignore
             yaxis_title_offset=0.18,   # type: ignore
-            name_file=f"all_videos_kp_slider_plot_{name}",
+            name_file=name_file,
             show_text_labels=True,
             pretty_text=True,
             events=events,
@@ -1459,7 +1595,7 @@ class HMD_helper:
             fig_save_width=1470,
             fig_save_height=850,
             save_file=True,
-            save_final=True,
+            save_final=save_final,
             custom_line_dashes=custom_line_dashes,
             flag_trigger=True,
             margin=margin,
@@ -1467,7 +1603,8 @@ class HMD_helper:
         )
 
     def heat_plot(self, folder_path: str, mapping_df: pd.DataFrame, relation: str = "ratio",
-                  colorscale: str = "Viridis", summary_func=np.mean):
+                  colorscale: str = "Viridis", summary_func=np.mean,
+                  trigger_threshold: float = 0.05):
         """
         Compute summary values per video CSV, rename axes using `mapping_df`,
         and show a Plotly heatmap of pairwise relations (no numbers, no colorbar).
@@ -1490,8 +1627,14 @@ class HMD_helper:
         colorscale : str
             Plotly colorscale name.
         summary_func : callable
-            Aggregator applied to all numeric values per condition (default: np.mean).
-            (Used for `avg_trigger`.)
+            Aggregator applied to binary trigger-pressed states per condition
+            (default: np.mean). With the default, `avg_trigger` is the
+            proportion of analysed participant-time bins for which the trigger
+            value was above `trigger_threshold`.
+        trigger_threshold : float
+            Trigger values strictly greater than this threshold are counted as
+            pressed. The default of 0.05 is used because the trigger was
+            pressure-sensitive and light contact could produce small values.
 
         Returns
         -------
@@ -1546,9 +1689,14 @@ class HMD_helper:
             m = re.search(r"(video_\d+)\.csv$", base, flags=re.IGNORECASE)
             return m.group(1) if m else base
 
-        # ---- Collect all trigger values per condition label ----
-        # per_label_values[label] = np.array([... trigger values from all files ...])
+        # ---- Collect trigger-pressed states per condition label ----
+        # per_label_values[label] stores one binary value per participant-time bin:
+        # 1 = at least one trigger value in that bin was above trigger_threshold;
+        # 0 = no trigger value in that bin was above trigger_threshold.
+        # This makes avg_trigger the proportion of analysed time marked as unsafe,
+        # rather than the mean trigger pressure/intensity.
         per_label_values: Dict[str, np.ndarray] = {}
+        per_label_raw_values: Dict[str, np.ndarray] = {}
 
         for file_path in file_list:
             video_id = _extract_video_id(file_path)
@@ -1597,42 +1745,54 @@ class HMD_helper:
             # Drop Timestamp before aggregating values
             ts_filtered = ts_filtered.drop(columns=["Timestamp"], errors="ignore")
 
-            # Parse list-like cells and collect finite numerics
-            all_values = []
+            # Parse list-like cells. For the manuscript's primary perceived-risk
+            # measure, each participant-time bin is converted into a binary state:
+            # pressed = any trigger value in that bin is above the threshold.
+            pressed_states = []
+            raw_values = []
             for col in ts_filtered.columns:
                 for val in ts_filtered[col]:
-                    try:
-                        nums = ast.literal_eval(val) if isinstance(val, str) else val
-                        if isinstance(nums, list):
-                            all_values.extend(
-                                float(x) for x in nums
-                                if isinstance(x, (int, float)) and np.isfinite(x)
-                            )
-                    except Exception:
-                        # skip unparseable cells
-                        continue
+                    nums = self._extract_numeric_values_from_cell(val)
+                    raw_values.extend(nums)
+                    pressed_states.append(1.0 if any(x > trigger_threshold for x in nums) else 0.0)
 
-            if not all_values:
-                logger.warning(f"⚠️ No numeric values found (after cutoff) in {file_path}; skipping.")
+            if not pressed_states:
+                logger.warning(f"⚠️ No analysable trigger bins found (after cutoff) in {file_path}; skipping.")
             else:
-                vals = np.array(all_values, dtype=float)
+                vals = np.array(pressed_states, dtype=float)
+                raw_vals = np.array(raw_values, dtype=float) if raw_values else np.array([], dtype=float)
                 if label not in per_label_values:
                     per_label_values[label] = vals
+                    per_label_raw_values[label] = raw_vals
                 else:
                     per_label_values[label] = np.concatenate([per_label_values[label], vals])
+                    per_label_raw_values[label] = np.concatenate([per_label_raw_values[label], raw_vals])
 
         if not per_label_values:
             raise ValueError("No valid numeric data found in videos (after applying time cutoffs).")
 
-        # ---- Build trigger summary (mean + SD + n) ----
+        # ---- Build trigger summary (unsafe proportion + SD + n) ----
         trigger_summary_df = (
             pd.DataFrame(
                 [
                     {
                         "label": label,
+                        # Proportion of analysed participant-time bins marked unsafe.
                         "avg_trigger": float(summary_func(vals)),
                         "sd_trigger": float(np.std(vals, ddof=1)) if len(vals) > 1 else np.nan,
                         "n_samples": int(len(vals)),
+                        "n_trigger_bins": int(len(vals)),
+                        "n_raw_trigger_samples": int(len(per_label_raw_values.get(label, []))),
+                        # Kept for diagnostics only; this is no longer the primary risk measure.
+                        "mean_trigger_intensity": (
+                            float(np.mean(per_label_raw_values[label]))
+                            if len(per_label_raw_values.get(label, [])) > 0 else np.nan
+                        ),
+                        "sd_trigger_intensity": (
+                            float(np.std(per_label_raw_values[label], ddof=1))
+                            if len(per_label_raw_values.get(label, [])) > 1 else np.nan
+                        ),
+                        "trigger_threshold": float(trigger_threshold),
                     }
                     for label, vals in per_label_values.items()
                 ]
@@ -1649,7 +1809,7 @@ class HMD_helper:
         # ---- Save trigger_summary.csv ----
         trigger_summary_path = os.path.join(folder_path, "trigger_summary.csv")
         trigger_summary_df.to_csv(trigger_summary_path, index=False)
-        logger.info(f"Saved trigger summary (mean + SD) to: {trigger_summary_path}")
+        logger.info(f"Saved trigger summary (unsafe proportion + SD) to: {trigger_summary_path}")
 
         # ---- Build pairwise relation matrix ----
         labels = list(averages.keys())
@@ -1740,8 +1900,30 @@ class HMD_helper:
                 out.append(float(item))
         return out
 
-    def _compute_trial_level_trigger_summary(self, output_dir, mapping_df):
-        """Build participant x video trigger summaries from exported participant trigger matrices."""
+    @classmethod
+    def _trigger_pressed_state(cls, value, threshold=0.05):
+        """Return 1 when any finite trigger value in a matrix cell is above threshold."""
+        values = cls._extract_numeric_values_from_cell(value)
+        return 1.0 if any(item > threshold for item in values) else 0.0
+
+    @classmethod
+    def _threshold_trigger_matrix(cls, df, threshold=0.05):
+        """Convert list-valued trigger matrix cells into binary pressed-state cells.
+
+        Each non-timestamp cell becomes ``[1.0]`` when any finite trigger value in
+        that participant-time bin is greater than ``threshold`` and ``[0.0]``
+        otherwise. Keeping a list in each cell preserves compatibility with the
+        existing averaging and time-series helper functions.
+        """
+        out = df.copy()
+        for col in out.columns:
+            if col == "Timestamp":
+                continue
+            out[col] = out[col].apply(lambda value: [cls._trigger_pressed_state(value, threshold)])
+        return out
+
+    def _compute_trial_level_trigger_summary(self, trigger_matrices_dir, mapping_df, trigger_threshold: float = 0.05):
+        """Build participant x video unsafe-time summaries from exported trigger matrices."""
         mapping_info = mapping_df.copy()
         for col in ["video_id", "condition_name"]:
             mapping_info[col] = mapping_info[col].astype(str)
@@ -1750,7 +1932,7 @@ class HMD_helper:
                 mapping_info[col] = pd.to_numeric(mapping_info[col], errors="coerce")
 
         records = []
-        pattern = os.path.join(output_dir, "participant_TriggerValueRight_video_*.csv")
+        pattern = os.path.join(trigger_matrices_dir, "participant_TriggerValueRight_video_*.csv")
         for fp in sorted(glob.glob(pattern)):
             base = os.path.basename(fp)
             m = re.search(r"(video_\d+)\.csv$", base, flags=re.IGNORECASE)
@@ -1783,26 +1965,47 @@ class HMD_helper:
                 if not pm:
                     continue
                 participant = int(pm.group(1))
-                values = []
+                raw_values = []
+                pressed_states = []
                 for cell in df[participant_col].tolist():
-                    values.extend(self._extract_numeric_values_from_cell(cell))
-                if not values:
-                    mean_trigger = np.nan
-                    sd_trigger = np.nan
-                    n_samples = 0
+                    cell_values = self._extract_numeric_values_from_cell(cell)
+                    raw_values.extend(cell_values)
+                    pressed_states.append(1.0 if any(v > trigger_threshold for v in cell_values) else 0.0)
+
+                if not pressed_states:
+                    unsafe_prop = np.nan
+                    sd_unsafe_prop = np.nan
+                    n_bins = 0
                 else:
-                    arr = np.asarray(values, dtype=float)
-                    mean_trigger = float(np.mean(arr))
-                    sd_trigger = float(np.std(arr, ddof=1)) if len(arr) > 1 else np.nan
-                    n_samples = int(len(arr))
+                    state_arr = np.asarray(pressed_states, dtype=float)
+                    unsafe_prop = float(np.mean(state_arr))
+                    sd_unsafe_prop = float(np.std(state_arr, ddof=1)) if len(state_arr) > 1 else np.nan
+                    n_bins = int(len(state_arr))
+
+                if raw_values:
+                    raw_arr = np.asarray(raw_values, dtype=float)
+                    mean_trigger_intensity = float(np.mean(raw_arr))
+                    sd_trigger_intensity = float(np.std(raw_arr, ddof=1)) if len(raw_arr) > 1 else np.nan
+                    n_raw_samples = int(len(raw_arr))
+                else:
+                    mean_trigger_intensity = np.nan
+                    sd_trigger_intensity = np.nan
+                    n_raw_samples = 0
 
                 records.append({
                     "participant": participant,
                     "video_id": video_id,
                     "condition_name": str(row0["condition_name"]),
-                    "avg_trigger": mean_trigger,
-                    "sd_trigger": sd_trigger,
-                    "n_trigger_samples": n_samples,
+                    # avg_trigger is retained as the public column used downstream,
+                    # but it now means unsafe-time proportion, not mean trigger intensity.
+                    "avg_trigger": unsafe_prop,
+                    "sd_trigger": sd_unsafe_prop,
+                    "n_trigger_samples": n_bins,
+                    "n_trigger_bins": n_bins,
+                    "n_raw_trigger_samples": n_raw_samples,
+                    "mean_trigger_intensity": mean_trigger_intensity,
+                    "sd_trigger_intensity": sd_trigger_intensity,
+                    "trigger_threshold": float(trigger_threshold),
                 })
 
         if not records:
@@ -1838,12 +2041,12 @@ class HMD_helper:
         mapping = {
             "Intercept": "Intercept",
             "C(yielding)[T.1]": "Yielding",
-            "C(eHMIOn)[T.1]": "eHMI on",
-            "C(camera)[T.1]": "Other pedestrian not visible",
+            "C(eHMIOn)[T.1]": "eHMI",
+            "C(camera)[T.1]": "Co-pedestrian not visible",
             "distPed_m": "Distance (m)",
-            "C(yielding)[T.1]:C(eHMIOn)[T.1]": "Yielding × eHMI on",
+            "C(yielding)[T.1]:C(eHMIOn)[T.1]": "Yielding × eHMI",
             "C(yielding)[T.1]:C(camera)[T.1]": "Yielding × other pedestrian not visible",
-            "C(eHMIOn)[T.1]:C(camera)[T.1]": "eHMI on × other pedestrian not visible",
+            "C(eHMIOn)[T.1]:C(camera)[T.1]": "eHMI × co-pedestrian not visible",
             "Group Var": "Random intercept variance",
         }
         return mapping.get(term, term)
@@ -1932,8 +2135,10 @@ class HMD_helper:
         n_participants: int = 50,
         response_col_index: int = 2,
         save_combined: bool = True,
+        trigger_threshold: float = 0.05,
+        trigger_matrices_dir: Optional[str] = None,
     ):
-        """Create trial-level and condition-level tables merging trigger risk with Q1/Q2/Q3."""
+        """Create trial-level and condition-level tables merging thresholded trigger risk with Q1/Q2/Q3."""
         trigger_df = pd.read_csv(trigger_summary_csv)
         if "label" in trigger_df.columns and "condition_name" not in trigger_df.columns:
             trigger_df = trigger_df.rename(columns={"label": "condition_name"})
@@ -1988,11 +2193,20 @@ class HMD_helper:
             ratings_df[q_col] = pd.to_numeric(ratings_df[q_col], errors="coerce")
 
         output_dir = os.path.dirname(trigger_summary_csv) or self.output_folder
-        participant_trigger_df = self._compute_trial_level_trigger_summary(output_dir, map_df)
+        trigger_matrices_dir = trigger_matrices_dir or output_dir
+        participant_trigger_df = self._compute_trial_level_trigger_summary(
+            trigger_matrices_dir,
+            map_df,
+            trigger_threshold=trigger_threshold,
+        )
 
         trial_df = ratings_df.merge(map_df, on="video_id", how="left")
         trial_df = trial_df.merge(
-            participant_trigger_df[["participant", "video_id", "avg_trigger", "sd_trigger", "n_trigger_samples"]],
+            participant_trigger_df[[
+                "participant", "video_id", "avg_trigger", "sd_trigger", "n_trigger_samples",
+                "n_trigger_bins", "n_raw_trigger_samples", "mean_trigger_intensity",
+                "sd_trigger_intensity", "trigger_threshold"
+            ]],
             on=["participant", "video_id"],
             how="left",
         )
@@ -2008,6 +2222,8 @@ class HMD_helper:
         trial_df = trial_df.drop(columns=["avg_trigger_condition", "sd_trigger_condition"], errors="ignore")
         trial_df["distPed_m"] = self._distance_series_to_meters(trial_df["distPed"])
         trial_df["distPed"] = trial_df["distPed_m"]
+        # crossing_risk is the percentage of analysed participant-time bins for
+        # which the trigger was pressed (> trigger_threshold), matching the paper.
         trial_df["crossing_risk"] = pd.to_numeric(trial_df["avg_trigger"], errors="coerce") * 100.0
         trial_df["crossing_risk_sd"] = pd.to_numeric(trial_df["sd_trigger"], errors="coerce") * 100.0
 
@@ -2024,6 +2240,8 @@ class HMD_helper:
                 mean_Q3=("Q3", "mean"),
                 std_Q3=("Q3", "std"),
                 n_trials=("Q2", "size"),
+                mean_trigger_intensity=("mean_trigger_intensity", "mean"),
+                trigger_threshold=("trigger_threshold", "first"),
             )
             .sort_values("condition_name")
             .reset_index(drop=True)
@@ -2040,6 +2258,173 @@ class HMD_helper:
 
         return trial_df, condition_df
 
+
+    @staticmethod
+    def _trigger_threshold_label(threshold: float) -> str:
+        """Create a filesystem-safe label for a trigger threshold."""
+        return "threshold_{:03d}pct".format(int(round(float(threshold) * 100)))
+
+    def run_trigger_threshold_sensitivity(
+        self,
+        trigger_thresholds,
+        trigger_matrices_dir: str,
+        responses_root: str,
+        mapping_df: pd.DataFrame,
+        output_dir: Optional[str] = None,
+        n_participants: int = 50,
+        response_col_index: int = 2,
+    ) -> Dict[str, pd.DataFrame]:
+        """Run crossing-risk sensitivity checks for several trigger thresholds.
+
+        The primary manuscript definition treats the pressure-sensitive trigger as
+        a binary state: values greater than the threshold are coded as unsafe/risk
+        state 1, and values at or below the threshold are coded as 0. This method
+        repeats that calculation for multiple thresholds so the effect of the
+        chosen tolerance can be inspected.
+
+        Parameters
+        ----------
+        trigger_thresholds : iterable
+            Trigger thresholds on the 0..1 scale, for example [0.05, 0.10, 0.50].
+        trigger_matrices_dir : str
+            Directory containing participant_TriggerValueRight_video_*.csv files.
+        responses_root : str
+            Directory containing Participant_* folders with trial-wise Q1/Q2/Q3 data.
+        mapping_df : pd.DataFrame
+            Scenario mapping table.
+        output_dir : str, optional
+            Root directory where threshold-specific output folders are written.
+        n_participants : int
+            Maximum participant id to scan when reading trial-wise responses.
+        response_col_index : int
+            Index of Q2 in the participant response CSVs; Q1 and Q3 are inferred
+            as the neighbouring columns, matching load_and_average_Q2.
+
+        Returns
+        -------
+        dict
+            A dictionary with combined summary, model-term, and condition-level
+            tables for all thresholds.
+        """
+        output_dir = output_dir or os.path.join(self.output_folder, "threshold_sensitivity")
+        os.makedirs(output_dir, exist_ok=True)
+
+        threshold_values = [float(x) for x in trigger_thresholds]
+        summary_records = []
+        model_tables = []
+        condition_tables = []
+
+        for threshold in threshold_values:
+            threshold_label = self._trigger_threshold_label(threshold)
+            threshold_dir = os.path.join(output_dir, threshold_label)
+            stats_dir = os.path.join(threshold_dir, "statistics")
+            os.makedirs(threshold_dir, exist_ok=True)
+            os.makedirs(stats_dir, exist_ok=True)
+
+            logger.info(
+                "Running trigger-threshold sensitivity for {} ({:.2f}).",
+                threshold_label,
+                threshold,
+            )
+
+            participant_trigger_df = self._compute_trial_level_trigger_summary(
+                trigger_matrices_dir,
+                mapping_df,
+                trigger_threshold=threshold,
+            )
+            participant_trigger_df.to_csv(
+                os.path.join(threshold_dir, "participant_level_trigger_summary.csv"),
+                index=False,
+            )
+
+            trigger_summary_df = (
+                participant_trigger_df
+                .groupby("condition_name", as_index=False)
+                .agg(
+                    avg_trigger=("avg_trigger", "mean"),
+                    sd_trigger=("avg_trigger", "std"),
+                    n_trials=("avg_trigger", "size"),
+                    n_trigger_bins=("n_trigger_bins", "sum"),
+                    n_raw_trigger_samples=("n_raw_trigger_samples", "sum"),
+                    mean_trigger_intensity=("mean_trigger_intensity", "mean"),
+                    sd_trigger_intensity=("sd_trigger_intensity", "mean"),
+                    trigger_threshold=("trigger_threshold", "first"),
+                )
+                .sort_values("condition_name")
+                .reset_index(drop=True)
+            )
+            trigger_summary_path = os.path.join(threshold_dir, "trigger_summary.csv")
+            trigger_summary_df.to_csv(trigger_summary_path, index=False)
+
+            trial_df, condition_df = self.load_and_average_Q2(
+                trigger_summary_csv=trigger_summary_path,
+                responses_root=responses_root,
+                mapping_df=mapping_df,
+                n_participants=n_participants,
+                response_col_index=response_col_index,
+                save_combined=True,
+                trigger_threshold=threshold,
+                trigger_matrices_dir=trigger_matrices_dir,
+            )
+            trial_df["threshold"] = threshold
+            trial_df["threshold_label"] = threshold_label
+            condition_df["threshold"] = threshold
+            condition_df["threshold_label"] = threshold_label
+            condition_tables.append(condition_df)
+
+            risk = pd.to_numeric(trial_df["crossing_risk"], errors="coerce").dropna()
+            summary_records.append({
+                "threshold": threshold,
+                "threshold_label": threshold_label,
+                "n_trials": int(risk.size),
+                "n_participants": int(trial_df["participant"].nunique()) if "participant" in trial_df.columns else np.nan,
+                "mean_crossing_risk": float(risk.mean()) if not risk.empty else np.nan,
+                "sd_crossing_risk": float(risk.std(ddof=1)) if risk.size > 1 else np.nan,
+                "median_crossing_risk": float(risk.median()) if not risk.empty else np.nan,
+                "min_crossing_risk": float(risk.min()) if not risk.empty else np.nan,
+                "max_crossing_risk": float(risk.max()) if not risk.empty else np.nan,
+                "p05_crossing_risk": float(risk.quantile(0.05)) if not risk.empty else np.nan,
+                "p95_crossing_risk": float(risk.quantile(0.95)) if not risk.empty else np.nan,
+                "zero_risk_trial_pct": float((risk == 0).mean() * 100.0) if not risk.empty else np.nan,
+            })
+
+            try:
+                _, coef_df = self._run_mixed_effects_model(trial_df, "crossing_risk", stats_dir)
+                coef_df = coef_df.copy()
+                coef_df["threshold"] = threshold
+                coef_df["threshold_label"] = threshold_label
+                model_tables.append(coef_df)
+            except Exception as exc:
+                logger.warning(
+                    "Mixed-effects model failed for {}: {}",
+                    threshold_label,
+                    exc,
+                )
+
+        summary_df = pd.DataFrame(summary_records)
+        model_terms_df = pd.concat(model_tables, ignore_index=True) if model_tables else pd.DataFrame()
+        condition_sensitivity_df = (
+            pd.concat(condition_tables, ignore_index=True) if condition_tables else pd.DataFrame()
+        )
+
+        summary_path = os.path.join(output_dir, "threshold_sensitivity_summary.csv")
+        model_path = os.path.join(output_dir, "threshold_sensitivity_model_terms.csv")
+        condition_path = os.path.join(output_dir, "threshold_sensitivity_condition_means.csv")
+
+        summary_df.to_csv(summary_path, index=False)
+        model_terms_df.to_csv(model_path, index=False)
+        condition_sensitivity_df.to_csv(condition_path, index=False)
+
+        logger.info("Saved threshold sensitivity summary to: {}", summary_path)
+        logger.info("Saved threshold sensitivity model terms to: {}", model_path)
+        logger.info("Saved threshold sensitivity condition means to: {}", condition_path)
+
+        return {
+            "summary": summary_df,
+            "model_terms": model_terms_df,
+            "condition_means": condition_sensitivity_df,
+        }
+
     def analyze_and_plot_distance_effect_plotly(self, mapping_df, condition_df, out_dir=None, trial_df=None):
         """
         Merge condition-level averages with distance, yielding, eHMI, and camera,
@@ -2052,8 +2437,8 @@ class HMD_helper:
              'mean_Q1', 'std_Q1',
              'mean_Q2', 'std_Q2',
              'mean_Q3', 'std_Q3']
-            - avg_trigger: mean proportion of time trigger was held (unsafe) per condition.
-            - std_trigger: SD of that trigger-based measure per condition.
+            - avg_trigger: mean proportion of analysed time bins where the trigger was pressed.
+            - std_trigger: SD of that thresholded trigger-based measure per condition.
             - mean_Q1/Q2/Q3: mean responses per condition (0–100).
             - std_Q1/Q2/Q3: SD of Q1/Q2/Q3 per condition.
 
@@ -2108,7 +2493,8 @@ class HMD_helper:
         cond_plot_df["distPed_m"] = self._distance_series_to_meters(cond_plot_df["distPed"])
         cond_plot_df["distPed"] = cond_plot_df["distPed_m"]
 
-        # Scale trigger to 0–100: "Mean perceived crossing risk (0–100)"
+        # Scale thresholded unsafe-time proportion to 0–100:
+        # "Mean perceived crossing risk (0–100)".
         cond_plot_df["crossing_risk"] = cond_plot_df["avg_trigger"] * 100.0
         cond_plot_df["crossing_risk_sd"] = cond_plot_df["std_trigger"] * 100.0
 
@@ -2118,9 +2504,9 @@ class HMD_helper:
         )
 
         # Label maps for binary factors (0/1 → text)
-        label_map_yield = {0: "Not yielding", 1: "Yielding"}
-        label_map_ehmi = {0: "eHMI off", 1: "eHMI on"}
-        label_map_cam = {0: "Can see other person", 1: "Cannot see other person"}
+        label_map_yield = {0: "Non-yielding", 1: "Yielding"}
+        label_map_ehmi = {0: "No eHMI", 1: "eHMI"}
+        label_map_cam = {0: "Co-pedestrian visible", 1: "Co-pedestrian not visible"}
 
         cond_plot_df["yielding_label"] = cond_plot_df["yielding"].map(label_map_yield)
         cond_plot_df["eHMI_label"] = cond_plot_df["eHMIOn"].map(label_map_ehmi)
@@ -2178,19 +2564,19 @@ class HMD_helper:
             "Q3_mean": "Q3 (0–100)",
             "Q3_sd": "SD of Q3 (0–100)",
 
-            "camera_label": "Camera",
-            "yielding_label": "Yielding",
-            "eHMI_label": "eHMI",
-            "context": "Context (Y = yielding, H = eHMI, C = camera)",
+            "camera_label": "Co-pedestrian visibility",
+            "yielding_label": "AV behaviour",
+            "eHMI_label": "eHMI status",
+            "context": "Context (AV behaviour, eHMI status, co-pedestrian visibility)",
             "delta": "Near–far difference (0–100)",
             "measure": "Measure",
         }
 
         # Category ordering for cleaner facets / legends
         category_orders = {
-            "eHMI_label": ["eHMI off", "eHMI on"],
-            "yielding_label": ["Not yielding", "Yielding"],
-            "camera_label": ["Can see other person", "Cannot see other person"],
+            "eHMI_label": ["No eHMI", "eHMI"],
+            "yielding_label": ["Non-yielding", "Yielding"],
+            "camera_label": ["Co-pedestrian visible", "Co-pedestrian not visible"],
         }
         axis_title_font = dict(size=font_size, family=font_family)
 
@@ -2457,7 +2843,7 @@ class HMD_helper:
         # Context string with on/off text instead of 0/1
         diff_df["context"] = diff_df.apply(
             lambda r: (
-                f"{'Yielding' if r['yielding'] == 1 else 'Non yielding'}, "
+                f"{'Yielding' if r['yielding'] == 1 else 'Non-yielding'}, "
                 f"eHMI {'on' if r['eHMIOn'] == 1 else 'off'}, "
                 f"{'other visible' if int(r['camera']) == 0 else 'other not visible'}"
             ),
@@ -2642,11 +3028,11 @@ class HMD_helper:
             conds = conds.iloc[:max_plots]
 
         def camera_label(cam):
-            return "Can see other person" if cam == 0 else "Cannot see other person"
+            return "Co-pedestrian visible" if cam == 0 else "Co-pedestrian not visible"
 
         # Two-line subplot title, single-line trace label
         def case_title(row):
-            line1 = f"{'Yielding' if row['yielding'] == 1 else 'Non-yielding'}, eHMI {'on' if row['eHMIOn'] == 1 else 'off'}"  # noqa: E501
+            line1 = f"{'Yielding' if row['yielding'] == 1 else 'Non-yielding'}, {'eHMI' if row['eHMIOn'] == 1 else 'No eHMI'}"  # noqa: E501
             line2 = camera_label(int(row['camera']))
             return f"{line1}<br>{line2}"
 
@@ -3047,8 +3433,8 @@ class HMD_helper:
                 y_val = int(sub["yielding"].iloc[0])
 
                 e_val = int(sub["eHMIOn"].iloc[0])
-                yielding_label = "No yielding" if y_val == 0 else "Yes yielding"
-                ehmi_label = "eHMI off" if e_val == 0 else "eHMI on"
+                yielding_label = "Non-yielding" if y_val == 0 else "Yielding"
+                ehmi_label = "No eHMI" if e_val == 0 else "eHMI"
 
                 cond_label = f"{yielding_label}, {ehmi_label}"
 

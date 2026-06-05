@@ -22,6 +22,7 @@ post_experiment_questionnaire = common.get_configs("post_experiment_questionnair
 
 RUN_ADVANCED_STATISTICS = True
 EQUIVALENCE_MARGIN_POINTS = 5.0
+TRIGGER_PRESS_THRESHOLDS = common.get_configs("trigger_threshold")
 
 
 intake_columns_to_plot = [
@@ -104,7 +105,7 @@ def ensure_slider_tables(data_folder: str, mapping_df: pd.DataFrame, output_dir:
             logger.warning(f"Expected slider table was not created: {path}")
 
 
-def run_advanced_statistics(trial_level_df: pd.DataFrame) -> None:
+def run_advanced_statistics(trial_level_df: pd.DataFrame, trigger_threshold: float) -> None:
     """Run the added statistical analyses on top of the existing pipeline output."""
     if not RUN_ADVANCED_STATISTICS:
         logger.info("Advanced statistics disabled.")
@@ -120,12 +121,110 @@ def run_advanced_statistics(trial_level_df: pd.DataFrame) -> None:
     runner.run_all(
         trial_df=trial_level_df,
         equivalence_margin=EQUIVALENCE_MARGIN_POINTS,
+        trigger_threshold=trigger_threshold,
     )
+
+
+def _trigger_threshold_label(trigger_threshold: float) -> str:
+    """Return a compact label such as 05pct, 10pct, or 50pct."""
+    pct = float(trigger_threshold) * 100.0
+    if pct.is_integer():
+        return f"{int(pct):02d}pct"
+    return f"{str(round(pct, 3)).replace('.', 'p')}pct"
+
+
+def _keypress_plot_specs():
+    """Central list of all condition-specific keypress figures."""
+    base_margin = dict(l=120, r=2, t=12, b=12)
+    y_title = "Percentage of trials with trigger key pressed"
+    x_title = "Time, [s]"
+    return [
+        dict(parameter=None, xaxis_range=[0, 18], compare_trial="video_1",
+             xaxis_title=x_title, yaxis_title=y_title,
+             name="all_values_with_yielding", margin=base_margin),
+        dict(parameter=None, xaxis_range=[0, 11], compare_trial="video_21",
+             xaxis_title=x_title, yaxis_title=y_title,
+             name="all_values_without_yielding", margin=base_margin),
+        dict(parameter="eHMIOn", parameter_value=0, xaxis_range=[0, 18], compare_trial="video_1",
+             xaxis_title=x_title, yaxis_title=y_title,
+             name="eHMI_off_yielding", margin=base_margin),
+        dict(parameter="eHMIOn", parameter_value=1, xaxis_range=[0, 18], compare_trial="video_11",
+             xaxis_title=x_title, yaxis_title=y_title,
+             name="eHMI_on_yielding", margin=base_margin),
+        dict(parameter="eHMIOn", parameter_value=0, xaxis_range=[0, 11], compare_trial="video_31",
+             xaxis_title=x_title, yaxis_title=y_title,
+             name="eHMI_off_non-yielding", margin=base_margin),
+        dict(parameter="eHMIOn", parameter_value=1, xaxis_range=[0, 11], compare_trial="video_21",
+             xaxis_title=x_title, yaxis_title=y_title,
+             name="eHMI_on_non-yielding", margin=base_margin),
+        dict(parameter="eHMIOn", parameter_value=1, additional_parameter="camera", additional_parameter_value=0,
+             xaxis_range=[0, 11], compare_trial="video_21", xaxis_title=x_title, yaxis_title=y_title,
+             name="first_eHMI_on_non-yielding", margin=base_margin),
+        dict(parameter="eHMIOn", parameter_value=1, additional_parameter="camera", additional_parameter_value=0,
+             xaxis_range=[0, 18], compare_trial="video_11", xaxis_title=x_title, yaxis_title=y_title,
+             name="first_eHMI_on_yielding", margin=base_margin),
+        dict(parameter="eHMIOn", parameter_value=0, additional_parameter="camera", additional_parameter_value=0,
+             xaxis_range=[0, 11], compare_trial="video_31", xaxis_title=x_title, yaxis_title=y_title,
+             name="first_eHMI_off_non-yielding", margin=base_margin),
+        dict(parameter="eHMIOn", parameter_value=0, additional_parameter="camera", additional_parameter_value=0,
+             xaxis_range=[0, 18], compare_trial="video_1", xaxis_title=x_title, yaxis_title=y_title,
+             name="first_eHMI_off_yielding", margin=base_margin),
+        dict(parameter="eHMIOn", parameter_value=1, additional_parameter="camera", additional_parameter_value=1,
+             xaxis_range=[0, 11], compare_trial="video_26", xaxis_title=x_title, yaxis_title=y_title,
+             name="second_eHMI_on_non-yielding", margin=base_margin),
+        dict(parameter="eHMIOn", parameter_value=1, additional_parameter="camera", additional_parameter_value=1,
+             xaxis_range=[0, 18], compare_trial="video_16", xaxis_title=x_title, yaxis_title=y_title,
+             name="second_eHMI_on_yielding", margin=base_margin),
+        dict(parameter="eHMIOn", parameter_value=0, additional_parameter="camera", additional_parameter_value=1,
+             xaxis_range=[0, 11], compare_trial="video_36", xaxis_title=x_title, yaxis_title=y_title,
+             name="second_eHMI_off_non-yielding", margin=base_margin),
+        dict(parameter="eHMIOn", parameter_value=0, additional_parameter="camera", additional_parameter_value=1,
+             xaxis_range=[0, 18], compare_trial="video_6", xaxis_title=x_title, yaxis_title=y_title,
+             name="second_eHMI_off_yielding", margin=base_margin),
+    ]
+
+
+def run_keypress_condition_plots(
+    mapping_df: pd.DataFrame,
+    trigger_threshold: float,
+    output_subdir: str = None,
+    save_final: bool = True,
+) -> None:
+    """Create all keypress figures for one trigger threshold."""
+    logger.info(
+        f"Generating keypress figures with trigger threshold {trigger_threshold:.3f}."
+    )
+    if output_subdir:
+        logger.info(
+            f"Keypress figures will be grouped under subfolder: {output_subdir}"
+        )
+
+    for spec in _keypress_plot_specs():
+        logger.info(
+            f"Creating keypress figure '{spec['name']}' at threshold {trigger_threshold:.3f}."
+        )
+        plot_spec = spec.copy()
+        HMD.plot_column(
+            mapping_df,
+            trigger_threshold=trigger_threshold,
+            output_subdir=output_subdir,
+            save_final=save_final,
+            **plot_spec,
+        )
 
 
 # Execute analysis
 if __name__ == "__main__":
     logger.info("Analysis started.")
+
+    if not TRIGGER_PRESS_THRESHOLDS:
+        raise ValueError("TRIGGER_PRESS_THRESHOLDS must contain at least one threshold.")
+
+    trigger_threshold = float(TRIGGER_PRESS_THRESHOLDS[0])
+    logger.info(
+        f"Using trigger press threshold {trigger_threshold:.3f} "
+        "for the main analysis. All listed thresholds will be used for sensitivity checks."
+    )
 
     logger.info("Preparing cached inputs and outputs.")
     ensure_slider_tables(data_folder, mapping, output_folder)
@@ -160,181 +259,59 @@ if __name__ == "__main__":
     # Read and process data
     HMD.read_slider_data(data_folder, mapping, output_folder)
 
-    # Keypress data for yielding criteria
-    HMD.plot_column(mapping,
-                    parameter=None,
-                    xaxis_range=[0, 18],
-                    compare_trial="video_1",
-                    xaxis_title="Time, [s]",
-                    yaxis_title="Percentage of trials with trigger key pressed",
-                    name="all_values_with_yielding",
-                    margin=dict(l=120, r=2, t=12, b=12))
+    # Keypress figures for the main threshold. These are saved directly in
+    # _output and figures with compact filenames, for example kp_e0_y.html/png.
+    run_keypress_condition_plots(
+        mapping_df=mapping,
+        trigger_threshold=trigger_threshold,
+        output_subdir=None,
+        save_final=True,
+    )
 
-    HMD.plot_column(mapping,
-                    parameter=None,
-                    xaxis_range=[0, 11],
-                    compare_trial="video_21",
-                    xaxis_title="Time, [s]",
-                    yaxis_title="Percentage of trials with trigger key pressed",
-                    name="all_values_without_yielding",
-                    margin=dict(l=120, r=2, t=12, b=12))
-
-    # Keypress data for yielding and eHMI criteria
-    HMD.plot_column(mapping,
-                    parameter="eHMIOn",
-                    parameter_value=0,
-                    xaxis_range=[0, 18],
-                    compare_trial="video_1",
-                    xaxis_title="Time, [s]",
-                    yaxis_title="Percentage of trials with trigger key pressed",
-                    name="eHMI_off_yielding",
-                    margin=dict(l=120, r=2, t=12, b=12))
-
-    HMD.plot_column(mapping,
-                    parameter="eHMIOn",
-                    parameter_value=1,
-                    xaxis_range=[0, 18],
-                    compare_trial="video_11",
-                    xaxis_title="Time, [s]",
-                    yaxis_title="Percentage of trials with trigger key pressed",
-                    name="eHMI_on_yielding",
-                    margin=dict(l=120, r=2, t=12, b=12))
-
-    HMD.plot_column(mapping,
-                    parameter="eHMIOn",
-                    parameter_value=0,
-                    xaxis_range=[0, 11],
-                    compare_trial="video_31",
-                    xaxis_title="Time, [s]",
-                    yaxis_title="Percentage of trials with trigger key pressed",
-                    name="eHMI_off_non-yielding",
-                    margin=dict(l=120, r=2, t=12, b=12))
-
-    HMD.plot_column(mapping,
-                    parameter="eHMIOn",
-                    parameter_value=1,
-                    xaxis_range=[0, 11],
-                    compare_trial="video_21",
-                    xaxis_title="Time, [s]",
-                    yaxis_title="Percentage of trials with trigger key pressed",
-                    name="eHMI_on_non-yielding",
-                    margin=dict(l=120, r=2, t=12, b=12))
-
-    # Keypress data for yielding, eHMI and position criteria
-
-    # First person view
-    HMD.plot_column(mapping,
-                    parameter="eHMIOn",
-                    parameter_value=1,
-                    additional_parameter="camera",
-                    additional_parameter_value=0,
-                    xaxis_range=[0, 11],
-                    compare_trial="video_21",
-                    xaxis_title="Time, [s]",
-                    yaxis_title="Percentage of trials with trigger key pressed",
-                    name="first_eHMI_on_non-yielding",
-                    margin=dict(l=120, r=2, t=12, b=12))
-
-    HMD.plot_column(mapping,
-                    parameter="eHMIOn",
-                    parameter_value=1,
-                    additional_parameter="camera",
-                    additional_parameter_value=0,
-                    xaxis_range=[0, 18],
-                    compare_trial="video_11",
-                    xaxis_title="Time, [s]",
-                    yaxis_title="Percentage of trials with trigger key pressed",
-                    name="first_eHMI_on_yielding",
-                    margin=dict(l=120, r=2, t=12, b=12))
-
-    HMD.plot_column(mapping,
-                    parameter="eHMIOn",
-                    parameter_value=0,
-                    additional_parameter="camera",
-                    additional_parameter_value=0,
-                    xaxis_range=[0, 11],
-                    compare_trial="video_31",
-                    xaxis_title="Time, [s]",
-                    yaxis_title="Percentage of trials with trigger key pressed",
-                    name="first_eHMI_off_non-yielding",
-                    margin=dict(l=120, r=2, t=12, b=12))
-
-    HMD.plot_column(mapping,
-                    parameter="eHMIOn",
-                    parameter_value=0,
-                    additional_parameter="camera",
-                    additional_parameter_value=0,
-                    xaxis_range=[0, 18],
-                    compare_trial="video_1",
-                    xaxis_title="Time, [s]",
-                    yaxis_title="Percentage of trials with trigger key pressed",
-                    name="first_eHMI_off_yielding",
-                    margin=dict(l=120, r=2, t=12, b=12))
-
-    # Second-person view
-    HMD.plot_column(mapping,
-                    parameter="eHMIOn",
-                    parameter_value=1,
-                    additional_parameter="camera",
-                    additional_parameter_value=1,
-                    xaxis_range=[0, 11],
-                    compare_trial="video_26",
-                    xaxis_title="Time, [s]",
-                    yaxis_title="Percentage of trials with trigger key pressed",
-                    name="second_eHMI_on_non-yielding",
-                    margin=dict(l=120, r=2, t=12, b=12))
-
-    HMD.plot_column(mapping,
-                    parameter="eHMIOn",
-                    parameter_value=1,
-                    additional_parameter="camera",
-                    additional_parameter_value=1,
-                    xaxis_range=[0, 18],
-                    compare_trial="video_16",
-                    xaxis_title="Time, [s]",
-                    yaxis_title="Percentage of trials with trigger key pressed",
-                    name="second_eHMI_on_yielding",
-                    margin=dict(l=120, r=2, t=12, b=12))
-
-    HMD.plot_column(mapping,
-                    parameter="eHMIOn",
-                    parameter_value=0,
-                    additional_parameter="camera",
-                    additional_parameter_value=1,
-                    xaxis_range=[0, 11],
-                    compare_trial="video_36",
-                    xaxis_title="Time, [s]",
-                    yaxis_title="Percentage of trials with trigger key pressed",
-                    name="second_eHMI_off_non-yielding",
-                    margin=dict(l=120, r=2, t=12, b=12))
-
-    HMD.plot_column(mapping,
-                    parameter="eHMIOn",
-                    parameter_value=0,
-                    additional_parameter="camera",
-                    additional_parameter_value=1,
-                    xaxis_range=[0, 18],
-                    compare_trial="video_6",
-                    xaxis_title="Time, [s]",
-                    yaxis_title="Percentage of trials with trigger key pressed",
-                    name="second_eHMI_off_yielding",
-                    margin=dict(l=120, r=2, t=12, b=12))
+    # Keypress figures grouped by threshold. This makes it easy to inspect the
+    # same condition figure at 5%, 10%, and 50% when those thresholds are listed.
+    for threshold in TRIGGER_PRESS_THRESHOLDS:
+        threshold_label = _trigger_threshold_label(float(threshold))
+        run_keypress_condition_plots(
+            mapping_df=mapping,
+            trigger_threshold=float(threshold),
+            output_subdir=os.path.join("kp_thr", f"t{threshold_label.replace('pct', '')}"),
+            save_final=True,
+        )
 
     logger.info("Running heat plot and distance analysis.")
 
-    # Heatplot
-    HMD.heat_plot(folder_path=output_folder, mapping_df=mapping)
+    # Heatplot. Trigger values are pressure-sensitive, so values greater than
+    # the configured threshold are coded as a pressed/risk state.
+    HMD.heat_plot(
+        folder_path=output_folder,
+        mapping_df=mapping,
+        trigger_threshold=trigger_threshold,
+    )
 
     trial_level_df, condition_level_df = HMD.load_and_average_Q2(
         trigger_summary_csv=os.path.join(output_folder, "trigger_summary.csv"),
         responses_root=common.get_configs("data"),
-        mapping_df=mapping)
+        mapping_df=mapping,
+        trigger_threshold=trigger_threshold,
+        trigger_matrices_dir=output_folder,
+    )
 
     HMD.analyze_and_plot_distance_effect_plotly(
         mapping_df=mapping,
         out_dir=output_folder,
         trial_df=trial_level_df,
         condition_df=condition_level_df,
+    )
+
+    logger.info("Running trigger-threshold sensitivity analysis.")
+    HMD.run_trigger_threshold_sensitivity(
+        trigger_thresholds=TRIGGER_PRESS_THRESHOLDS,
+        trigger_matrices_dir=output_folder,
+        responses_root=common.get_configs("data"),
+        mapping_df=mapping,
+        output_dir=os.path.join(output_folder, "threshold_sensitivity"),
+        n_participants=50,
     )
 
     logger.info("Running violin plots for behaviour, distance, and intention ratings.")
@@ -530,5 +507,8 @@ if __name__ == "__main__":
         yaw_files_dir=output_folder
         )
 
-    run_advanced_statistics(trial_level_df)
+    run_advanced_statistics(
+        trial_level_df,
+        trigger_threshold=trigger_threshold,
+    )
     logger.info("Analysis finished.")
