@@ -1,7 +1,8 @@
 import numpy as np
 import pandas as pd
 import ast
-from utils.HMD_helper import HMD_yaw
+from .HMD_helper import HMD_yaw
+from .parsing import parse_list_cell
 
 HMD_class = HMD_yaw()
 
@@ -59,49 +60,8 @@ class Tools():
 
     @staticmethod
     def _cell_to_list(value):
-        """
-        Convert one matrix cell into a list of values.
-
-        The exported participant matrices may contain either string-encoded lists
-        after reading from CSV, for example "[0.0, 1.0]", or actual Python lists
-        when a DataFrame has already been processed in memory. This helper keeps
-        both cases valid and treats missing or malformed cells as empty lists.
-        """
-        if value is None:
-            return []
-
-        # Some code paths already provide Python lists, which should not be
-        # passed to ast.literal_eval again.
-        if isinstance(value, list):
-            return value
-        if isinstance(value, tuple):
-            return list(value)
-        if isinstance(value, np.ndarray):
-            return value.tolist()
-
-        # Scalar missing values should be treated as empty cells.
-        if isinstance(value, float) and pd.isna(value):
-            return []
-
-        if isinstance(value, str):
-            stripped = value.strip()
-            if stripped == "" or stripped.lower() in {"nan", "none"}:
-                return []
-            try:
-                parsed_value = ast.literal_eval(stripped)
-            except (ValueError, SyntaxError):
-                return []
-            if isinstance(parsed_value, list):
-                return parsed_value
-            if isinstance(parsed_value, tuple):
-                return list(parsed_value)
-            return [parsed_value]
-
-        # A numeric scalar should still contribute one value rather than crash.
-        if isinstance(value, (int, float, np.integer, np.floating)):
-            return [] if pd.isna(value) else [float(value)]
-
-        return []
+        """Convert one matrix cell into a list using the shared safe parser."""
+        return parse_list_cell(value)
 
     def extract_time_series_values(self, df):
         """
