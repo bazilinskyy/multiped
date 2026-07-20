@@ -7,28 +7,7 @@ HMD_class = HMD_yaw()
 
 
 class Tools():
-    """
-    A utility class providing helper functions for data processing in time-series and participant tracking experiments.
-
-    This class offers methods to:
-        - Parse and process DataFrame columns containing string-encoded lists or quaternions.
-        - Flatten nested data structures for analysis.
-        - Extract and compute statistical features (such as means or yaws)
-        from experimental data stored in CSV or DataFrame formats.
-
-    Methods in this class expect data with a specific structure, such as DataFrames with a 'Timestamp'
-    column and participant columns containing lists encoded as strings, and may utilise external
-    tools for quaternion-to-euler conversions.
-
-    Usage example:
-        tools = Tools()
-        avg_df = tools.average_dataframe_vectors_with_timestamp(df, "average")
-        yaws = tools.all_yaws_per_bin("data.csv")
-        flat = tools.flatten_trial_matrix(nested_list)
-    """
-
-    def __init__(self) -> None:
-        pass
+    """Parse participant matrices and extract horizontal head-heading values."""
 
     def average_dataframe_vectors_with_timestamp(self, df, column_name):
         """
@@ -155,7 +134,11 @@ class Tools():
 
     def all_yaws_per_bin(self, input_csv):
         """
-        Reads a CSV file and extracts the yaw values from quaternion lists for each timestamp/bin.
+        Extract horizontal Unity head headings from each timestamp/bin.
+
+        The method name is retained for compatibility. Returned values are
+        rotations around Unity's vertical y-axis, calculated from the projected
+        HMD forward vector.
 
         Parameters:
             input_csv (str): Path to the input CSV file. The file must have a 'Timestamp' column,
@@ -168,6 +151,16 @@ class Tools():
                 - Inner list: all yaw values (float) from all participants for that bin.
         """
         df = pd.read_csv(input_csv)
+        return self.all_yaws_per_bin_from_dataframe(df)
+
+    def all_yaws_per_bin_from_dataframe(self, df):
+        """Extract horizontal Unity headings from an in-memory matrix.
+
+        This is the DataFrame equivalent of :meth:`all_yaws_per_bin`. Keeping
+        this processed representation in the main pickle prevents every graph
+        rerun from converting the same quaternions again.
+        """
+        df = df.copy()
 
         # All participant columns (exclude the timestamp)
         participant_cols = [col for col in df.columns if col != "Timestamp"]
@@ -186,9 +179,9 @@ class Tools():
                     # Ensure the entry is a non-empty list
                     if isinstance(quats, list) and len(quats) > 0:
                         for q in quats:
-                            # Convert quaternion to yaw using external method
-                            _, _, yaw = HMD_class.quaternion_to_euler(*q)
-                            all_yaws.append(yaw)
+                            heading = HMD_class.quaternion_to_unity_heading(*q)
+                            if np.isfinite(heading):
+                                all_yaws.append(heading)
                 except Exception:
                     # Skip if parsing or conversion fails
                     continue

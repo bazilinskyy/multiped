@@ -1,5 +1,6 @@
 import pandas as pd
 import os
+import shutil
 import glob
 import plotly.graph_objects as go
 import plotly as py
@@ -12,10 +13,9 @@ import common
 from custom_logger import CustomLogger
 import re
 import numpy as np
-from scipy.stats import ttest_rel, ttest_ind, pearsonr, t
+from scipy.stats import ttest_rel, ttest_ind, t
 from utils.HMD_helper import HMD_yaw
 from utils.tools import Tools
-from tqdm import tqdm
 from datetime import datetime
 import ast
 import math
@@ -29,9 +29,6 @@ HMD_class = HMD_yaw()
 extra_class = Tools()
 
 # Consts
-SAVE_PNG = True
-SAVE_EPS = True
-output = common.get_configs("output")
 plotly_template = common.get_configs("plotly_template")
 font_size = common.get_configs("font_size")
 font_family = common.get_configs("font_family")
@@ -46,6 +43,27 @@ class HMD_helper:
         self.folder_stats = 'statistics'  # subdirectory to save statistical output
         self.data_folder = common.get_configs("data")  # Get path to participant data
         self.output_folder = common.get_configs("output")
+        self.processed_data_cache = None
+        self.statistical_cache_changed = False
+        self.reuse_statistical_results = False
+
+    def set_processed_data_cache(self, payload, reuse_statistical_results=False):
+        """Attach the loaded processed-data payload for graph-only reruns."""
+        self.processed_data_cache = payload
+        self.statistical_cache_changed = False
+        self.reuse_statistical_results = bool(reuse_statistical_results)
+
+    @staticmethod
+    def _half_open_bin_start(timestamps, resolution):
+        """Map raw timestamps to starts of half-open bins ``[t, t + resolution)``."""
+        numeric = pd.to_numeric(timestamps, errors="coerce").astype(float)
+        resolution = float(resolution)
+        if not np.isfinite(resolution) or resolution <= 0:
+            raise ValueError("resolution must be a positive finite number")
+        # The tiny tolerance keeps a value represented as 0.2999999999999999
+        # on the intended 0.3-second boundary without moving genuinely earlier
+        # samples into the following bin.
+        return np.floor((numeric + resolution * 1e-9) / resolution) * resolution
 
     @staticmethod
     def _short_kp_file_stem(name):
@@ -133,24 +151,27 @@ class HMD_helper:
 
     @staticmethod
     def _distance_code_to_meters(value):
-        """Convert coded distance levels 1..5 to 2..10 m while preserving metre values."""
+        """Convert one raw mapping code in 1..5 to physical metres."""
         numeric = pd.to_numeric(value, errors="coerce")
         if pd.isna(numeric):
             return np.nan
         numeric = float(numeric)
         if numeric == 0:
             return np.nan
-        if numeric in {1.0, 2.0, 3.0, 4.0, 5.0}:
-            return numeric * 2.0
-        return numeric
+        if numeric not in {1.0, 2.0, 3.0, 4.0, 5.0}:
+            raise ValueError(f"Unexpected raw distPed code: {numeric}")
+        return numeric * 2.0
 
     @classmethod
     def _distance_series_to_meters(cls, series):
-        """Vectorised distance conversion for pandas Series."""
+        """Convert a Series of raw mapping codes to physical metres once."""
         numeric = pd.to_numeric(series, errors="coerce")
-        mapped = numeric.copy()
         mask_code = numeric.isin([1, 2, 3, 4, 5])
-        mapped.loc[mask_code] = numeric.loc[mask_code] * 2.0
+        invalid = numeric.notna() & (numeric != 0) & ~mask_code
+        if invalid.any():
+            unexpected = sorted(numeric.loc[invalid].unique().tolist())
+            raise ValueError(f"Unexpected raw distPed codes: {unexpected}")
+        mapped = numeric * 2.0
         mapped.loc[numeric == 0] = np.nan
         return mapped
 
@@ -170,17 +191,16 @@ class HMD_helper:
                                       beta=common.get_configs('beta'))            # beta value
             return [filter_kp(value) for value in signal]
         else:
-            logger.error('Specified filter {} not implemented.', type_flter)
+            logger.error(f"Specified filter {type_flter} not implemented.")
             return -1
 
-    def plot_column_distribution(self, df, columns, output_folder, save_file=True, tag=None):
+    def plot_column_distribution(self, df, columns, save_file=True, tag=None):
         """
         Plots and prints distributions of specified survey columns.
 
         Parameters:
             df (DataFrame or str): DataFrame or path to CSV.
             columns (list): List of column names to analyse.
-            output_folder (str): Folder where plots will be saved.
             save_file (bool): Whether to save plots or just show them.
         """
         if isinstance(df, str):
@@ -216,7 +236,7 @@ class HMD_helper:
             else:
                 fig.show()
 
-    def distribution_plots(self, df, column_names, output_folder, save_file=True):
+    def distribution_plots(self, df, column_names, save_file=True):
 
         if isinstance(df, str):
             df = pd.read_csv(df)
@@ -295,7 +315,7 @@ class HMD_helper:
         showing gender distribution for each nationality.
         """
 
-        df = pd.read_csv(csv_path)
+        df = csv_path.copy() if isinstance(csv_path, pd.DataFrame) else pd.read_csv(csv_path)
 
         nationality_map = {
             "Pakistani": "Pakistan",
@@ -343,7 +363,7 @@ class HMD_helper:
         fig.show()
 
     @staticmethod
-    def read_slider_data(data_folder, mapping, output_folder):
+    def read_slider_data(data_folder, output_folder):
         """
         Reads participant slider CSVs from all participant folders, aggregates the
         ratings (noticeability, informativeness, annoyance) for all trials,
@@ -351,7 +371,6 @@ class HMD_helper:
 
         Args:
             data_folder (str): Path to the folder containing participant subfolders.
-            mapping (pd.DataFrame): Mapping DataFrame with 'video_id' and 'sound_clip_name'.
             output_folder (str): Directory to save aggregated CSVs for each slider.
         """
         participant_data = {}  # Store per-participant DataFrames
@@ -443,6 +462,8 @@ class HMD_helper:
         name = os.path.normpath(name)
         if name.startswith("..") or os.path.isabs(name):
             raise ValueError(f"Figure name must be a relative path, got: {name}")
+        if name == "head_heading" or name.startswith(f"head_heading{os.sep}"):
+            name = os.path.basename(name)
 
         output_base = os.path.join(output_root, name)
         final_base = os.path.join(final_root, name)
@@ -461,18 +482,17 @@ class HMD_helper:
             output_base = os.path.join(output_dir, stem)
             final_base = os.path.join(final_dir, stem)
 
-        # save as html
+        # Save once in the output directory, then copy the exact file into the
+        # configured figures directory. This guarantees that both locations
+        # contain the same figure and avoids rendering the same figure twice.
         if save_html:
-            output_html = output_base + '.html'
-            if open_browser:
-                py.offline.plot(fig, filename=output_html)
-            else:
-                py.offline.plot(fig, filename=output_html, auto_open=False)
+            output_html = output_base + ".html"
+            py.offline.plot(fig, filename=output_html, auto_open=open_browser)
             logger.info(f"Saved figure: {output_html}")
 
             if save_final:
-                final_html = final_base + '.html'
-                py.offline.plot(fig, filename=final_html, auto_open=False)
+                final_html = final_base + ".html"
+                shutil.copy2(output_html, final_html)
                 logger.info(f"Saved figure: {final_html}")
 
         # remove white margins
@@ -482,13 +502,13 @@ class HMD_helper:
         # save as eps
         if save_eps:
             try:
-                output_eps = output_base + '.eps'
+                output_eps = output_base + ".eps"
                 fig.write_image(output_eps, width=width, height=height)
                 logger.info(f"Saved figure: {output_eps}")
 
                 if save_final:
-                    final_eps = final_base + '.eps'
-                    fig.write_image(final_eps, width=width, height=height)
+                    final_eps = final_base + ".eps"
+                    shutil.copy2(output_eps, final_eps)
                     logger.info(f"Saved figure: {final_eps}")
             except Exception as exc:
                 logger.warning(
@@ -498,13 +518,13 @@ class HMD_helper:
         # save as png
         if save_png:
             try:
-                output_png = output_base + '.png'
+                output_png = output_base + ".png"
                 fig.write_image(output_png, width=width, height=height)
                 logger.info(f"Saved figure: {output_png}")
 
                 if save_final:
-                    final_png = final_base + '.png'
-                    fig.write_image(final_png, width=width, height=height)
+                    final_png = final_base + ".png"
+                    shutil.copy2(output_png, final_png)
                     logger.info(f"Saved figure: {final_png}")
             except Exception as exc:
                 logger.warning(
@@ -528,21 +548,20 @@ class HMD_helper:
                 yaxis_title='Percentage of trials with response key pressed',
                 xaxis_title_offset=0, yaxis_title_offset=0,
                 xaxis_range=None, yaxis_range=None, stacked=False,
-                pretty_text=False, orientation='v', show_text_labels=False,
+                pretty_text=False, show_text_labels=False,
                 name_file='kp', save_file=False, save_final=False,
                 fig_save_width=1320, fig_save_height=680, legend_x=0.7, legend_y=0.95, legend_columns=1,
-                font_family=None, font_size=None, ttest_signals=None, ttest_marker='circle',
+                font_family=None, font_size=None, ttest_signals=None,
                 ttest_marker_size=3, ttest_marker_colour='black', ttest_annotations_font_size=10,
-                ttest_annotation_x=0, ttest_annotations_colour='black', anova_signals=None, anova_marker='cross',
-                anova_marker_size=3, anova_marker_colour='black', anova_annotations_font_size=10,
-                anova_annotations_colour='black', ttest_anova_row_height=0.5, xaxis_step=5,
-                yaxis_step=5, y_legend_bar=None, line_width=1, bar_font_size=None,
+                ttest_annotation_x=0, ttest_annotations_colour='black', ttest_row_height=0.5,
+                xaxis_step=5, yaxis_step=5, line_width=1,
                 custom_line_colors=None, custom_line_dashes=None, flag_trigger=False, margin=None,
                 cross_p1_times=None, cross_p1_marker='diamond',
-                cross_p1_marker_size=10, cross_p1_marker_colour='black'):
+                cross_p1_marker_size=10, cross_p1_marker_colour='black',
+                reuse_statistical_csv=None):
         """
         Plots keypress (response) data from a dataframe using Plotly, with options for custom lines,
-        annotations, t-test and ANOVA result overlays, event markers, per-line cross_p1 markers,
+        annotations, t-test result overlays, event markers, per-line cross_p1 markers,
         and customisable styling and saving.
         """
 
@@ -725,26 +744,23 @@ class HMD_helper:
             x = df.index
 
         # draw ttest and anova rows
-        self.draw_ttest_anova(fig=fig,
+        if reuse_statistical_csv is None:
+            reuse_statistical_csv = self.reuse_statistical_results
+
+        self.draw_ttest(fig=fig,
                               times=times,
                               name_file=name_file,
                               yaxis_range=yaxis_range,
                               yaxis_step=yaxis_step,
                               ttest_signals=ttest_signals,
-                              ttest_marker=ttest_marker,
                               ttest_marker_size=ttest_marker_size,
                               ttest_marker_colour=ttest_marker_colour,
                               ttest_annotations_font_size=ttest_annotations_font_size,
                               ttest_annotations_colour=ttest_annotations_colour,
-                              anova_signals=anova_signals,
-                              anova_marker=anova_marker,
-                              anova_marker_size=anova_marker_size,
-                              anova_marker_colour=anova_marker_colour,
-                              anova_annotations_font_size=anova_annotations_font_size,
-                              anova_annotations_colour=anova_annotations_colour,
-                              ttest_anova_row_height=ttest_anova_row_height,
+                              ttest_row_height=ttest_row_height,
                               ttest_annotation_x=ttest_annotation_x,
-                              flag_trigger=flag_trigger)
+                              flag_trigger=flag_trigger,
+                              reuse_statistical_csv=reuse_statistical_csv)
 
         # update template
         fig.update_layout(template=self.template)
@@ -752,6 +768,13 @@ class HMD_helper:
         # format text labels
         if show_text_labels:
             fig.update_traces(texttemplate='%{text:.2f}')
+            # Significance stars are literal text rather than numeric values.
+            # Restore their template after formatting the normal data traces;
+            # otherwise Plotly renders "*" as NaN.
+            fig.update_traces(
+                texttemplate="%{text}",
+                selector=dict(name="__significance_markers__"),
+            )
 
         # stacked bar chart
         if stacked:
@@ -869,101 +892,11 @@ class HMD_helper:
 
         return [p_values, significance]
 
-    def avg_csv_files(self, data_folder, mapping):
-        """
-        Averages multiple CSV files corresponding to the same video ID. Each file is expected to contain
-        time-series data, including quaternion rotations and potentially other columns. The output is a
-        CSV file with averaged values for each timestamp across the files.
-
-        Parameters:
-            data_folder (str): Path to the folder containing input CSV files.
-            mapping (pd.DataFrame): A DataFrame containing metadata, including 'video_id' and 'video_length'.
-
-        Outputs:
-            For each video_id, saves an averaged DataFrame as a CSV in the output directory.
-            The output CSV is named as "<video_id>_avg_df.csv".
-        """
-
-        # Group file paths by video_id using a helper function
-        grouped_data = HMD_class.group_files_by_video_id(data_folder, mapping)
-
-        # calculate resolution based on the param in
-        resolution = common.get_configs("yaw_resolution") / 1000.0
-
-        # Process each video ID and its associated files
-        logger.info("Exporting CSV files.")
-        for video_id, file_locations in tqdm(grouped_data.items()):
-            all_dfs = []
-
-            # Retrieve the video length from the mapping DataFrame
-            video_length_row = mapping.loc[mapping["video_id"] == video_id, "video_length"]
-            if video_length_row.empty:
-                logger.info(f"Video length not found for video_id: {video_id}")
-                continue
-
-            video_length = video_length_row.values[0] / 1000  # Convert milliseconds to seconds
-
-            # Read and process each file associated with the video ID
-            for file_location in file_locations:
-                df = pd.read_csv(file_location)
-
-                # Filter the DataFrame to only include rows where Timestamp >= 0 and <= video_length
-                # todo: 0.01 hardcoded value does not work?
-                df = df[(df["Timestamp"] >= 0) & (df["Timestamp"] <= video_length + 0.01)]
-
-                # Round the Timestamp to the nearest multiple of resolution
-                df["Timestamp"] = ((df["Timestamp"] / resolution).round() * resolution).astype(float)
-
-                all_dfs.append(df)
-
-            # Skip if no dataframes were collected
-            if not all_dfs:
-                continue
-
-            # Concatenate all DataFrames row-wise
-            combined_df = pd.concat(all_dfs, ignore_index=True)
-
-            # Group by 'Timestamp'
-            grouped = combined_df.groupby('Timestamp')
-
-            avg_rows = []
-            for timestamp, group in grouped:
-                row = {'Timestamp': timestamp}
-
-                # Perform SLERP-based quaternion averaging if quaternion columns are present
-                if {"HMDRotationW", "HMDRotationX", "HMDRotationY", "HMDRotationZ"}.issubset(group.columns):
-                    quats = group[["HMDRotationW", "HMDRotationX", "HMDRotationY", "HMDRotationZ"]].values.tolist()
-                    avg_quat = HMD_class.average_quaternions_eigen(quats)
-                    row.update({
-                        "HMDRotationW": avg_quat[0],
-                        "HMDRotationX": avg_quat[1],
-                        "HMDRotationY": avg_quat[2],
-                        "HMDRotationZ": avg_quat[3],
-                    })
-
-                # Average all remaining columns (excluding Timestamp and quaternion cols)
-                other_cols = [col for col in group.columns if col not in ["Timestamp",
-                                                                          "HMDRotationW",
-                                                                          "HMDRotationX",
-                                                                          "HMDRotationY",
-                                                                          "HMDRotationZ"]]
-                for col in other_cols:
-                    row[col] = group[col].mean()
-
-                avg_rows.append(row)
-
-            # Create a new DataFrame from the averaged rows
-            avg_df = pd.DataFrame(avg_rows)
-
-            # Save dataframe in the output folder
-            avg_df.to_csv(os.path.join(common.get_configs("output"), f"{video_id}_avg_df.csv"), index=False)
-
-    def draw_ttest_anova(self, fig, times, name_file, yaxis_range, yaxis_step, ttest_signals, ttest_marker,
-                         ttest_marker_size, ttest_marker_colour, ttest_annotations_font_size, ttest_annotations_colour,
-                         anova_signals, anova_marker, anova_marker_size, anova_marker_colour,
-                         anova_annotations_font_size, anova_annotations_colour, ttest_anova_row_height,
-                         ttest_annotation_x, flag_trigger=False):
-        """Draw ttest and anova test rows.
+    def draw_ttest(self, fig, times, name_file, yaxis_range, yaxis_step, ttest_signals,
+                   ttest_marker_size, ttest_marker_colour, ttest_annotations_font_size,
+                   ttest_annotations_colour, ttest_row_height, ttest_annotation_x,
+                   flag_trigger=False, reuse_statistical_csv=False):
+        """Draw the pointwise paired t test row.
 
         Args:
             fig (figure): figure object.
@@ -971,18 +904,11 @@ class HMD_helper:
             yaxis_range (list): range of y axis in format [min, max] for the keypress plot.
             yaxis_step (int): step between ticks on y axis.
             ttest_signals (list): signals to compare with ttest. None = do not compare.
-            ttest_marker (str): symbol of markers for the ttest.
             ttest_marker_size (int): size of markers for the ttest.
             ttest_marker_colour (str): colour of markers for the ttest.
             ttest_annotations_font_size (int): font size of annotations for ttest.
             ttest_annotations_colour (str): colour of annotations for ttest.
-            anova_signals (dict): signals to compare with ANOVA. None = do not compare.
-            anova_marker (str): symbol of markers for the ANOVA.
-            anova_marker_size (int): size of markers for the ANOVA.
-            anova_marker_colour (str): colour of markers for the ANOVA.
-            anova_annotations_font_size (int): font size of annotations for ANOVA.
-            anova_annotations_colour (str): colour of annotations for ANOVA.
-            ttest_anova_row_height (float): height of row of ttest/anova markers in y units.
+            ttest_row_height (float): height of the t test marker row in y units.
         """
         # Save original axis limits (bottom/top of the main data area)
         original_min, original_max = yaxis_range
@@ -999,10 +925,6 @@ class HMD_helper:
         # --- t-test markers ---
         if ttest_signals:
             for comp in ttest_signals:
-                p_vals, sig = self.ttest(
-                    signal_1=comp['signal_1'], signal_2=comp['signal_2'], paired=comp['paired']
-                )  # type: ignore
-
                 # Save csv. Keep nested plot output folders intact when name_file
                 # contains a subdirectory, for example:
                 #   kp_threshold_sensitivity/threshold_05pct/all_videos_...
@@ -1016,36 +938,76 @@ class HMD_helper:
                 stats_name_file = f"{comp['label']}_{name_base}.csv"
                 if name_dir:
                     stats_name_file = os.path.join(name_dir, stats_name_file)
-                self.save_stats_csv(t=times_csv,
-                                    p_values=p_vals,
-                                    name_file=stats_name_file)
+                stats_path = os.path.join(
+                    common.get_configs("output"),
+                    self.folder_stats,
+                    stats_name_file,
+                )
+
+                p_vals = None
+                sig = None
+                if reuse_statistical_csv and os.path.isfile(stats_path):
+                    cached_stats = pd.read_csv(stats_path)
+                    if (
+                        "p-value" in cached_stats.columns
+                        and len(cached_stats) == len(comp["signal_1"])
+                    ):
+                        p_vals = (
+                            pd.to_numeric(cached_stats["p-value"], errors="coerce")
+                            .fillna(1.0)
+                            .tolist()
+                        )
+                        threshold = common.get_configs("p_value")
+                        sig = [int(value < threshold) for value in p_vals]
+                        logger.info(f"Reused cached statistical test CSV: {stats_path}")
+
+                if p_vals is None or sig is None:
+                    p_vals, sig = self.ttest(
+                        signal_1=comp['signal_1'],
+                        signal_2=comp['signal_2'],
+                        paired=comp['paired'],
+                    )  # type: ignore
+                    self.save_stats_csv(
+                        t=times_csv,
+                        p_values=p_vals,
+                        name_file=stats_name_file,
+                    )
+                    self.statistical_cache_changed = True
 
                 if any(sig):
-                    xs, ys = [], []
-
                     # Place this row below the curves, one row further down per comparison
-                    # (same logic for kp/yaw; ttest_anova_row_height is in the same units as y)
-                    y_offset = original_min - ttest_anova_row_height * (counter_ttest + 1)
+                    # (same logic for kp/yaw; ttest_row_height is in the same units as y)
+                    y_offset = original_min - ttest_row_height * (counter_ttest + 1)
 
-                    for i, s in enumerate(sig):
-                        if s:
-                            xs.append(times[i])
-                            ys.append(y_offset)
+                    significant_indices = [
+                        index for index, is_significant in enumerate(sig)
+                        if is_significant
+                    ]
+                    xs = [times[index] for index in significant_indices]
+                    significant_p_values = [
+                        p_vals[index] for index in significant_indices
+                    ]
 
-                    # plot markers
-                    for x, y, p_val in zip(xs, ys, p_vals):
-                        fig.add_annotation(
-                            x=x,
-                            y=y,
-                            text='*',  # TODO: use ttest_marker symbol if desired
-                            showarrow=False,
-                            yanchor='middle',
-                            font=dict(family=common.get_configs("font_family"),
-                                      size=ttest_marker_size,
-                                      color=ttest_marker_colour),
-                            hovertext=f"{comp['label']}: time={x}, p={p_val}",
-                            hoverlabel=dict(bgcolor="white"),
-                        )
+                    # One vectorised text trace is substantially faster than
+                    # adding a separate Plotly annotation for every time bin.
+                    fig.add_trace(go.Scatter(
+                        x=xs,
+                        y=[y_offset] * len(xs),
+                        mode="text",
+                        text=["*"] * len(xs),
+                        name="__significance_markers__",
+                        textfont=dict(
+                            family=common.get_configs("font_family"),
+                            size=ttest_marker_size,
+                            color=ttest_marker_colour,
+                        ),
+                        customdata=significant_p_values,
+                        hovertemplate=(
+                            f"{comp['label']}: time=%{{x}}, "
+                            "p=%{customdata:.4g}<extra></extra>"
+                        ),
+                        showlegend=False,
+                    ))
 
                     # label row
                     fig.add_annotation(x=ttest_annotation_x,
@@ -1065,7 +1027,7 @@ class HMD_helper:
         if counter_ttest or counter_anova:
             n_rows = max(counter_ttest, counter_anova)
             # Extend the axis downward enough to include all rows, plus one extra row of padding
-            min_y = original_min - ttest_anova_row_height * (n_rows + 1)
+            min_y = original_min - ttest_row_height * (n_rows + 1)
 
             fig.update_layout(yaxis=dict(
                 range=[min_y, original_max],
@@ -1194,7 +1156,15 @@ class HMD_helper:
                     ),
                 )
 
-    def export_participant_trigger_matrix(self, data_folder, video_id, output_file, column_name, mapping):
+    def export_participant_trigger_matrix(
+        self,
+        data_folder,
+        video_id,
+        output_file,
+        column_name,
+        mapping,
+        overwrite=False,
+    ):
         """
         Export a matrix of trigger (or other column) values per participant for a given video.
 
@@ -1207,7 +1177,16 @@ class HMD_helper:
             output_file (str): Path to output CSV file (e.g. '_output/participant_trigger_002.csv').
             column_name (str): Name of the column to export (e.g. 'TriggerValueRight').
             mapping (pd.DataFrame): Mapping DataFrame containing at least 'video_id' and 'video_length'.
+            overwrite (bool): Rebuild from raw participant files even if output exists.
         """
+
+        if not overwrite and os.path.isfile(output_file):
+            return
+        if not overwrite and not bool(common.get_configs("always_analyse")):
+            raise FileNotFoundError(
+                f"A trigger matrix required by the processed-data cache is missing: {output_file}. "
+                "Set always_analyse to true for one run to rebuild the cache."
+            )
 
         participant_matrix = {}    # Store trigger value lists for each participant, keyed by timestamp
         all_timestamps = set()     # Collect all observed timestamps for alignment
@@ -1237,8 +1216,12 @@ class HMD_helper:
                     if "Timestamp" not in df or column_name not in df:
                         continue
 
-                    # Bin timestamps to specified resolution
-                    df["Timestamp"] = ((df["Timestamp"] / resolution).round() * resolution).round(2)
+                    # Aggregate 50-Hz raw samples into half-open 100-ms bins.
+                    # Floor-based binning gives [0.0, 0.1), [0.1, 0.2), ...
+                    # rather than nearest-bin rounding around bin centres.
+                    df["Timestamp"] = self._half_open_bin_start(
+                        df["Timestamp"], resolution
+                    ).round(6)
 
                     # Group by timestamp, collect all values in a list per bin
                     grouped = df.groupby("Timestamp", as_index=True)[column_name].apply(list)
@@ -1275,6 +1258,11 @@ class HMD_helper:
         # short-circuit if already exists
         if not overwrite and os.path.isfile(output_file):
             return
+        if not overwrite and not bool(common.get_configs("always_analyse")):
+            raise FileNotFoundError(
+                f"A quaternion matrix required by the processed-data cache is missing: {output_file}. "
+                "Set always_analyse to true for one run to rebuild the cache."
+            )
 
         participant_matrix = {}
         all_timestamps = set()
@@ -1359,7 +1347,6 @@ class HMD_helper:
                 'video_id', 'sound_clip_name', 'display_name', and 'colour'.
             column_name (str): The column to extract for plotting (e.g., 'TriggerValueRight').
             xaxis_title (str, optional): Custom label for the x-axis.
-            yaxis_title (str, optional): Custom label for the y-axis.
             xaxis_range (list, optional): x-axis [min, max] limits for the plot.
             yaxis_range (list, optional): y-axis [min, max] limits for the plot.
             margin (dict, optional): Custom plot margin dictionary.
@@ -1580,10 +1567,9 @@ class HMD_helper:
             events_annotations_font_size=common.get_configs("font_size") - 8,
             stacked=False,
             ttest_signals=ttest_signals,
-            ttest_anova_row_height=6,
+            ttest_row_height=6,
             ttest_annotations_font_size=common.get_configs("font_size") - 8,
             ttest_annotation_x=0.001,  # type: ignore
-            ttest_marker="circle",
             ttest_marker_size=common.get_configs("font_size")-6,
             legend_x=0,
             legend_y=1.225,
@@ -2016,76 +2002,124 @@ class HMD_helper:
         return pd.DataFrame.from_records(records)
 
     @staticmethod
-    def _pearson_ci(x, y, alpha=0.05):
-        """Pearson r with p value and Fisher-z confidence interval."""
-        df = pd.DataFrame({"x": pd.to_numeric(x, errors="coerce"), "y": pd.to_numeric(y, errors="coerce")}).dropna()
-        n = len(df)
-        if n < 4:
-            return np.nan, np.nan, np.nan, np.nan, n
-        r_val, p_val = pearsonr(df["x"], df["y"])
-        r_val = float(r_val)  # type: ignore
-        p_val = float(p_val)  # type: ignore
-        if abs(r_val) >= 1:
-            return r_val, p_val, r_val, r_val, n
-        z = np.arctanh(r_val)
-        se = 1.0 / np.sqrt(n - 3)
-        crit = t.ppf(1 - alpha / 2.0, df=n - 1)  # noqa: F841
-        # use normal approx on z scale, crit≈1.96 for moderate n
-        z_delta = 1.959963984540054 * se
-        lo = float(np.tanh(z - z_delta))
-        hi = float(np.tanh(z + z_delta))
-        return r_val, p_val, lo, hi, n
-
-    @staticmethod
     def _pretty_mixed_term(term):
         mapping = {
             "Intercept": "Intercept",
             "C(yielding)[T.1]": "Yielding",
             "C(eHMIOn)[T.1]": "eHMI",
-            "C(camera)[T.1]": "Co-pedestrian not visible",
+            "C(camera)[T.1]": "Participant-first / avatar-second order",
             "distPed_m": "Distance (m)",
             "C(yielding)[T.1]:C(eHMIOn)[T.1]": "Yielding × eHMI",
-            "C(yielding)[T.1]:C(camera)[T.1]": "Yielding × other pedestrian not visible",
-            "C(eHMIOn)[T.1]:C(camera)[T.1]": "eHMI × co-pedestrian not visible",
+            "C(yielding)[T.1]:C(camera)[T.1]": "Yielding × relative pedestrian order",
+            "C(eHMIOn)[T.1]:C(camera)[T.1]": "eHMI × relative pedestrian order",
             "Group Var": "Random intercept variance",
         }
         return mapping.get(term, term)
 
     def _run_mixed_effects_model(self, trial_df, outcome, out_dir=None):
-        """Fit a random-intercept mixed model for one outcome and save raw and manuscript-ready outputs."""
+        """Fit categorical-distance models, attempting participant random slopes first."""
         if smf is None:
-            logger.warning("statsmodels is not available; skipping mixed model for {}", outcome)
+            logger.warning(f"statsmodels is not available; skipping mixed model for {outcome}")
             return None, None
+
+        save_dir = out_dir or self.output_folder
+        os.makedirs(save_dir, exist_ok=True)
+        coefficients_path = os.path.join(
+            save_dir, f"mixed_model_coefficients_{outcome}.csv"
+        )
+        analysis_version = "categorical_distance_random_slopes_v2"
+        if self.reuse_statistical_results and os.path.isfile(coefficients_path):
+            cached = pd.read_csv(coefficients_path)
+            if (
+                "analysis_version" in cached.columns
+                and cached["analysis_version"].eq(analysis_version).all()
+            ):
+                logger.info(f"Reused cached improved mixed model for {outcome}.")
+                return None, cached
 
         model_df = trial_df.copy()
         model_df[outcome] = pd.to_numeric(model_df[outcome], errors="coerce")
         needed = ["participant", outcome, "yielding", "eHMIOn", "camera", "distPed_m"]
+        if "trial_number" in model_df.columns:
+            needed.append("trial_number")
         model_df = model_df.dropna(subset=needed)
         if model_df.empty:
-            logger.warning("No data available for mixed model outcome {}", outcome)
+            logger.warning(f"No data available for mixed model outcome {outcome}")
             return None, None
 
+        model_df["distPed_centered"] = model_df["distPed_m"] - 6.0
+        trial_terms = ""
+        random_trial_term = ""
+        if "trial_number" in model_df.columns:
+            model_df["trial_number_centered"] = (
+                model_df["trial_number"]
+                - model_df.groupby("participant")["trial_number"].transform("mean")
+            )
+            trial_terms = " + trial_number_centered + I(trial_number_centered ** 2)"
+            random_trial_term = " + trial_number_centered"
+
         formula = (
-            f"{outcome} ~ C(yielding) + C(eHMIOn) + C(camera) + distPed_m + "
-            f"C(yielding):C(eHMIOn) + C(yielding):C(camera) + C(eHMIOn):C(camera)"
+            f"{outcome} ~ C(yielding) * C(eHMIOn) * C(camera) + "
+            "C(distPed_m) * (C(yielding) + C(camera))"
+            f"{trial_terms}"
         )
-        try:
-            fit = smf.mixedlm(
-                formula,
-                model_df,
-                groups=model_df["participant"]
-            ).fit(reml=False, method="lbfgs", maxiter=200, disp=False)
-        except Exception as e:
-            logger.warning("Mixed model failed for {} with full formula: {}", outcome, e)
+        random_formulas = [
+            "~C(yielding) + C(eHMIOn) + C(camera) + distPed_centered"
+            f"{random_trial_term}",
+            "~C(yielding) + C(eHMIOn) + C(camera)",
+            "~C(yielding) + C(eHMIOn)",
+            "~distPed_centered",
+            None,
+        ]
+        fit = None
+        model_name = None
+        selected_re_formula = None
+        for index, re_formula in enumerate(random_formulas, start=1):
             try:
-                formula = f"{outcome} ~ C(yielding) + C(eHMIOn) + C(camera) + distPed_m"
-                fit = smf.mixedlm(
+                candidate = smf.mixedlm(
                     formula,
                     model_df,
-                    groups=model_df["participant"]
-                ).fit(reml=False, method="lbfgs", maxiter=200, disp=False)
-            except Exception as e2:
-                logger.error("Mixed model failed for {} with fallback formula: {}", outcome, e2)
+                    groups=model_df["participant"],
+                    re_formula=re_formula,
+                ).fit(
+                    reml=False,
+                    method=["lbfgs", "bfgs", "cg"],
+                    maxiter=500,
+                    disp=False,
+                )
+                if not bool(getattr(candidate, "converged", False)):
+                    raise RuntimeError("model did not converge")
+                fit = candidate
+                model_name = (
+                    f"mixed_random_slopes_{index}"
+                    if re_formula is not None
+                    else "mixed_random_intercept_fallback"
+                )
+                selected_re_formula = re_formula
+                break
+            except Exception as exc:
+                logger.warning(
+                    "Mixed model attempt {} failed for {} (re_formula={}): {}",
+                    index,
+                    outcome,
+                    re_formula,
+                    exc,
+                )
+
+        if fit is None:
+            try:
+                fit = smf.ols(formula, data=model_df).fit(
+                    cov_type="cluster",
+                    cov_kwds={"groups": model_df["participant"]},
+                )
+                model_name = "ols_clustered_fallback"
+                selected_re_formula = None
+                logger.warning(
+                    "All mixed models failed for {}; used participant-clustered OLS.",
+                    outcome,
+                )
+            except Exception as exc:
+                logger.error(f"All improved models failed for {outcome}: {exc}")
                 return None, None
 
         coef_df = pd.DataFrame({
@@ -2099,33 +2133,94 @@ class HMD_helper:
         coef_df["ci_lower"] = conf.iloc[:, 0].values
         coef_df["ci_upper"] = conf.iloc[:, 1].values
         coef_df["predictor"] = coef_df["term"].map(self._pretty_mixed_term)
+        coef_df["model"] = model_name
+        coef_df["formula"] = formula
+        coef_df["random_effects_formula"] = selected_re_formula or "1"
+        coef_df["converged"] = bool(getattr(fit, "converged", True))
+        coef_df["analysis_version"] = analysis_version
         coef_df["ci_95"] = coef_df.apply(
-            lambda r: "[{:.2f}, {:.2f}]".format(r["ci_lower"], r["ci_upper"]),
+            lambda row: f"[{row['ci_lower']:.2f}, {row['ci_upper']:.2f}]",
             axis=1,
         )
 
-        logger.info("\n=== Mixed model: {} ===", outcome)
-        logger.info("Formula: {}", formula)
+        logger.info(f"\n=== Mixed model: {outcome} ===")
+        logger.info(f"Formula: {formula}")
         logger.info(
             "{}",
             coef_df[["predictor", "estimate", "ci_lower", "ci_upper", "p_value"]].to_string(index=False),
         )
         logger.info("=======================\n")
 
-        save_dir = out_dir or self.output_folder
-        os.makedirs(save_dir, exist_ok=True)
-        coef_df.to_csv(os.path.join(save_dir, "mixed_model_coefficients_{}.csv".format(outcome)), index=False)
+        coef_df.to_csv(coefficients_path, index=False)
 
         term_df = coef_df[["term", "predictor", "estimate", "ci_lower", "ci_upper", "p_value"]].copy()
         term_df.insert(0, "outcome", outcome)
-        term_df.to_csv(os.path.join(save_dir, "mixed_model_terms_{}.csv".format(outcome)), index=False)
+        term_df.to_csv(os.path.join(save_dir, f"mixed_model_terms_{outcome}.csv"), index=False)
 
+        fixed_term_names = (
+            set(fit.fe_params.index)
+            if hasattr(fit, "fe_params")
+            else set(fit.params.index)
+        )
         manuscript_df = coef_df.loc[
-            coef_df["term"] != "Group Var",
+            coef_df["term"].isin(fixed_term_names),
             ["predictor", "estimate", "ci_lower", "ci_upper", "ci_95", "p_value"],
         ].copy()
-        manuscript_df.to_csv(os.path.join(save_dir, "mixed_model_table_{}.csv".format(outcome)), index=False)
+        manuscript_df.to_csv(os.path.join(save_dir, f"mixed_model_table_{outcome}.csv"), index=False)
         return fit, coef_df
+
+    @staticmethod
+    def load_trial_ratings(
+        responses_root: str,
+        n_participants: int = 50,
+        response_col_index: int = 2,
+    ) -> pd.DataFrame:
+        """Load participant Q1/Q2/Q3 trial ratings from the raw response files."""
+        q1_idx = response_col_index - 1
+        q2_idx = response_col_index
+        q3_idx = response_col_index + 1
+        if q1_idx < 1:
+            raise ValueError("response_col_index is too small to infer Q1/Q2/Q3")
+
+        all_records = []
+        for pid in range(1, n_participants + 1):
+            participant_folder = os.path.join(
+                responses_root,
+                f"Participant_{pid}",
+            )
+            if not os.path.isdir(participant_folder):
+                continue
+            pattern = os.path.join(
+                participant_folder,
+                f"Participant_{pid}_*.csv",
+            )
+            for file_path in glob.glob(pattern):
+                response_df = pd.read_csv(file_path, header=None)
+                if response_df.shape[1] <= q3_idx:
+                    continue
+                trial_df = response_df[[0, q1_idx, q2_idx, q3_idx]].copy()
+                trial_df.columns = ["video_id", "Q1", "Q2", "Q3"]  # pyright: ignore[reportAttributeAccessIssue]
+                trial_df["participant"] = pid
+                trial_df["video_id"] = trial_df["video_id"].astype(str)
+                trial_df = trial_df[
+                    trial_df["video_id"].str.startswith("video_")
+                ].copy()
+                # Rows were written by Unity in realised presentation order.
+                # Preserve that order explicitly so learning and fatigue can be
+                # tested without inferring order from video identifiers.
+                trial_df["trial_number"] = np.arange(1, len(trial_df) + 1)
+                all_records.append(trial_df)
+
+        if not all_records:
+            raise ValueError(
+                "No participant response data found. "
+                "Check responses_root and file patterns."
+            )
+
+        ratings_df = pd.concat(all_records, ignore_index=True)
+        for q_col in ["Q1", "Q2", "Q3"]:
+            ratings_df[q_col] = pd.to_numeric(ratings_df[q_col], errors="coerce")
+        return ratings_df
 
     def load_and_average_Q2(
         self,
@@ -2137,8 +2232,9 @@ class HMD_helper:
         save_combined: bool = True,
         trigger_threshold: float = 0.05,
         trigger_matrices_dir: Optional[str] = None,
+        ratings_df: Optional[pd.DataFrame] = None,
     ):
-        """Create trial-level and condition-level tables merging thresholded trigger risk with Q1/Q2/Q3."""
+        """Merge trigger risk with cached or raw participant Q1/Q2/Q3 ratings."""
         trigger_df = pd.read_csv(trigger_summary_csv)
         if "label" in trigger_df.columns and "condition_name" not in trigger_df.columns:
             trigger_df = trigger_df.rename(columns={"label": "condition_name"})
@@ -2156,39 +2252,26 @@ class HMD_helper:
         ]
         missing_map = [c for c in map_cols if c not in mapping_df.columns]
         if missing_map:
-            raise ValueError("mapping_df missing required columns: {}".format(missing_map))
+            raise ValueError(f"mapping_df missing required columns: {missing_map}")
         map_df = mapping_df[map_cols].copy()
         map_df["video_id"] = map_df["video_id"].astype(str)
         map_df["condition_name"] = map_df["condition_name"].astype(str)
 
-        q1_idx = response_col_index - 1
-        q2_idx = response_col_index
-        q3_idx = response_col_index + 1
-        if q1_idx < 1:
-            raise ValueError("response_col_index is too small to infer Q1/Q2/Q3")
-
-        all_records = []
-        for pid in range(1, n_participants + 1):
-            participant_folder = os.path.join(responses_root, "Participant_{}".format(pid))
-            if not os.path.isdir(participant_folder):
-                continue
-            pattern = os.path.join(participant_folder, "Participant_{}_*.csv".format(pid))
-            files = glob.glob(pattern)
-            for fp in files:
-                df = pd.read_csv(fp, header=None)
-                if df.shape[1] <= q3_idx:
-                    continue
-                tmp = df[[0, q1_idx, q2_idx, q3_idx]].copy()
-                tmp.columns = ["video_id", "Q1", "Q2", "Q3"]  # pyright: ignore[reportAttributeAccessIssue]
-                tmp["participant"] = pid
-                tmp["video_id"] = tmp["video_id"].astype(str)
-                tmp = tmp[tmp["video_id"].str.startswith("video_")].copy()
-                all_records.append(tmp)
-
-        if not all_records:
-            raise ValueError("No participant response data found. Check responses_root and file patterns.")
-
-        ratings_df = pd.concat(all_records, ignore_index=True)
+        if ratings_df is None:
+            ratings_df = self.load_trial_ratings(
+                responses_root=responses_root,
+                n_participants=n_participants,
+                response_col_index=response_col_index,
+            )
+        else:
+            ratings_df = ratings_df.copy()
+            required_rating_columns = {"participant", "video_id", "Q1", "Q2", "Q3"}
+            missing_ratings = sorted(required_rating_columns.difference(ratings_df.columns))
+            if missing_ratings:
+                raise ValueError(
+                    f"ratings_df missing required columns: {missing_ratings}"
+                )
+            ratings_df["video_id"] = ratings_df["video_id"].astype(str)
         for q_col in ["Q1", "Q2", "Q3"]:
             ratings_df[q_col] = pd.to_numeric(ratings_df[q_col], errors="coerce")
 
@@ -2220,8 +2303,10 @@ class HMD_helper:
         trial_df["avg_trigger"] = trial_df["avg_trigger"].fillna(trial_df["avg_trigger_condition"])
         trial_df["sd_trigger"] = trial_df["sd_trigger"].fillna(trial_df["sd_trigger_condition"])
         trial_df = trial_df.drop(columns=["avg_trigger_condition", "sd_trigger_condition"], errors="ignore")
+        # Preserve the raw mapping code in distPed and store physical distance
+        # separately. This prevents downstream code from mistaking 2 m or 4 m
+        # for raw codes and multiplying them a second time.
         trial_df["distPed_m"] = self._distance_series_to_meters(trial_df["distPed"])
-        trial_df["distPed"] = trial_df["distPed_m"]
         # crossing_risk is the percentage of analysed participant-time bins for
         # which the trigger was pressed (> trigger_threshold), matching the paper.
         trial_df["crossing_risk"] = pd.to_numeric(trial_df["avg_trigger"], errors="coerce") * 100.0
@@ -2253,8 +2338,8 @@ class HMD_helper:
             cond_path = os.path.join(output_dir, "condition_level_trigger_Q123.csv")
             trial_df.to_csv(trial_path, index=False)
             condition_df.to_csv(cond_path, index=False)
-            logger.info("Saved trial-level trigger + Q1/Q2/Q3 data to: {}", trial_path)
-            logger.info("Saved condition-level trigger + Q1/Q2/Q3 data to: {}", cond_path)
+            logger.info(f"Saved trial-level trigger + Q1/Q2/Q3 data to: {trial_path}")
+            logger.info(f"Saved condition-level trigger + Q1/Q2/Q3 data to: {cond_path}")
 
         return trial_df, condition_df
 
@@ -2262,7 +2347,7 @@ class HMD_helper:
     @staticmethod
     def _trigger_threshold_label(threshold: float) -> str:
         """Create a filesystem-safe label for a trigger threshold."""
-        return "threshold_{:03d}pct".format(int(round(float(threshold) * 100)))
+        return f"threshold_{int(round(float(threshold) * 100)):03d}pct"
 
     def run_trigger_threshold_sensitivity(
         self,
@@ -2270,9 +2355,11 @@ class HMD_helper:
         trigger_matrices_dir: str,
         responses_root: str,
         mapping_df: pd.DataFrame,
+        primary_threshold: float = 0.10,
         output_dir: Optional[str] = None,
         n_participants: int = 50,
         response_col_index: int = 2,
+        ratings_df: Optional[pd.DataFrame] = None,
     ) -> Dict[str, pd.DataFrame]:
         """Run crossing-risk sensitivity checks for several trigger thresholds.
 
@@ -2292,6 +2379,9 @@ class HMD_helper:
             Directory containing Participant_* folders with trial-wise Q1/Q2/Q3 data.
         mapping_df : pd.DataFrame
             Scenario mapping table.
+        primary_threshold : float
+            Threshold used for the manuscript's primary analysis. Alternative
+            thresholds are compared directly with this value.
         output_dir : str, optional
             Root directory where threshold-specific output folders are written.
         n_participants : int
@@ -2299,6 +2389,9 @@ class HMD_helper:
         response_col_index : int
             Index of Q2 in the participant response CSVs; Q1 and Q3 are inferred
             as the neighbouring columns, matching load_and_average_Q2.
+        ratings_df : pd.DataFrame, optional
+            Cached participant Q1/Q2/Q3 trial ratings. When supplied, raw
+            participant response files are not read.
 
         Returns
         -------
@@ -2309,7 +2402,10 @@ class HMD_helper:
         output_dir = output_dir or os.path.join(self.output_folder, "threshold_sensitivity")
         os.makedirs(output_dir, exist_ok=True)
 
-        threshold_values = [float(x) for x in trigger_thresholds]
+        threshold_values = list(dict.fromkeys(float(x) for x in trigger_thresholds))
+        primary_threshold = float(primary_threshold)
+        if not any(np.isclose(value, primary_threshold) for value in threshold_values):
+            raise ValueError("primary_threshold must be included in trigger_thresholds")
         summary_records = []
         model_tables = []
         condition_tables = []
@@ -2365,6 +2461,7 @@ class HMD_helper:
                 save_combined=True,
                 trigger_threshold=threshold,
                 trigger_matrices_dir=trigger_matrices_dir,
+                ratings_df=ratings_df,
             )
             trial_df["threshold"] = threshold
             trial_df["threshold_label"] = threshold_label
@@ -2407,22 +2504,126 @@ class HMD_helper:
             pd.concat(condition_tables, ignore_index=True) if condition_tables else pd.DataFrame()
         )
 
+        # Provide an auditable comparison with the primary 0.10 analysis. The
+        # correlations describe stability of condition patterns, while the
+        # model fields show whether effect directions and significance decisions
+        # are retained. These metrics are descriptive; the researcher should
+        # inspect the accompanying long-form tables before claiming robustness.
+        robustness_records = []
+        if not condition_sensitivity_df.empty:
+            primary_condition = condition_sensitivity_df.loc[
+                np.isclose(condition_sensitivity_df["threshold"], primary_threshold),
+                ["condition_name", "avg_trigger"],
+            ].rename(columns={"avg_trigger": "avg_trigger_primary"})
+
+            primary_model = pd.DataFrame()
+            if not model_terms_df.empty and {"term", "estimate", "p_value", "threshold"}.issubset(model_terms_df.columns):
+                primary_model = model_terms_df.loc[
+                    np.isclose(model_terms_df["threshold"], primary_threshold),
+                    ["term", "estimate", "p_value"],
+                ].drop_duplicates(subset=["term"])
+
+            for threshold in threshold_values:
+                current_condition = condition_sensitivity_df.loc[
+                    np.isclose(condition_sensitivity_df["threshold"], threshold),
+                    ["condition_name", "avg_trigger"],
+                ].rename(columns={"avg_trigger": "avg_trigger_current"})
+                condition_compare = primary_condition.merge(
+                    current_condition,
+                    on="condition_name",
+                    how="inner",
+                ).dropna()
+
+                pearson = np.nan
+                spearman = np.nan
+                mean_abs_difference_points = np.nan
+                max_abs_difference_points = np.nan
+                if len(condition_compare) >= 2:
+                    pearson = condition_compare["avg_trigger_primary"].corr(
+                        condition_compare["avg_trigger_current"], method="pearson"
+                    )
+                    spearman = condition_compare["avg_trigger_primary"].corr(
+                        condition_compare["avg_trigger_current"], method="spearman"
+                    )
+                    difference_points = (
+                        condition_compare["avg_trigger_current"]
+                        - condition_compare["avg_trigger_primary"]
+                    ).abs() * 100.0
+                    mean_abs_difference_points = float(difference_points.mean())
+                    max_abs_difference_points = float(difference_points.max())
+
+                model_sign_agreement_pct = np.nan
+                model_significance_agreement_pct = np.nan
+                n_model_terms = 0
+                if not primary_model.empty:
+                    current_model = model_terms_df.loc[
+                        np.isclose(model_terms_df["threshold"], threshold),
+                        ["term", "estimate", "p_value"],
+                    ].drop_duplicates(subset=["term"])
+                    model_compare = primary_model.merge(
+                        current_model,
+                        on="term",
+                        suffixes=("_primary", "_current"),
+                        how="inner",
+                    )
+                    model_compare = model_compare.loc[
+                        model_compare["term"] != "Group Var"
+                    ].dropna(subset=["estimate_primary", "estimate_current"])
+                    n_model_terms = int(len(model_compare))
+                    if n_model_terms:
+                        model_sign_agreement_pct = float(
+                            (
+                                np.sign(model_compare["estimate_primary"])
+                                == np.sign(model_compare["estimate_current"])
+                            ).mean() * 100.0
+                        )
+                        valid_p = model_compare.dropna(
+                            subset=["p_value_primary", "p_value_current"]
+                        )
+                        if not valid_p.empty:
+                            model_significance_agreement_pct = float(
+                                (
+                                    (valid_p["p_value_primary"] < 0.05)
+                                    == (valid_p["p_value_current"] < 0.05)
+                                ).mean() * 100.0
+                            )
+
+                robustness_records.append({
+                    "primary_threshold": primary_threshold,
+                    "threshold": threshold,
+                    "is_primary": bool(np.isclose(threshold, primary_threshold)),
+                    "n_conditions": int(len(condition_compare)),
+                    "condition_pearson_r": pearson,
+                    "condition_spearman_rho": spearman,
+                    "condition_mean_abs_difference_points": mean_abs_difference_points,
+                    "condition_max_abs_difference_points": max_abs_difference_points,
+                    "n_model_terms": n_model_terms,
+                    "model_sign_agreement_pct": model_sign_agreement_pct,
+                    "model_significance_agreement_pct": model_significance_agreement_pct,
+                })
+
+        robustness_df = pd.DataFrame(robustness_records)
+
         summary_path = os.path.join(output_dir, "threshold_sensitivity_summary.csv")
         model_path = os.path.join(output_dir, "threshold_sensitivity_model_terms.csv")
         condition_path = os.path.join(output_dir, "threshold_sensitivity_condition_means.csv")
+        robustness_path = os.path.join(output_dir, "threshold_sensitivity_robustness.csv")
 
         summary_df.to_csv(summary_path, index=False)
         model_terms_df.to_csv(model_path, index=False)
         condition_sensitivity_df.to_csv(condition_path, index=False)
+        robustness_df.to_csv(robustness_path, index=False)
 
-        logger.info("Saved threshold sensitivity summary to: {}", summary_path)
-        logger.info("Saved threshold sensitivity model terms to: {}", model_path)
-        logger.info("Saved threshold sensitivity condition means to: {}", condition_path)
+        logger.info(f"Saved threshold sensitivity summary to: {summary_path}")
+        logger.info(f"Saved threshold sensitivity model terms to: {model_path}")
+        logger.info(f"Saved threshold sensitivity condition means to: {condition_path}")
+        logger.info(f"Saved threshold sensitivity robustness checks to: {robustness_path}")
 
         return {
             "summary": summary_df,
             "model_terms": model_terms_df,
             "condition_means": condition_sensitivity_df,
+            "robustness": robustness_df,
         }
 
     def analyze_and_plot_distance_effect_plotly(self, mapping_df, condition_df, out_dir=None, trial_df=None):
@@ -2488,25 +2689,25 @@ class HMD_helper:
             how="left",
         )
 
-        # Convert coded distance values to actual metres (2, 4, 6, 8, 10) and
-        # also handle mapping tables that already store metre values.
+        # Convert the raw mapping codes once to actual metres (2, 4, 6, 8, 10).
         cond_plot_df["distPed_m"] = self._distance_series_to_meters(cond_plot_df["distPed"])
-        cond_plot_df["distPed"] = cond_plot_df["distPed_m"]
 
-        # Scale thresholded unsafe-time proportion to 0–100:
-        # "Mean perceived crossing risk (0–100)".
+        # Scale thresholded unsafe-time proportion to 0–100.
         cond_plot_df["crossing_risk"] = cond_plot_df["avg_trigger"] * 100.0
         cond_plot_df["crossing_risk_sd"] = cond_plot_df["std_trigger"] * 100.0
 
         # Drop if some factors missing
         cond_plot_df = cond_plot_df.dropna(
-            subset=["distPed", "yielding", "eHMIOn", "camera"]
+            subset=["distPed_m", "yielding", "eHMIOn", "camera"]
         )
 
         # Label maps for binary factors (0/1 → text)
         label_map_yield = {0: "Non-yielding", 1: "Yielding"}
         label_map_ehmi = {0: "No eHMI", 1: "eHMI"}
-        label_map_cam = {0: "Co-pedestrian visible", 1: "Co-pedestrian not visible"}
+        label_map_cam = {
+            0: "Avatar first / participant second",
+            1: "Participant first / avatar second",
+        }
 
         cond_plot_df["yielding_label"] = cond_plot_df["yielding"].map(label_map_yield)
         cond_plot_df["eHMI_label"] = cond_plot_df["eHMIOn"].map(label_map_ehmi)
@@ -2538,6 +2739,49 @@ class HMD_helper:
             .sort_values(group_cols)
         )
 
+        # Figure uncertainty must come from participant-level trials, not from
+        # variation among condition means. Add t-based 95% CIs when those data
+        # are available.
+        by_cond["ci95_half_crossing_risk"] = np.nan
+        by_cond["n_participants_crossing_risk"] = np.nan
+        if trial_df is not None and not trial_df.empty:
+            participant_trials = trial_df.copy()
+            if "distPed_m" not in participant_trials.columns:
+                participant_trials["distPed_m"] = self._distance_series_to_meters(
+                    participant_trials["distPed"]
+                )
+            participant_trials["crossing_risk"] = pd.to_numeric(
+                participant_trials["crossing_risk"], errors="coerce"
+            )
+            participant_summary = (
+                participant_trials.dropna(subset=group_cols + ["participant", "crossing_risk"])
+                .groupby(group_cols, as_index=False)["crossing_risk"]
+                .agg(
+                    mean_crossing_risk_participant="mean",
+                    sd_crossing_risk_participant="std",
+                    n_participants_crossing_risk="count",
+                )
+            )
+            participant_summary["se_crossing_risk"] = (
+                participant_summary["sd_crossing_risk_participant"]
+                / np.sqrt(participant_summary["n_participants_crossing_risk"])
+            )
+            participant_summary["ci95_half_crossing_risk"] = participant_summary.apply(
+                lambda row: (
+                    t.ppf(0.975, int(row["n_participants_crossing_risk"]) - 1)
+                    * row["se_crossing_risk"]
+                    if int(row["n_participants_crossing_risk"]) > 1
+                    else np.nan
+                ),
+                axis=1,
+            )
+            by_cond = by_cond.drop(
+                columns=["ci95_half_crossing_risk", "n_participants_crossing_risk"]
+            ).merge(participant_summary, on=group_cols, how="left")
+            by_cond["mean_crossing_risk"] = by_cond[
+                "mean_crossing_risk_participant"
+            ].combine_first(by_cond["mean_crossing_risk"])
+
         # Add label columns for plotting facets
         by_cond["yielding_label"] = by_cond["yielding"].map(label_map_yield)
         by_cond["eHMI_label"] = by_cond["eHMIOn"].map(label_map_ehmi)
@@ -2553,9 +2797,9 @@ class HMD_helper:
         # Common label mapping for all figures
         base_labels = {
             "distPed_m": "Distance between pedestrians (m)",
-            "crossing_risk": "Mean perceived crossing risk<br>(0–100)",
-            "mean_crossing_risk": "Mean perceived crossing risk<br>(0–100)",
-            "sd_crossing_risk": "SD of perceived crossing risk<br>(0–100)",
+            "crossing_risk": "Perceived-unsafety time (%)",
+            "mean_crossing_risk": "Perceived-unsafety time (%)",
+            "sd_crossing_risk": "SD of perceived-unsafety time (%)",
 
             "Q1_mean": "Q1 (0–100)",
             "Q1_sd": "SD of Q1 (0–100)",
@@ -2564,10 +2808,10 @@ class HMD_helper:
             "Q3_mean": "Q3 (0–100)",
             "Q3_sd": "SD of Q3 (0–100)",
 
-            "camera_label": "Co-pedestrian visibility",
+            "camera_label": "Relative pedestrian order",
             "yielding_label": "AV behaviour",
-            "eHMI_label": "eHMI status",
-            "context": "Context (AV behaviour, eHMI status, co-pedestrian visibility)",
+            "eHMI_label": "Conditional eHMI logic",
+            "context": "Context (AV behaviour, conditional eHMI logic, relative pedestrian order)",
             "delta": "Near–far difference (0–100)",
             "measure": "Measure",
         }
@@ -2576,7 +2820,10 @@ class HMD_helper:
         category_orders = {
             "eHMI_label": ["No eHMI", "eHMI"],
             "yielding_label": ["Non-yielding", "Yielding"],
-            "camera_label": ["Co-pedestrian visible", "Co-pedestrian not visible"],
+            "camera_label": [
+                "Avatar first / participant second",
+                "Participant first / avatar second",
+            ],
         }
         axis_title_font = dict(size=font_size, family=font_family)
 
@@ -2591,6 +2838,7 @@ class HMD_helper:
             facet_col="eHMI_label",
             facet_row="yielding_label",
             markers=True,
+            error_y="ci95_half_crossing_risk",
             labels=base_labels,
             category_orders=category_orders,
             title="",
@@ -2845,7 +3093,7 @@ class HMD_helper:
             lambda r: (
                 f"{'Yielding' if r['yielding'] == 1 else 'Non-yielding'}, "
                 f"eHMI {'on' if r['eHMIOn'] == 1 else 'off'}, "
-                f"{'other visible' if int(r['camera']) == 0 else 'other not visible'}"
+                f"{'avatar first / participant second' if int(r['camera']) == 0 else 'participant first / avatar second'}"
             ),
             axis=1,
         )
@@ -2867,7 +3115,7 @@ class HMD_helper:
         )
 
         long_diff["measure"] = long_diff["measure"].map({
-            "delta_crossing_risk": "Mean perceived crossing risk (0–100)",
+            "delta_crossing_risk": "Perceived-unsafety time (%)",
             "delta_Q1": "Q1 (0–100)",
             "delta_Q2": "Q2 (0–100)",
             "delta_Q3": "Q3 (0–100)",
@@ -2906,11 +3154,11 @@ class HMD_helper:
         # ============================
         # Stats summary
         # ============================
-        # Correlations with crossing risk
-        for q_label, col in [("Q1", "mean_Q1"), ("Q2", "mean_Q2"), ("Q3", "mean_Q3")]:
-            if col in cond_plot_df.columns:
-                r = cond_plot_df["crossing_risk"].corr(cond_plot_df[col])
-                logger.info(f"Correlation (Mean perceived crossing risk, {q_label}): r = {r:.3f}")
+        logger.info(
+            "Naive trial-level and condition-mean correlations are intentionally "
+            "omitted; the within/between-participant models provide the clustered "
+            "association analysis."
+        )
 
         xd = by_cond["distPed_m"].values
 
@@ -2918,7 +3166,7 @@ class HMD_helper:
         yd_risk = by_cond["mean_crossing_risk"].values
         slope_risk, intercept_risk = np.polyfit(xd, yd_risk, 1)
         logger.info(
-            "Overall Mean perceived crossing risk vs distance: "
+            "Overall perceived-unsafety time vs distance: "
             f"slope = {slope_risk:.4f} (risk units per 1 m)"
         )
 
@@ -2935,30 +3183,6 @@ class HMD_helper:
         # ============================
         stats_out_dir = out_dir or self.output_folder
         os.makedirs(stats_out_dir, exist_ok=True)
-
-        corr_records = []
-        corr_source = trial_df if trial_df is not None else cond_plot_df.rename(columns={"mean_Q1": "Q1",
-                                                                                         "mean_Q2": "Q2",
-                                                                                         "mean_Q3": "Q3"})
-        for q_label in ["Q1", "Q2", "Q3"]:
-            if q_label in corr_source.columns and "crossing_risk" in corr_source.columns:
-                r_val, p_val, ci_lo, ci_hi, n_obs = self._pearson_ci(corr_source["crossing_risk"],
-                                                                     corr_source[q_label])
-                corr_records.append({
-                    "measure": q_label,
-                    "r": r_val,
-                    "p_value": p_val,
-                    "ci_lower": ci_lo,
-                    "ci_upper": ci_hi,
-                    "n": n_obs,
-                })
-                logger.info(
-                    "Correlation (crossing risk, {}): r = {:.3f}, p = {:.4g}, 95% CI [{:.3f}, {:.3f}], n = {}",
-                    q_label, r_val, p_val, ci_lo, ci_hi, n_obs
-                )
-        if corr_records:
-            pd.DataFrame(corr_records).to_csv(os.path.join(stats_out_dir,
-                                                           "condition_level_correlations.csv"), index=False)
 
         near_far_path = os.path.join(stats_out_dir, "near_far_differences.csv")
         diff_df.to_csv(near_far_path, index=False)
@@ -2977,7 +3201,6 @@ class HMD_helper:
         # ============================
         self.save_plotly(fig_beh, "crossing_risk_full_factorial", save_final=True)
         self.save_plotly(fig_q2, "Q2_full_factorial", save_final=True)
-        self.save_plotly(fig_scatter, "crossing_risk_vs_Q2_scatter", save_final=True)
         self.save_plotly(fig_diff, "near_minus_far_crossing_risk_vs_Q123", save_final=True)
         self.save_plotly(fig_beh_yield, "crossing_risk_full_factorial_legend_yielding", save_final=True)
         self.save_plotly(fig_beh_ehmi, "crossing_risk_full_factorial_legend_eHMI", save_final=True)
@@ -3015,6 +3238,27 @@ class HMD_helper:
         long_cond["rating"] = pd.to_numeric(long_cond["rating"], errors="coerce")
         long_cond = long_cond.dropna(subset=["rating", "yielding", "eHMIOn", "camera"])
 
+        # Keep Plotly's original full violin density, including its soft tails,
+        # but provide only nonnegative y-axis tick positions.
+        rating_max = float(long_cond["rating"].max()) if not long_cond.empty else 1.0
+        rough_tick_step = max(rating_max, 1.0) / 5.0
+        tick_magnitude = 10.0 ** math.floor(math.log10(rough_tick_step))
+        normalized_step = rough_tick_step / tick_magnitude
+        if normalized_step <= 1.0:
+            nice_step = 1.0 * tick_magnitude
+        elif normalized_step <= 2.0:
+            nice_step = 2.0 * tick_magnitude
+        elif normalized_step <= 5.0:
+            nice_step = 5.0 * tick_magnitude
+        else:
+            nice_step = 10.0 * tick_magnitude
+        tick_upper = math.ceil(max(rating_max, 0.0) / nice_step) * nice_step
+        nonnegative_rating_ticks = np.arange(
+            0.0,
+            tick_upper + nice_step * 0.5,
+            nice_step,
+        )
+
         # 4. Unique condition combinations (should be 8)
         conds = (
             long_cond[["yielding", "eHMIOn", "camera"]]
@@ -3028,7 +3272,11 @@ class HMD_helper:
             conds = conds.iloc[:max_plots]
 
         def camera_label(cam):
-            return "Co-pedestrian visible" if cam == 0 else "Co-pedestrian not visible"
+            return (
+                "Avatar first / participant second"
+                if cam == 0
+                else "Participant first / avatar second"
+            )
 
         # Two-line subplot title, single-line trace label
         def case_title(row):
@@ -3085,8 +3333,16 @@ class HMD_helper:
             template=plotly_template
         )
 
-        # y-axis label for first column
+        # Preserve the original autorange and full violin shape. Only the tick
+        # positions are restricted, so negative density tails remain visible.
         for r in range(1, 3):
+            for c in range(1, 5):
+                fig.update_yaxes(
+                    tickmode="array",
+                    tickvals=nonnegative_rating_ticks,
+                    row=r,
+                    col=c,
+                )
             fig.update_yaxes(title_text="Rating", row=r, col=1)
 
         # Hide x tick labels (titles already describe conditions)
@@ -3100,10 +3356,11 @@ class HMD_helper:
 
     def plot_yaw(self, mapping, column_name="Yaw", parameter=None, parameter_value=None,
                  additional_parameter=None, additional_parameter_value=None, compare_trial="video_1",
-                 xaxis_title=None, yaxis_title=None, xaxis_range=None, yaxis_range=None,
+                 xaxis_title=None, xaxis_range=None, yaxis_range=None,
                  margin=None, name=None, recompute=False):
         """
-        Generate a comparison plot of keypress yaw data and subjective slider ratings
+        Generate a comparison plot of horizontal Unity head heading data and
+        subjective slider ratings
         for multiple video trials relative to a test condition.
 
         The function processes trigger matrices for each participant and trial,
@@ -3120,7 +3377,6 @@ class HMD_helper:
             additional_parameter / additional_parameter_value (optional): Second filter.
             compare_trial (str, optional): Reference trial video_id.
             xaxis_title (str, optional): Custom label for the x-axis.
-            yaxis_title (str, optional): Custom label for the y-axis.
             xaxis_range (list, optional): x-axis [min, max] limits for the plot.
             yaxis_range (list, optional): y-axis [min, max] limits for the plot.
             margin (dict, optional): Custom plot margin dictionary.
@@ -3160,7 +3416,7 @@ class HMD_helper:
 
         data_folder = common.get_configs("data")  # Get path to raw data
 
-        # === Reference (test) trial: export yaw matrix and compute average yaw per timestamp ===
+        # Export HMD quaternions and compute horizontal Unity heading per timestamp.
         test_participant_csv = os.path.join(
             self.output_folder,
             f"participant_{column_name}_{compare_trial}.csv"
@@ -3175,7 +3431,7 @@ class HMD_helper:
                 mapping=mapping
             )
 
-        # Compute average yaw for the reference (test) trial and save
+        # Compute average horizontal heading for the reference trial and save.
         test_yaw_csv = os.path.join(
             self.output_folder,
             f"yaw_avg_{compare_trial}.csv"     # IMPORTANT: separate file from participant_*.csv
@@ -3184,13 +3440,21 @@ class HMD_helper:
         if recompute or not os.path.exists(test_yaw_csv):
             HMD_class.compute_avg_yaw_from_matrix_csv(
                 input_csv=test_participant_csv,
-                output_csv=test_yaw_csv
+                output_csv=test_yaw_csv,
+                force=recompute,
             )
 
-        # Matrix for t-tests: must use participant matrix, not averaged yaw CSV
-        test_matrix = extra_class.all_yaws_per_bin(
-            input_csv=test_participant_csv
-        )
+        def heading_bins(video_id, participant_csv):
+            """Use processed per-bin headings before converting quaternions."""
+            if self.processed_data_cache is not None:
+                cached_bins = self.processed_data_cache.get("head_heading_bins", {})
+                if str(video_id) in cached_bins:
+                    return cached_bins[str(video_id)]
+            return extra_class.all_yaws_per_bin(input_csv=participant_csv)
+
+        # Matrix for t-tests: must use participant-level per-bin headings, not
+        # only the averaged yaw CSV.
+        test_matrix = heading_bins(compare_trial, test_participant_csv)
 
         # === Iterate through each video trial (excluding control/test) ===
         for video in plot_videos:
@@ -3215,7 +3479,8 @@ class HMD_helper:
             if recompute or not os.path.exists(yaw_csv):
                 HMD_class.compute_avg_yaw_from_matrix_csv(
                     input_csv=participant_csv,
-                    output_csv=yaw_csv
+                    output_csv=yaw_csv,
+                    force=recompute,
                 )
 
             df = pd.read_csv(yaw_csv)
@@ -3223,9 +3488,7 @@ class HMD_helper:
             all_labels.append(display_name)
 
             # Extract all per-bin yaw values (for saving and t-test)
-            trial_matrix = extra_class.all_yaws_per_bin(
-                input_csv=participant_csv
-            )
+            trial_matrix = heading_bins(video, participant_csv)
 
             yaw_values = extra_class.flatten_trial_matrix(trial_matrix)
             yaw_values = yaw_values[~np.isnan(yaw_values)]  # Remove NaNs if present
@@ -3339,7 +3602,7 @@ class HMD_helper:
             xaxis_range=xaxis_range,
             yaxis_range=yaxis_range,
             xaxis_title=xaxis_title,  # type: ignore
-            yaxis_title="Yaw angle, [radians]",
+            yaxis_title="Horizontal head heading, [radians]",
             xaxis_title_offset=-0.047,  # type: ignore
             name_file=f"{name}",
             show_text_labels=True,
@@ -3349,12 +3612,12 @@ class HMD_helper:
             events_annotations_font_size=common.get_configs("font_size") - 8,
             stacked=False,
             ttest_signals=ttest_signals,
-            ttest_anova_row_height=0.006,
+            ttest_row_height=0.006,
             ttest_annotations_font_size=common.get_configs("font_size") - 8,
             ttest_annotation_x=0.001,  # type: ignore
             ttest_marker_size=common.get_configs("font_size") - 6,
             xaxis_step=1,
-            yaxis_step=0.03,  # type: ignore
+            yaxis_step=0.20,  # type: ignore
             legend_x=0,
             legend_y=1.225,
             legend_columns=2,
@@ -3368,6 +3631,7 @@ class HMD_helper:
             flag_trigger=False,
             margin=margin,
             cross_p1_times=cross_p1_times,
+            reuse_statistical_csv=self.reuse_statistical_results,
         )
 
     def plot_yaw_frequencies_by_condition(self, mapping, yaw_files_dir):
@@ -3567,7 +3831,7 @@ class HMD_helper:
         if not metrics_cam1_df.empty:
             logger.info(f"Camera 1 metrics:\n{metrics_cam1_df.to_string(index=False)}")
 
-        def finalize_figure(fig, cam_value):
+        def finalize_figure(fig):
             if fig is None:
 
                 return None
@@ -3585,7 +3849,7 @@ class HMD_helper:
                 paper_bgcolor="white",
                 plot_bgcolor="white",
                 title="",
-                xaxis_title="</b>Gaze yaw angle (deg)</b>",
+                xaxis_title="</b>Horizontal head heading (deg)</b>",
                 yaxis_title="</b>Frequency</b>",
                 legend_title=None,
                 legend=dict(
@@ -3629,8 +3893,8 @@ class HMD_helper:
             )
             return fig
 
-        fig_cam0 = finalize_figure(fig_cam0, 0)
-        fig_cam1 = finalize_figure(fig_cam1, 1)
+        fig_cam0 = finalize_figure(fig_cam0)
+        fig_cam1 = finalize_figure(fig_cam1)
 
         # Save main camera-level figs
         if fig_cam0 is not None:
@@ -3772,7 +4036,7 @@ class HMD_helper:
         # Axis labels for the grid
         fig_grid.update_yaxes(title_text="Frequency", row=1, col=1)
         fig_grid.update_yaxes(title_text="Frequency", row=2, col=1)
-        fig_grid.update_xaxes(title_text="Gaze yaw angle (deg)", row=2, col=3)
+        fig_grid.update_xaxes(title_text="Horizontal head heading (deg)", row=2, col=3)
 
         # Row labels on extreme left: "Can see the person" / "Cannot see the person"
         # Use y-axis domains of first column in each row to place the labels nicely

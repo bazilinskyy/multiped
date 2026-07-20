@@ -141,8 +141,11 @@ Equivalence test for the near (2–4 m) versus far (8–10 m) contrast in percei
 [![within_between_crossing_risk_coefficients](figures/within_between_crossing_risk_coefficients.png)](https://htmlpreview.github.io/?https://github.com/bazilinskyy/multiped/blob/main/figures/within_between_crossing_risk_coefficients.html)
 Within-participant and between-participant coefficients relating trigger-based perceived crossing risk to Q1, Q2, and Q3.
 
+[![perceived_unsafety_common_window_full_factorial](figures/perceived_unsafety_common_window_full_factorial.png)](https://htmlpreview.github.io/?https://github.com/bazilinskyy/multiped/blob/main/figures/perceived_unsafety_common_window_full_factorial.html)
+Primary fixed five-second pre-passage perceived-unsafety outcome. Points show participant-level mean percentages across the five inter-pedestrian spacings, split by AV behaviour, conditional eHMI logic, and relative pedestrian order; error bars are between-participant 95% confidence intervals.
+
 [![crossing_risk_full_factorial](figures/crossing_risk_full_factorial.png)](https://htmlpreview.github.io/?https://github.com/bazilinskyy/multiped/blob/main/figures/crossing_risk_full_factorial.html)
-Trigger-based perceived crossing risk across inter-pedestrian distance, split by AV behaviour, eHMI status, and co-pedestrian visibility.
+Compatibility export of the primary fixed five-second pre-passage perceived-unsafety figure, retained under the earlier crossing-risk filename.
 
 [![Q2_full_factorial](figures/Q2_full_factorial.png)](https://htmlpreview.github.io/?https://github.com/bazilinskyy/multiped/blob/main/figures/Q2_full_factorial.html)
 Self-reported distance influence (Q2, 0–100) across inter-pedestrian distance, split by AV behaviour, eHMI status, and co-pedestrian visibility.
@@ -224,6 +227,12 @@ Mixed model coefficients for the additional trigger features as a function of AV
 
 
 ### Head movement from the participant
+
+[![head_heading_event_aligned_95ci](figures/head_heading_event_aligned_95ci.png)](https://htmlpreview.github.io/?https://github.com/bazilinskyy/multiped/blob/main/figures/head_heading_event_aligned_95ci.html)
+Participant-level baseline-corrected horizontal head heading aligned to the vehicle passing the participant. The non-yielding and yielding panels compare the two relative pedestrian orders; lines are participant-marginal means averaged over eHMI logic and spacing, shaded regions are between-participant 95% confidence intervals, and asterisks mark 20-ms bins with raw pointwise $p<.001$.
+
+[![head_heading_passage_summary_95ci](figures/head_heading_passage_summary_95ci.png)](https://htmlpreview.github.io/?https://github.com/bazilinskyy/multiped/blob/main/figures/head_heading_passage_summary_95ci.html)
+Horizontal head heading at participant passage, summarised by AV behaviour, conditional eHMI logic, and relative pedestrian order and averaged over inter-pedestrian spacing. Error bars show between-participant 95% confidence intervals.
 
 [![all_yaw_values_with_yielding](figures/all_yaw_values_with_yielding.png)](https://htmlpreview.github.io/?https://github.com/bazilinskyy/multiped/blob/main/figures/all_yaw_values_with_yielding.html)
 Head yaw in yielding trials.
