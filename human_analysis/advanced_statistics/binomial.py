@@ -26,7 +26,7 @@ from custom_logger import CustomLogger
 import warnings
 
 
-ADVANCED_STATS_SPECIFICATION = "reviewer_response_v4_bounded_common_window"
+ADVANCED_STATS_SPECIFICATION = "reviewer_response_v5_participant_bootstrap"
 
 import statsmodels.api as sm
 import statsmodels.formula.api as smf
@@ -48,6 +48,128 @@ from ..utils.distance import distance_code_to_metres, distance_codes_to_metres, 
 
 class BinomialMixin:
     """Focused method group extracted without changing calculation logic."""
+
+    @staticmethod
+    def _binomial_rhs_formula(model_mode: str) -> str:
+        """Return the fixed effects specification for one binomial model mode."""
+        if model_mode == "full":
+            return (
+                "C(yielding) * C(eHMIOn) * C(camera) + "
+                "C(distPed_m) * (C(yielding) + C(eHMIOn) + C(camera)) + "
+                "trial_number_centered * C(yielding) * C(eHMIOn) + "
+                "I(trial_number_centered ** 2)"
+            )
+        if model_mode == "participant_first":
+            return (
+                "C(yielding) * C(eHMIOn) + "
+                "C(distPed_m) * (C(yielding) + C(eHMIOn)) + "
+                "trial_number_centered * C(yielding) * C(eHMIOn) + "
+                "I(trial_number_centered ** 2)"
+            )
+        if model_mode == "event_participant_first_yielding":
+            return (
+                "C(distPed_m) * C(eHMIOn) + "
+                "trial_number_centered * C(eHMIOn) + "
+                "I(trial_number_centered ** 2)"
+            )
+        raise ValueError(f"Unknown binomial model mode: {model_mode}")
+
+    def _prepare_grouped_binomial_frame(
+        self,
+        trial_df: pd.DataFrame,
+        success_column: str,
+        valid_column: str,
+        model_mode: str,
+        analysis_label: str,
+    ) -> pd.DataFrame:
+        """Validate and prepare the trial rows used by a grouped binomial fit."""
+        self._binomial_rhs_formula(model_mode)
+        required = [
+            "participant",
+            success_column,
+            valid_column,
+            "yielding",
+            "eHMIOn",
+            "camera",
+            "distPed_m",
+            "trial_number",
+        ]
+        missing = [column for column in required if column not in trial_df.columns]
+        if missing:
+            raise ValueError(f"Missing columns for {analysis_label}: {missing}")
+        current = trial_df.copy()
+        for column in required:
+            current[column] = pd.to_numeric(current[column], errors="coerce")
+        current = current.dropna(subset=required)
+        current = current.loc[current[valid_column] > 0].copy()
+        if model_mode == "participant_first":
+            current = current.loc[current["camera"].eq(1)].copy()
+        elif model_mode == "event_participant_first_yielding":
+            current = current.loc[
+                current["camera"].eq(1) & current["yielding"].eq(1)
+            ].copy()
+            expected_bins = int(round(5.0 / self.trigger_bin_seconds))
+            incomplete_count = int((current[valid_column] != expected_bins).sum())
+            if incomplete_count:
+                logger.warning(
+                    f"Excluded {incomplete_count} incomplete event windows from "
+                    f"{analysis_label}."
+                )
+                current = current.loc[
+                    current[valid_column].eq(expected_bins)
+                ].copy()
+        if current.empty:
+            raise ValueError(f"No valid observations for {analysis_label}.")
+        current["trial_number_centered"] = (
+            current["trial_number"]
+            - current.groupby("participant")["trial_number"].transform("mean")
+        )
+        return current
+
+    @staticmethod
+    def _full_contrast_specifications():
+        """Return the twelve response scale contrasts used by the primary model."""
+        specifications = []
+        for yielding in (0, 1):
+            for camera in (0, 1):
+                specifications.append(
+                    (
+                        "conditional_ehmi",
+                        f"eHMI on minus off | yielding={yielding}, order={camera}",
+                        (yielding, 0, camera),
+                        (yielding, 1, camera),
+                        f"yielding={yielding}; camera={camera}",
+                    )
+                )
+        for yielding in (0, 1):
+            for ehmi in (0, 1):
+                specifications.append(
+                    (
+                        "relative_order",
+                        (
+                            "participant first minus avatar first | "
+                            f"yielding={yielding}, eHMI={ehmi}"
+                        ),
+                        (yielding, ehmi, 0),
+                        (yielding, ehmi, 1),
+                        f"yielding={yielding}; eHMIOn={ehmi}",
+                    )
+                )
+        for ehmi in (0, 1):
+            for camera in (0, 1):
+                specifications.append(
+                    (
+                        "av_behaviour",
+                        (
+                            "yielding minus non-yielding | "
+                            f"eHMI={ehmi}, order={camera}"
+                        ),
+                        (0, ehmi, camera),
+                        (1, ehmi, camera),
+                        f"eHMIOn={ehmi}; camera={camera}",
+                    )
+                )
+        return specifications
 
     @staticmethod
     def _joint_wald_row(
@@ -242,40 +364,7 @@ class BinomialMixin:
             for row in marginal_probabilities.itertuples()
         }
         covariance = fit.cov_params().to_numpy(dtype=float)
-        specifications: List[Tuple[str, str, Tuple[int, int, int], Tuple[int, int, int], str]] = []
-        for yielding in (0, 1):
-            for camera in (0, 1):
-                specifications.append(
-                    (
-                        "conditional_ehmi",
-                        f"eHMI on minus off | yielding={yielding}, order={camera}",
-                        (yielding, 0, camera),
-                        (yielding, 1, camera),
-                        f"yielding={yielding}; camera={camera}",
-                    )
-                )
-        for yielding in (0, 1):
-            for ehmi in (0, 1):
-                specifications.append(
-                    (
-                        "relative_order",
-                        f"participant first minus avatar first | yielding={yielding}, eHMI={ehmi}",
-                        (yielding, ehmi, 0),
-                        (yielding, ehmi, 1),
-                        f"yielding={yielding}; eHMIOn={ehmi}",
-                    )
-                )
-        for ehmi in (0, 1):
-            for camera in (0, 1):
-                specifications.append(
-                    (
-                        "av_behaviour",
-                        f"yielding minus non-yielding | eHMI={ehmi}, order={camera}",
-                        (0, ehmi, camera),
-                        (1, ehmi, camera),
-                        f"eHMIOn={ehmi}; camera={camera}",
-                    )
-                )
+        specifications = self._full_contrast_specifications()
 
         rows: List[Dict[str, object]] = []
         for family, label, reference, comparison, conditioning in specifications:
@@ -321,63 +410,14 @@ class BinomialMixin:
         """
         if sm is None or dmatrix is None or build_design_matrices is None:
             raise RuntimeError("statsmodels and patsy are required for the binomial analysis.")
-        if model_mode not in {"full", "participant_first", "event_participant_first_yielding"}:
-            raise ValueError(f"Unknown binomial model mode: {model_mode}")
-        required = [
-            "participant",
-            success_column,
-            valid_column,
-            "yielding",
-            "eHMIOn",
-            "camera",
-            "distPed_m",
-            "trial_number",
-        ]
-        missing = [column for column in required if column not in trial_df.columns]
-        if missing:
-            raise ValueError(f"Missing columns for {analysis_label}: {missing}")
-        current = trial_df.copy()
-        for column in required:
-            current[column] = pd.to_numeric(current[column], errors="coerce")
-        current = current.dropna(subset=required)
-        current = current.loc[current[valid_column] > 0].copy()
-        if model_mode == "participant_first":
-            current = current.loc[current["camera"].eq(1)].copy()
-        elif model_mode == "event_participant_first_yielding":
-            current = current.loc[current["camera"].eq(1) & current["yielding"].eq(1)].copy()
-            expected_bins = int(round(5.0 / self.trigger_bin_seconds))
-            incomplete_count = int((current[valid_column] != expected_bins).sum())
-            if incomplete_count:
-                logger.warning(
-                    f"Excluded {incomplete_count} incomplete event windows from {analysis_label}."
-                )
-                current = current.loc[current[valid_column].eq(expected_bins)].copy()
-        if current.empty:
-            raise ValueError(f"No valid observations for {analysis_label}.")
-        current["trial_number_centered"] = (
-            current["trial_number"]
-            - current.groupby("participant")["trial_number"].transform("mean")
+        current = self._prepare_grouped_binomial_frame(
+            trial_df=trial_df,
+            success_column=success_column,
+            valid_column=valid_column,
+            model_mode=model_mode,
+            analysis_label=analysis_label,
         )
-        if model_mode == "full":
-            rhs_formula = (
-                "C(yielding) * C(eHMIOn) * C(camera) + "
-                "C(distPed_m) * (C(yielding) + C(eHMIOn) + C(camera)) + "
-                "trial_number_centered * C(yielding) * C(eHMIOn) + "
-                "I(trial_number_centered ** 2)"
-            )
-        elif model_mode == "participant_first":
-            rhs_formula = (
-                "C(yielding) * C(eHMIOn) + "
-                "C(distPed_m) * (C(yielding) + C(eHMIOn)) + "
-                "trial_number_centered * C(yielding) * C(eHMIOn) + "
-                "I(trial_number_centered ** 2)"
-            )
-        else:
-            rhs_formula = (
-                "C(distPed_m) * C(eHMIOn) + "
-                "trial_number_centered * C(eHMIOn) + "
-                "I(trial_number_centered ** 2)"
-            )
+        rhs_formula = self._binomial_rhs_formula(model_mode)
         formula = f"{success_column}/{valid_column} ~ {rhs_formula}"
         design = dmatrix(rhs_formula, current, return_type="dataframe")
         successes = current[success_column].to_numpy(dtype=float)
@@ -479,5 +519,411 @@ class BinomialMixin:
             "marginal_probabilities": marginal,
             "revised_contrasts": contrasts,
             "omnibus_tests": omnibus,
+            "diagnostics": diagnostics,
+        }
+
+    def run_primary_participant_bootstrap(
+        self,
+        trial_df: pd.DataFrame,
+        primary_result: Dict[str, pd.DataFrame],
+        n_resamples: int = 2000,
+        random_seed: int = 20260726,
+        minimum_success_rate: float = 0.95,
+        success_column: str = "unsafe_bins_common_window",
+        valid_column: str = "valid_bins_common_window",
+        analysis_label: str = "common_window_primary_participant_bootstrap",
+    ) -> Dict[str, pd.DataFrame]:
+        """Bootstrap primary response scale estimates by resampling participants.
+
+        Every selected participant contributes all of their trials. The bootstrap
+        refits the same grouped binomial mean model as the primary analysis.
+        Percentile intervals are a robustness check only; the participant
+        clustered sandwich covariance and Holm adjusted tests remain the primary
+        inference.
+        """
+        if n_resamples < 100:
+            raise ValueError("Participant bootstrap requires at least 100 resamples.")
+        if not 0.0 < minimum_success_rate <= 1.0:
+            raise ValueError("minimum_success_rate must be in (0, 1].")
+
+        current = self._prepare_grouped_binomial_frame(
+            trial_df=trial_df,
+            success_column=success_column,
+            valid_column=valid_column,
+            model_mode="full",
+            analysis_label=analysis_label,
+        )
+        rhs_formula = self._binomial_rhs_formula("full")
+        formula = f"{success_column}/{valid_column} ~ {rhs_formula}"
+        design = dmatrix(rhs_formula, current, return_type="dataframe")
+        successes = current[success_column].to_numpy(dtype=float)
+        failures = (
+            current[valid_column] - current[success_column]
+        ).to_numpy(dtype=float)
+        endog = np.column_stack([successes, failures])
+
+        participant_values = np.sort(current["participant"].unique())
+        participant_rows = {
+            participant: np.flatnonzero(
+                current["participant"].to_numpy() == participant
+            )
+            for participant in participant_values
+        }
+        n_participants = len(participant_values)
+        if n_participants < 2:
+            raise ValueError("Participant bootstrap requires at least two participants.")
+
+        distances = sorted(current["distPed_m"].dropna().unique().tolist())
+        cell_keys = [
+            (yielding, ehmi, camera)
+            for yielding in (0, 1)
+            for ehmi in (0, 1)
+            for camera in (0, 1)
+        ]
+        prediction_grid = pd.DataFrame.from_records(
+            [
+                {
+                    "yielding": yielding,
+                    "eHMIOn": ehmi,
+                    "camera": camera,
+                    "distPed_m": distance,
+                    "trial_number_centered": 0.0,
+                }
+                for yielding, ehmi, camera in cell_keys
+                for distance in distances
+            ]
+        )
+        prediction_design = build_design_matrices(
+            [design.design_info],
+            prediction_grid,
+            return_type="dataframe",
+        )[0]
+        prediction_design = prediction_design.loc[:, design.columns]
+        prediction_matrix = prediction_design.to_numpy(dtype=float)
+        prediction_grid_keys = list(
+            zip(
+                prediction_grid["yielding"].astype(int),
+                prediction_grid["eHMIOn"].astype(int),
+                prediction_grid["camera"].astype(int),
+            )
+        )
+        cell_positions = {
+            key: np.asarray(
+                [
+                    index
+                    for index, grid_key in enumerate(prediction_grid_keys)
+                    if grid_key == key
+                ],
+                dtype=int,
+            )
+            for key in cell_keys
+        }
+        contrast_specs = self._full_contrast_specifications()
+
+        marginal_draws = np.full(
+            (n_resamples, len(cell_keys)),
+            np.nan,
+            dtype=float,
+        )
+        contrast_draws = np.full(
+            (n_resamples, len(contrast_specs)),
+            np.nan,
+            dtype=float,
+        )
+        rng = np.random.default_rng(int(random_seed))
+        failure_messages = []
+        successful = 0
+        log_every = max(1, n_resamples // 10)
+        logger.info(
+            f"Starting participant bootstrap with {n_resamples} resamples, "
+            f"{n_participants} participants, and seed {random_seed}."
+        )
+
+        for bootstrap_index in range(n_resamples):
+            sampled_participants = rng.choice(
+                participant_values,
+                size=n_participants,
+                replace=True,
+            )
+            row_indexes = np.concatenate(
+                [
+                    participant_rows[participant]
+                    for participant in sampled_participants
+                ]
+            )
+            try:
+                with warnings.catch_warnings(record=True):
+                    warnings.simplefilter("always")
+                    fit = sm.GLM(
+                        endog=endog[row_indexes, :],
+                        exog=design.iloc[row_indexes, :],
+                        family=sm.families.Binomial(),
+                    ).fit(maxiter=100, disp=0)
+                converged = bool(getattr(fit, "converged", True))
+                parameters = np.asarray(fit.params, dtype=float)
+                if not converged or not np.all(np.isfinite(parameters)):
+                    raise RuntimeError("grouped binomial fit did not converge")
+                grid_probabilities = expit(prediction_matrix @ parameters)
+                cell_probability_lookup = {
+                    key: float(np.mean(grid_probabilities[cell_positions[key]]))
+                    for key in cell_keys
+                }
+                marginal_draws[successful, :] = [
+                    cell_probability_lookup[key] for key in cell_keys
+                ]
+                contrast_draws[successful, :] = [
+                    (
+                        cell_probability_lookup[comparison]
+                        - cell_probability_lookup[reference]
+                    )
+                    for _, _, reference, comparison, _ in contrast_specs
+                ]
+                successful += 1
+            except Exception as exc:
+                if len(failure_messages) < 20:
+                    failure_messages.append(
+                        f"iteration {bootstrap_index + 1}: "
+                        f"{type(exc).__name__}: {exc}"
+                    )
+            if (bootstrap_index + 1) % log_every == 0:
+                logger.info(
+                    "Participant bootstrap progress: "
+                    f"{bootstrap_index + 1}/{n_resamples}; "
+                    f"successful={successful}."
+                )
+
+        marginal_draws = marginal_draws[:successful, :]
+        contrast_draws = contrast_draws[:successful, :]
+        success_rate = successful / float(n_resamples)
+        if success_rate < minimum_success_rate:
+            raise RuntimeError(
+                "Participant bootstrap success rate was "
+                f"{success_rate:.3f}, below the required "
+                f"{minimum_success_rate:.3f}. First failures: "
+                + " | ".join(failure_messages[:5])
+            )
+
+        primary_marginal = primary_result["marginal_probabilities"].copy()
+        primary_contrasts = primary_result["revised_contrasts"].copy()
+        original_marginal = {
+            (int(row.yielding), int(row.eHMIOn), int(row.camera)): row
+            for row in primary_marginal.itertuples()
+        }
+        original_contrasts = {
+            str(row.contrast): row for row in primary_contrasts.itertuples()
+        }
+
+        def distribution_summary(values: np.ndarray, original_value: float):
+            return {
+                "original_estimate": float(original_value),
+                "bootstrap_mean": float(np.mean(values)),
+                "bootstrap_bias": float(np.mean(values) - original_value),
+                "bootstrap_standard_error": float(np.std(values, ddof=1)),
+                "bootstrap_ci_lower": float(np.quantile(values, 0.025)),
+                "bootstrap_ci_upper": float(np.quantile(values, 0.975)),
+            }
+
+        marginal_rows = []
+        for column_index, key in enumerate(cell_keys):
+            original = original_marginal[key]
+            summary = distribution_summary(
+                marginal_draws[:, column_index],
+                float(original.predicted_probability),
+            )
+            marginal_rows.append(
+                {
+                    "analysis": analysis_label,
+                    "yielding": key[0],
+                    "eHMIOn": key[1],
+                    "camera": key[2],
+                    "original_predicted_percentage": (
+                        100.0 * summary["original_estimate"]
+                    ),
+                    "cluster_sandwich_ci_lower_percentage": float(
+                        original.ci_lower_percentage
+                    ),
+                    "cluster_sandwich_ci_upper_percentage": float(
+                        original.ci_upper_percentage
+                    ),
+                    "bootstrap_mean_percentage": (
+                        100.0 * summary["bootstrap_mean"]
+                    ),
+                    "bootstrap_bias_percentage_points": (
+                        100.0 * summary["bootstrap_bias"]
+                    ),
+                    "bootstrap_standard_error_percentage_points": (
+                        100.0 * summary["bootstrap_standard_error"]
+                    ),
+                    "bootstrap_ci_lower_percentage": (
+                        100.0 * summary["bootstrap_ci_lower"]
+                    ),
+                    "bootstrap_ci_upper_percentage": (
+                        100.0 * summary["bootstrap_ci_upper"]
+                    ),
+                    "bootstrap_interval": (
+                        "95% participant percentile interval; "
+                        "robustness check only"
+                    ),
+                    "n_resamples_requested": int(n_resamples),
+                    "n_resamples_successful": int(successful),
+                    "random_seed": int(random_seed),
+                }
+            )
+        marginal_summary = pd.DataFrame.from_records(marginal_rows)
+
+        contrast_rows = []
+        for column_index, (
+            family,
+            label,
+            reference,
+            comparison,
+            conditioning,
+        ) in enumerate(contrast_specs):
+            original = original_contrasts[label]
+            summary = distribution_summary(
+                contrast_draws[:, column_index],
+                float(original.estimate_probability),
+            )
+            contrast_rows.append(
+                {
+                    "analysis": analysis_label,
+                    "contrast_family": family,
+                    "contrast": label,
+                    "conditioning": conditioning,
+                    "reference_cell": str(reference),
+                    "comparison_cell": str(comparison),
+                    "original_estimate_percentage_points": (
+                        100.0 * summary["original_estimate"]
+                    ),
+                    "cluster_sandwich_ci_lower_percentage_points": float(
+                        original.ci_lower_percentage_points
+                    ),
+                    "cluster_sandwich_ci_upper_percentage_points": float(
+                        original.ci_upper_percentage_points
+                    ),
+                    "primary_p_value_holm": float(original.p_value_holm),
+                    "bootstrap_mean_percentage_points": (
+                        100.0 * summary["bootstrap_mean"]
+                    ),
+                    "bootstrap_bias_percentage_points": (
+                        100.0 * summary["bootstrap_bias"]
+                    ),
+                    "bootstrap_standard_error_percentage_points": (
+                        100.0 * summary["bootstrap_standard_error"]
+                    ),
+                    "bootstrap_ci_lower_percentage_points": (
+                        100.0 * summary["bootstrap_ci_lower"]
+                    ),
+                    "bootstrap_ci_upper_percentage_points": (
+                        100.0 * summary["bootstrap_ci_upper"]
+                    ),
+                    "bootstrap_ci_excludes_zero": bool(
+                        summary["bootstrap_ci_lower"] > 0.0
+                        or summary["bootstrap_ci_upper"] < 0.0
+                    ),
+                    "bootstrap_interval": (
+                        "95% participant percentile interval; "
+                        "no multiplicity adjustment; robustness check only"
+                    ),
+                    "n_resamples_requested": int(n_resamples),
+                    "n_resamples_successful": int(successful),
+                    "random_seed": int(random_seed),
+                }
+            )
+        contrast_summary = pd.DataFrame.from_records(contrast_rows)
+
+        marginal_draw_rows = []
+        contrast_draw_rows = []
+        for iteration in range(successful):
+            for column_index, key in enumerate(cell_keys):
+                marginal_draw_rows.append(
+                    {
+                        "bootstrap_iteration": iteration + 1,
+                        "yielding": key[0],
+                        "eHMIOn": key[1],
+                        "camera": key[2],
+                        "predicted_percentage": (
+                            100.0 * marginal_draws[iteration, column_index]
+                        ),
+                    }
+                )
+            for column_index, (
+                family,
+                label,
+                _,
+                _,
+                conditioning,
+            ) in enumerate(contrast_specs):
+                contrast_draw_rows.append(
+                    {
+                        "bootstrap_iteration": iteration + 1,
+                        "contrast_family": family,
+                        "contrast": label,
+                        "conditioning": conditioning,
+                        "estimate_percentage_points": (
+                            100.0 * contrast_draws[iteration, column_index]
+                        ),
+                    }
+                )
+        marginal_draw_table = pd.DataFrame.from_records(marginal_draw_rows)
+        contrast_draw_table = pd.DataFrame.from_records(contrast_draw_rows)
+        diagnostics = pd.DataFrame.from_records(
+            [
+                {
+                    "analysis": analysis_label,
+                    "formula": formula,
+                    "resampling_unit": "participant",
+                    "resampling_scheme": (
+                        "participants sampled with replacement; "
+                        "all participant trials retained"
+                    ),
+                    "n_trials_original": len(current),
+                    "n_participants_original": n_participants,
+                    "n_resamples_requested": int(n_resamples),
+                    "n_resamples_successful": int(successful),
+                    "n_resamples_failed": int(n_resamples - successful),
+                    "success_rate": float(success_rate),
+                    "minimum_success_rate": float(minimum_success_rate),
+                    "random_seed": int(random_seed),
+                    "interval_method": "participant percentile bootstrap",
+                    "confidence_level": 0.95,
+                    "primary_inference": (
+                        "participant clustered sandwich covariance with "
+                        "Holm adjusted contrast families"
+                    ),
+                    "failure_examples": " | ".join(failure_messages),
+                }
+            ]
+        )
+
+        self._save_table(
+            marginal_summary,
+            f"{analysis_label}_marginal_probabilities.csv",
+        )
+        self._save_table(
+            contrast_summary,
+            f"{analysis_label}_revised_contrasts.csv",
+        )
+        self._save_table(
+            marginal_draw_table,
+            f"{analysis_label}_marginal_probability_draws.csv",
+        )
+        self._save_table(
+            contrast_draw_table,
+            f"{analysis_label}_contrast_draws.csv",
+        )
+        self._save_table(
+            diagnostics,
+            f"{analysis_label}_diagnostics.csv",
+        )
+        logger.info(
+            "Participant bootstrap completed: "
+            f"{successful}/{n_resamples} successful resamples."
+        )
+        return {
+            "marginal_probabilities": marginal_summary,
+            "revised_contrasts": contrast_summary,
+            "marginal_probability_draws": marginal_draw_table,
+            "contrast_draws": contrast_draw_table,
             "diagnostics": diagnostics,
         }

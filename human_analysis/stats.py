@@ -15,7 +15,7 @@ from .advanced_statistics import (
     WithinBetweenMixin,
 )
 
-ADVANCED_STATS_SPECIFICATION = "reviewer_response_v4_bounded_common_window"
+ADVANCED_STATS_SPECIFICATION = "reviewer_response_v5_participant_bootstrap"
 
 
 class AdvancedStatsRunner(

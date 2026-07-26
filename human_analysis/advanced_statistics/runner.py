@@ -26,7 +26,7 @@ from custom_logger import CustomLogger
 import warnings
 
 
-ADVANCED_STATS_SPECIFICATION = "reviewer_response_v4_bounded_common_window"
+ADVANCED_STATS_SPECIFICATION = "reviewer_response_v5_participant_bootstrap"
 
 import statsmodels.api as sm
 import statsmodels.formula.api as smf
@@ -49,7 +49,15 @@ from ..utils.distance import distance_code_to_metres, distance_codes_to_metres, 
 class RunnerMixin:
     """Focused method group extracted without changing calculation logic."""
 
-    def run_all(self, trial_df: pd.DataFrame, equivalence_margin: float = 5.0, trigger_threshold: float = 0.05) -> Dict[str, pd.DataFrame]:
+    def run_all(
+        self,
+        trial_df: pd.DataFrame,
+        equivalence_margin: float = 5.0,
+        trigger_threshold: float = 0.05,
+        participant_bootstrap_resamples: int = 2000,
+        participant_bootstrap_seed: int = 20260726,
+        participant_bootstrap_minimum_success_rate: float = 0.95,
+    ) -> Dict[str, pd.DataFrame]:
 
         """Run the full advanced statistics pipeline end to end.
 
@@ -59,6 +67,12 @@ class RunnerMixin:
                 near versus far TOST comparison.
             trigger_threshold: Threshold on the 0..1 pressure-sensitive trigger
                 signal used to define a binary pressed/risk state.
+            participant_bootstrap_resamples: Number of complete participant
+                resamples used for the primary model robustness check.
+            participant_bootstrap_seed: Reproducible random seed for participant
+                resampling.
+            participant_bootstrap_minimum_success_rate: Minimum acceptable
+                proportion of converged bootstrap fits.
 
         Returns:
             A dictionary containing the main intermediate and final result
@@ -100,6 +114,21 @@ class RunnerMixin:
             success_column="unsafe_bins_common_window",
             valid_column="valid_bins_common_window",
             model_mode="full",
+        )
+        # Resample complete participant clusters and refit the same primary
+        # mean model. These percentile intervals are a targeted robustness
+        # check for the finite number of participant clusters; they do not
+        # replace the clustered sandwich covariance or Holm-adjusted tests.
+        common_window_participant_bootstrap = (
+            self.run_primary_participant_bootstrap(
+                enriched_trial_df,
+                primary_result=common_window_binomial,
+                n_resamples=int(participant_bootstrap_resamples),
+                random_seed=int(participant_bootstrap_seed),
+                minimum_success_rate=float(
+                    participant_bootstrap_minimum_success_rate
+                ),
+            )
         )
         participant_first_binomial = self.run_primary_grouped_binomial_analysis(
             enriched_trial_df,
@@ -203,6 +232,7 @@ class RunnerMixin:
             "common_window_revised_contrasts": common_window_binomial["revised_contrasts"],
             "common_window_omnibus_tests": common_window_binomial["omnibus_tests"],
             "common_window_binomial_diagnostics": common_window_binomial["diagnostics"],
+            "common_window_participant_bootstrap": common_window_participant_bootstrap,
             "participant_first_binomial": participant_first_binomial,
             "event_aligned_binomial": event_results,
             "threshold_binomial": threshold_results,

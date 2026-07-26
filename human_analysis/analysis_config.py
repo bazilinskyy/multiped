@@ -20,6 +20,9 @@ class AnalysisConfig:
     always_analyse: bool
     primary_trigger_threshold: float
     trigger_thresholds: tuple[float, ...]
+    participant_bootstrap_resamples: int
+    participant_bootstrap_seed: int
+    participant_bootstrap_minimum_success_rate: float
     keypress_resolution_ms: int
     yaw_resolution_ms: int
     p_value: float
@@ -39,6 +42,15 @@ class AnalysisConfig:
             always_analyse=bool(common.get_configs("always_analyse")),
             primary_trigger_threshold=float(common.get_configs("primary_trigger_threshold")),
             trigger_thresholds=tuple(float(v) for v in common.get_configs("trigger_threshold")),
+            participant_bootstrap_resamples=int(
+                common.get_configs("participant_bootstrap_resamples")
+            ),
+            participant_bootstrap_seed=int(
+                common.get_configs("participant_bootstrap_seed")
+            ),
+            participant_bootstrap_minimum_success_rate=float(
+                common.get_configs("participant_bootstrap_minimum_success_rate")
+            ),
             keypress_resolution_ms=int(common.get_configs("kp_resolution")),
             yaw_resolution_ms=int(common.get_configs("yaw_resolution")),
             p_value=float(common.get_configs("p_value")),
@@ -60,5 +72,15 @@ class AnalysisConfig:
             for value in self.trigger_thresholds
         ):
             raise ValueError("The primary threshold must appear in trigger_threshold")
+        if self.participant_bootstrap_resamples < 100:
+            raise ValueError(
+                "participant_bootstrap_resamples must be at least 100"
+            )
+        if self.participant_bootstrap_seed < 0:
+            raise ValueError("participant_bootstrap_seed must be nonnegative")
+        if not 0.0 < self.participant_bootstrap_minimum_success_rate <= 1.0:
+            raise ValueError(
+                "participant_bootstrap_minimum_success_rate must be in (0, 1]"
+            )
         if self.keypress_resolution_ms <= 0 or self.yaw_resolution_ms <= 0:
             raise ValueError("Sampling resolutions must be positive")

@@ -51,11 +51,16 @@ CACHE_SETTINGS = {
 }
 
 RUN_ADVANCED_STATISTICS = True
-ANALYSIS_PIPELINE_VERSION = "reviewer_response_v4_bounded_common_window"
-ANALYSIS_SOURCE_VERSION = "2026-07-20-readable-modular-v1"
+ANALYSIS_PIPELINE_VERSION = "reviewer_response_v5_participant_bootstrap"
+ANALYSIS_SOURCE_VERSION = "2026-07-26-participant-bootstrap-v1"
 EQUIVALENCE_MARGIN_POINTS = 5.0
 PRIMARY_TRIGGER_THRESHOLD = CONFIG.primary_trigger_threshold
 TRIGGER_PRESS_THRESHOLDS = list(CONFIG.trigger_thresholds)
+PARTICIPANT_BOOTSTRAP_RESAMPLES = CONFIG.participant_bootstrap_resamples
+PARTICIPANT_BOOTSTRAP_SEED = CONFIG.participant_bootstrap_seed
+PARTICIPANT_BOOTSTRAP_MINIMUM_SUCCESS_RATE = (
+    CONFIG.participant_bootstrap_minimum_success_rate
+)
 
 
 
@@ -171,12 +176,20 @@ def run_advanced_statistics(trial_level_df: pd.DataFrame, trigger_threshold: flo
         trial_df=trial_level_df,
         equivalence_margin=EQUIVALENCE_MARGIN_POINTS,
         trigger_threshold=trigger_threshold,
+        participant_bootstrap_resamples=PARTICIPANT_BOOTSTRAP_RESAMPLES,
+        participant_bootstrap_seed=PARTICIPANT_BOOTSTRAP_SEED,
+        participant_bootstrap_minimum_success_rate=(
+            PARTICIPANT_BOOTSTRAP_MINIMUM_SUCCESS_RATE
+        ),
     )
     required_outputs = [
         "common_window_primary_marginal_probabilities.csv",
         "common_window_primary_revised_contrasts.csv",
         "common_window_primary_omnibus_tests.csv",
         "common_window_primary_binomial_diagnostics.csv",
+        "common_window_primary_participant_bootstrap_marginal_probabilities.csv",
+        "common_window_primary_participant_bootstrap_revised_contrasts.csv",
+        "common_window_primary_participant_bootstrap_diagnostics.csv",
         "common_window_participant_first_marginal_probabilities.csv",
         "common_window_participant_first_omnibus_tests.csv",
         "braking_onset_window_participant_first_marginal_probabilities.csv",
