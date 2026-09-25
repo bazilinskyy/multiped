@@ -126,6 +126,23 @@ Configuration of the project needs to be defined in `multiped/config`. Please us
 * `font_family`: Font family to be used in all generated figures for visual consistency.
 * `font_size`: Font size to be applied to all text in generated figures.
 * `p_value`: p-value threshold to be used for statistical significance testing (e.g., in t-tests).
+* `processed_data_cache`: Pickle file holding all processed participant data; later runs read only this file unless `always_analyse` is true.
+* `primary_trigger_threshold`: Trigger threshold used for the primary analysis; it must also appear in `trigger_threshold`.
+* `participant_bootstrap_resamples`, `participant_bootstrap_seed`, `participant_bootstrap_minimum_success_rate`: Settings of the participant-level bootstrap of the primary model.
+* `open_figures_in_browser`: Boolean toggle; when true, every saved Plotly figure is also opened in a browser tab.
+
+### Vehicle event schedule
+The AV followed one scripted trajectory per vehicle behaviour, so vehicle event times are constant across trials. `human_analysis/utils/vehicle_events.py` replaces the scattered per-condition times in `mapping.csv` (logged with a 0.5-s speed estimate and 20-ms physics steps) with this schedule before any analysis: braking onset 5.76 s, standstill 11.00 s, drive-off 14.00 s, and passage of the first roadside position 9.58 s (non-yielding) or 14.92 s (yielding) after trial onset. Cached statistics are recomputed automatically when the schedule changes.
+
+### Second-revision analyses
+`human_analysis/advanced_statistics/revision.py` adds the analyses requested in the second review round. They run automatically as part of `analysis.py` and write to `_output/statistics/`:
+* `common_window_primary_interaction_contrasts.csv`: difference between the participant-first and avatar-first eHMI contrasts (clustered and bootstrap intervals).
+* `common_window_participant_level_paired_contrasts.csv` and `common_window_trial_level_vs_primary_contrasts.csv`: sensitivity analyses that do not treat 100-ms bins as independent (paired participant-level contrasts, trial-level fractional logit, binary majority-of-window outcome).
+* `common_window_animation_exposure_learning_*.csv`: learning analysis based on the number of previous yielding-eHMI animation trials.
+* `common_window_primary_term_wise_wald_tests.csv`: joint Wald test of every model term (effect coding).
+* `presentation_order_*.csv`: spread of conditions over the randomised trial order.
+* `vehicle_event_timing_summary.csv`: the vehicle event schedule used by the analyses, with the raw simulator log for comparison.
+* `rating_models_random_intercept_coefficients.csv`: Gaussian random-intercept models for the trial-wise ratings Q1–Q3.
 
 
 

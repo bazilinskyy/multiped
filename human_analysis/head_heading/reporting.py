@@ -70,9 +70,14 @@ def _log_results(
     minimum_main = minimum.loc[
         ["yielding_minus_non_yielding", "PF_AS_minus_AF_PS", "conditional_eHMI_on_minus_off"]
     ]
-    logger.info(
-        f"Minimum-heading main contrasts were not supported after Holm correction (smallest {_p_text(float(minimum_main['p_holm_within_metric'].min()))})."
-    )
+    for contrast_name, row in minimum_main.iterrows():
+        holm_p = float(row["p_holm_within_metric"])
+        verdict = "supported" if holm_p < 0.05 else "not supported"
+        logger.info(
+            f"Minimum-heading contrast {contrast_name}: {row['estimate']:.2f} deg, "
+            f"95% CI [{row['ci_lower']:.2f}, {row['ci_upper']:.2f}], "
+            f"{_p_text(holm_p)} ({verdict} after Holm correction)."
+        )
     participant_cells = (
         features.groupby(["participant", "yielding", "order"], observed=True)["heading_at_pass_deg"]
         .mean()
@@ -149,7 +154,7 @@ def _log_results(
         "Exploratory final-sustained 20% recovery onset, yielding minus "
         f"non-yielding: {onset['estimate']:.2f} s, "
         f"95% CI [{onset['ci_lower']:.2f}, {onset['ci_upper']:.2f}], "
-        f"Holm p<.001; available in {available}/{len(features)} trials "
+        f"{_p_text(float(onset['p_holm_within_metric']))}; available in {available}/{len(features)} trials "
         f"({100.0 * available / len(features):.1f}%)."
     )
     stop_rows = event_contrasts[event_contrasts["metric"].eq("stopping_change_deg")].set_index("contrast")

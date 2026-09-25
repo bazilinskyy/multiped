@@ -9,10 +9,12 @@ from .binomial import BinomialMixin
 from .figures import CommonWindowFigureMixin
 from .within_between import WithinBetweenMixin
 from .feature_models import FeatureModelMixin
+from .revision import RevisionAnalysesMixin
 from .runner import RunnerMixin
 
 __all__ = [
     "TOSTResult", "CoreStatsMixin", "TriggerFeatureMixin", "EquivalenceMixin",
     "RepeatedMeasuresMixin", "BinomialMixin", "CommonWindowFigureMixin",
-    "WithinBetweenMixin", "FeatureModelMixin", "RunnerMixin",
+    "WithinBetweenMixin", "FeatureModelMixin", "RevisionAnalysesMixin",
+    "RunnerMixin",
 ]

@@ -26,7 +26,7 @@ from custom_logger import CustomLogger
 import warnings
 
 
-ADVANCED_STATS_SPECIFICATION = "reviewer_response_v5_participant_bootstrap"
+ADVANCED_STATS_SPECIFICATION = "reviewer_response_v6_second_revision"
 
 import statsmodels.api as sm
 import statsmodels.formula.api as smf
@@ -129,6 +129,15 @@ class RunnerMixin:
                     participant_bootstrap_minimum_success_rate
                 ),
             )
+        )
+        # Second-revision analyses: direct eHMI-by-order interaction contrasts,
+        # a trial-level fractional-logit sensitivity model, exposure-based
+        # eHMI learning, term-wise Wald tests, trial-order balance, and the
+        # logged vehicle event timing that defines the analysis windows.
+        revision_results = self.run_revision_analyses(
+            enriched_trial_df,
+            primary_result=common_window_binomial,
+            bootstrap_result=common_window_participant_bootstrap,
         )
         participant_first_binomial = self.run_primary_grouped_binomial_analysis(
             enriched_trial_df,
@@ -233,6 +242,7 @@ class RunnerMixin:
             "common_window_omnibus_tests": common_window_binomial["omnibus_tests"],
             "common_window_binomial_diagnostics": common_window_binomial["diagnostics"],
             "common_window_participant_bootstrap": common_window_participant_bootstrap,
+            "revision": revision_results,
             "participant_first_binomial": participant_first_binomial,
             "event_aligned_binomial": event_results,
             "threshold_binomial": threshold_results,

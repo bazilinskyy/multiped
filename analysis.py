@@ -20,6 +20,10 @@ from typing import Any, Callable
 from scipy import stats
 
 from human_analysis.processed_cache import ProcessedExperimentCache
+from human_analysis.utils.vehicle_events import (
+    apply_scripted_vehicle_events,
+    vehicle_event_schedule_key,
+)
 from human_analysis import stats as stats_module
 
 
@@ -51,8 +55,8 @@ CACHE_SETTINGS = {
 }
 
 RUN_ADVANCED_STATISTICS = True
-ANALYSIS_PIPELINE_VERSION = "reviewer_response_v5_participant_bootstrap"
-ANALYSIS_SOURCE_VERSION = "2026-07-26-participant-bootstrap-v1"
+ANALYSIS_PIPELINE_VERSION = "reviewer_response_v6_second_revision"
+ANALYSIS_SOURCE_VERSION = "2026-09-24-second-revision-v2-scripted-events"
 EQUIVALENCE_MARGIN_POINTS = 5.0
 PRIMARY_TRIGGER_THRESHOLD = CONFIG.primary_trigger_threshold
 TRIGGER_PRESS_THRESHOLDS = list(CONFIG.trigger_thresholds)
@@ -201,6 +205,15 @@ def run_advanced_statistics(trial_level_df: pd.DataFrame, trigger_threshold: flo
         "common_window_threshold_binomial_diagnostics.csv",
         "common_window_participant_level_descriptives.csv",
         "common_window_figure7_cell_summary.csv",
+        "common_window_primary_interaction_contrasts.csv",
+        "common_window_participant_level_paired_contrasts.csv",
+        "common_window_trial_level_vs_primary_contrasts.csv",
+        "common_window_trial_level_majority_binary_marginal_probabilities.csv",
+        "common_window_animation_exposure_learning_tests.csv",
+        "common_window_primary_term_wise_wald_tests.csv",
+        "presentation_order_balance_by_factor.csv",
+        "vehicle_event_timing_summary.csv",
+        "rating_models_random_intercept_coefficients.csv",
     ]
     missing_outputs = [
         filename
@@ -438,11 +451,27 @@ def main() -> None:
     # Existing plotting functions consume compatibility CSVs. Restore these
     # from the single pickle so no raw human data are read in cache-only mode.
     cache.restore_analysis_inputs(processed_data)
-    mapping = processed_data["mapping"].copy()
+    # The AV followed one scripted trajectory per vehicle behaviour, so every
+    # analysis uses constant vehicle event times rather than the scattered
+    # per-condition simulator log (see human_analysis/utils/vehicle_events.py).
+    mapping = apply_scripted_vehicle_events(processed_data["mapping"])
     intake_questionnaire = processed_data["intake_questionnaire"].copy()
     post_experiment_questionnaire = processed_data["post_questionnaire"].copy()
     trial_ratings = processed_data["trial_ratings"].copy()
     cache_payload_changed = False
+    # Statistics cached in the pickle (and the head-heading cache) are only
+    # valid for the event schedule they were computed with.
+    event_schedule_key = vehicle_event_schedule_key(mapping)
+    event_schedule_changed = (
+        processed_data.get("event_schedule_key") != event_schedule_key
+    )
+    if event_schedule_changed:
+        logger.warning(
+            "Vehicle event schedule differs from the one stored with the cached "
+            "statistics; cached statistical results will be recomputed."
+        )
+        processed_data["event_schedule_key"] = event_schedule_key
+        cache_payload_changed = True
     if "trial_number" not in trial_ratings.columns:
         # Compatibility path for older processed pickles. The cached rating
         # rows retain the order in which Unity wrote each participant's trials.
@@ -457,7 +486,7 @@ def main() -> None:
         )
     HMD.set_processed_data_cache(
         processed_data,
-        reuse_statistical_results=not reanalysed_this_run,
+        reuse_statistical_results=not (reanalysed_this_run or event_schedule_changed),
     )
 
     logger.info("Preparing cached inputs and outputs.")
@@ -576,11 +605,11 @@ def main() -> None:
         output=os.path.join(output_folder, "statistics", "head_heading"),
         # True both when always_analyse=true and when a missing pickle caused
         # load_or_build() to perform a complete raw-data analysis.
-        force=reanalysed_this_run,
+        force=reanalysed_this_run or event_schedule_changed,
         figure_saver=HMD.save_plotly,
         # This stable pickle identifier prevents restored CSV modification
         # times from needlessly invalidating the head-heading cache.
-        source_cache_key=str(processed_data["created_utc"]),
+        source_cache_key=f'{processed_data["created_utc"]}|{event_schedule_key}',
     )
     logger.info(
         "Head-heading analysis completed; cached participant-level results "

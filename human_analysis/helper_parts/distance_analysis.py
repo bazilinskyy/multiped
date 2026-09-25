@@ -213,9 +213,9 @@ class DistanceAnalysisMixin:
         # Common label mapping for all figures
         base_labels = {
             "distPed_m": "Distance between pedestrians (m)",
-            "crossing_risk": "Perceived-unsafety time (%)",
-            "mean_crossing_risk": "Perceived-unsafety time (%)",
-            "sd_crossing_risk": "SD of perceived-unsafety time (%)",
+            "crossing_risk": "Perceived crossing risk (%)",
+            "mean_crossing_risk": "Perceived crossing risk (%)",
+            "sd_crossing_risk": "SD of perceived crossing risk (%)",
 
             "Q1_mean": "Q1 (0–100)",
             "Q1_sd": "SD of Q1 (0–100)",
@@ -531,7 +531,7 @@ class DistanceAnalysisMixin:
         )
 
         long_diff["measure"] = long_diff["measure"].map({
-            "delta_crossing_risk": "Perceived-unsafety time (%)",
+            "delta_crossing_risk": "Perceived crossing risk (%)",
             "delta_Q1": "Q1 (0–100)",
             "delta_Q2": "Q2 (0–100)",
             "delta_Q3": "Q3 (0–100)",
@@ -582,7 +582,7 @@ class DistanceAnalysisMixin:
         yd_risk = by_cond["mean_crossing_risk"].values
         slope_risk, intercept_risk = np.polyfit(xd, yd_risk, 1)
         logger.info(
-            "Overall perceived-unsafety time vs distance: "
+            "Overall perceived crossing risk vs distance: "
             f"slope = {slope_risk:.4f} (risk units per 1 m)"
         )
 

@@ -26,7 +26,7 @@ from custom_logger import CustomLogger
 import warnings
 
 
-ADVANCED_STATS_SPECIFICATION = "reviewer_response_v5_participant_bootstrap"
+ADVANCED_STATS_SPECIFICATION = "reviewer_response_v6_second_revision"
 
 import statsmodels.api as sm
 import statsmodels.formula.api as smf

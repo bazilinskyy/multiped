@@ -26,7 +26,7 @@ from custom_logger import CustomLogger
 import warnings
 
 
-ADVANCED_STATS_SPECIFICATION = "reviewer_response_v5_participant_bootstrap"
+ADVANCED_STATS_SPECIFICATION = "reviewer_response_v6_second_revision"
 
 import statsmodels.api as sm
 import statsmodels.formula.api as smf
@@ -43,6 +43,7 @@ logger = CustomLogger(__name__)
 
 from .results import TOSTResult
 from ..utils.parsing import parse_numeric_list
+from ..utils.vehicle_events import vehicle_event_schedule_key
 from ..utils.distance import distance_code_to_metres, distance_codes_to_metres, validate_distances_metres
 
 
@@ -97,6 +98,9 @@ class TriggerFeatureMixin:
                 sensitivity_dir,
                 f"trigger_time_series_features_{threshold_label}.csv",
             )
+        # Event windows and passage cut-offs come from the mapping, so a cached
+        # table is only valid for the event schedule it was built with.
+        event_schedule_key = vehicle_event_schedule_key(self.mapping_df)
         if os.path.isfile(out_csv) and not force:
             cached = pd.read_csv(out_csv)
             required_common_columns = {
@@ -129,6 +133,8 @@ class TriggerFeatureMixin:
                     and np.isclose(cached_pre[0], self.common_window_pre_s)
                     and len(cached_post) == 1
                     and np.isclose(cached_post[0], self.common_window_post_s)
+                    and "event_schedule_key" in cached.columns
+                    and cached["event_schedule_key"].astype(str).eq(event_schedule_key).all()
                 ):
                     logger.info(f"Loading cached trigger feature table: {out_csv}")
                     return cached
@@ -524,6 +530,7 @@ class TriggerFeatureMixin:
                 "expected number of populated bins. Examples:\n"
                 + example.to_string(index=False)
             )
+        feature_df["event_schedule_key"] = event_schedule_key
         feature_df.to_csv(out_csv, index=False)
 
         logger.info(

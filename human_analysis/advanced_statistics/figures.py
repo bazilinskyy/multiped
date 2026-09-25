@@ -26,7 +26,7 @@ from custom_logger import CustomLogger
 import warnings
 
 
-ADVANCED_STATS_SPECIFICATION = "reviewer_response_v5_participant_bootstrap"
+ADVANCED_STATS_SPECIFICATION = "reviewer_response_v6_second_revision"
 
 import statsmodels.api as sm
 import statsmodels.formula.api as smf
@@ -59,12 +59,12 @@ class CommonWindowFigureMixin:
             {0: "Non-yielding", 1: "Yielding"}
         )
         summary["eHMI_label"] = summary["eHMIOn"].map(
-            {0: "No eHMI", 1: "Conditional eHMI"}
+            {0: "eHMI off", 1: "eHMI on"}
         )
         summary["order_label"] = summary["camera"].map(
             {
-                0: "Avatar first / participant second",
-                1: "Participant first / avatar second",
+                0: "Avatar first (AF)",
+                1: "Participant first (PF)",
             }
         )
         self._save_table(summary, "common_window_figure7_cell_summary.csv")
@@ -79,18 +79,18 @@ class CommonWindowFigureMixin:
             facet_row="yielding_label",
             markers=True,
             category_orders={
-                "eHMI_label": ["No eHMI", "Conditional eHMI"],
+                "eHMI_label": ["eHMI off", "eHMI on"],
                 "yielding_label": ["Non-yielding", "Yielding"],
                 "order_label": [
-                    "Avatar first / participant second",
-                    "Participant first / avatar second",
+                    "Avatar first (AF)",
+                    "Participant first (PF)",
                 ],
             },
             labels={
-                "distPed_m": "Inter-pedestrian spacing (m)",
-                "mean": "Perceived-unsafety time (%)",
+                "distPed_m": "Inter-pedestrian distance (m)",
+                "mean": "Perceived crossing risk (%)",
                 "order_label": "Relative pedestrian order",
-                "eHMI_label": "Conditional eHMI logic",
+                "eHMI_label": "eHMI",
                 "yielding_label": "AV behaviour",
             },
             template=self.template,

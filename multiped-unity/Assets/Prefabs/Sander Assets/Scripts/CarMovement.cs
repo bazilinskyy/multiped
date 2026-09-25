@@ -34,6 +34,12 @@ public class CarMovement : MonoBehaviour
     TweenBase FirstTween; TweenBase SecondTween; TweenBase ThirdTween; TweenBase FourthTween; TweenBase FullTween;
 
     // Timings/distances used when yielding to a pedestrian (scenario specific)
+    // Realised yielding schedule in the multiped experiment (all yielding trials):
+    // braking begins 43 m before the first pedestrian (5.76 s after trial onset),
+    // standstill 3 m before that pedestrian at firstAni = 11.00 s (40-m braking
+    // distance in 5.24 s; design value 2.4 m/s^2 after Dey et al., 2021, realised
+    // mean 2.65 m/s^2), drive-off at secDel = 14.00 s (3.00 s standstill), and
+    // passage of the first pedestrian position at 14.92 s.
     private float firstAni = 11f;   // Duration of first segment when yielding to P1
     private float secDel = 14f;     // Delay before second segment when yielding to P1
     private int firstDist = 115;    // Wheel rotation distance for segment 1 (yield P1)
@@ -154,6 +160,8 @@ public class CarMovement : MonoBehaviour
     [Tooltip("Maximum physical speed the car is allowed to reach in km/h when not yielding.")]
     public float maxSpeedKmh = 50f;
 
+    // With 40 km/h/s the non-yielding AV reaches 50 km/h 1.25 s after trial onset,
+    // more than 100 m before the pedestrians, and then drives at a constant speed.
     [Tooltip("Acceleration toward max speed in km/h per second (non-yield).")]
     public float accelKmhPerSec = 40f;
 

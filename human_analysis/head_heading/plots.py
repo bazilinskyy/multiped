@@ -270,6 +270,8 @@ def _save_plotly_only(
     """Save one figure with Plotly only to the configured output root."""
     import plotly.offline as plotly_offline
 
+    from ..helper_parts.figure_export import figures_open_in_browser
+
     figure_root = Path(common.get_configs("output"))
     figure_root.mkdir(parents=True, exist_ok=True)
     output_base = figure_root / name
@@ -277,7 +279,7 @@ def _save_plotly_only(
     plotly_offline.plot(
         fig,
         filename=str(output_base.with_suffix(".html")),
-        auto_open=bool(open_browser),
+        auto_open=bool(open_browser) and figures_open_in_browser(),
     )
     logger.info(f"Saved Plotly figure: {output_base.with_suffix('.html')}")
 

@@ -133,3 +133,5 @@ multiped-unity/Assets/*.csv
 
 # Logs
 logs.txt
+# Publisher PDFs used only as writing-style references
+latex/style/

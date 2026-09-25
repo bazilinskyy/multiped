@@ -26,7 +26,7 @@ from custom_logger import CustomLogger
 import warnings
 
 
-ADVANCED_STATS_SPECIFICATION = "reviewer_response_v5_participant_bootstrap"
+ADVANCED_STATS_SPECIFICATION = "reviewer_response_v6_second_revision"
 
 import statsmodels.api as sm
 import statsmodels.formula.api as smf
@@ -404,10 +404,18 @@ class BinomialMixin:
                                               analysis_label: str = "common_window_primary",
                                               success_column: str = "unsafe_bins_common_window",
                                               valid_column: str = "valid_bins_common_window",
-                                              model_mode: str = "full") -> Dict[str, pd.DataFrame]:
+                                              model_mode: str = "full",
+                                              response: str = "grouped") -> Dict[str, pd.DataFrame]:
         """
         Fit the primary bounded marginal binomial model with participant clustering.
+
+        ``response="grouped"`` fits unsafe and not-unsafe bin counts, so every
+        100-ms bin carries equal weight. ``response="trial_proportion"`` fits a
+        fractional logit to the per-trial unsafe proportion, so every trial
+        carries equal weight regardless of how many dependent bins it contains.
         """
+        if response not in ("grouped", "trial_proportion"):
+            raise ValueError(f"Unknown binomial response type: {response}")
         if sm is None or dmatrix is None or build_design_matrices is None:
             raise RuntimeError("statsmodels and patsy are required for the binomial analysis.")
         current = self._prepare_grouped_binomial_frame(
@@ -424,14 +432,24 @@ class BinomialMixin:
         failures = (current[valid_column] - current[success_column]).to_numpy(dtype=float)
         if np.any(successes < 0) or np.any(failures < 0):
             raise ValueError(f"Invalid grouped-binomial counts in {analysis_label}.")
-        fit = sm.GLM(
-            endog=np.column_stack([successes, failures]),
-            exog=design,
-            family=sm.families.Binomial(),
-        ).fit(
-            cov_type="cluster",
-            cov_kwds={"groups": current["participant"]},
-        )
+        if response == "grouped":
+            endog = np.column_stack([successes, failures])
+            model_name = "marginal_binomial_glm_participant_clustered"
+        else:
+            endog = successes / (successes + failures)
+            model_name = "trial_level_fractional_logit_participant_clustered"
+        with warnings.catch_warnings():
+            # A fractional response is valid for the quasi-binomial estimating
+            # equations, although statsmodels warns about non-integer counts.
+            warnings.simplefilter("ignore")
+            fit = sm.GLM(
+                endog=endog,
+                exog=design,
+                family=sm.families.Binomial(),
+            ).fit(
+                cov_type="cluster",
+                cov_kwds={"groups": current["participant"]},
+            )
         threshold_values = (
             pd.to_numeric(current.get("trigger_threshold"), errors="coerce")
             .dropna()
@@ -443,7 +461,7 @@ class BinomialMixin:
         coefficients = self._coef_frame(
             fit,
             outcome=f"{success_column}/{valid_column}",
-            model_name="marginal_binomial_glm_participant_clustered",
+            model_name=model_name,
         )
         coefficients["analysis"] = analysis_label
         coefficients["analysis_version"] = "primary_grouped_binomial_clustered_v3"
@@ -486,7 +504,8 @@ class BinomialMixin:
                 {
                     "analysis": analysis_label,
                     "analysis_version": "primary_grouped_binomial_clustered_v3",
-                    "model": "marginal_binomial_glm_participant_clustered",
+                    "model": model_name,
+                    "response": response,
                     "formula": formula,
                     "n_trials": len(current),
                     "n_participants": current["participant"].nunique(),
@@ -520,6 +539,12 @@ class BinomialMixin:
             "revised_contrasts": contrasts,
             "omnibus_tests": omnibus,
             "diagnostics": diagnostics,
+            # Model objects are returned for follow-up contrasts; they are not
+            # saved as tables.
+            "fit": fit,
+            "design_info": design.design_info,
+            "cell_gradients": gradients,
+            "model_frame": current,
         }
 
     def run_primary_participant_bootstrap(

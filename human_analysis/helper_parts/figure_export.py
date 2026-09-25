@@ -39,6 +39,14 @@ from ..utils.parsing import parse_numeric_list
 from ..utils.distance import distance_code_to_metres, distance_codes_to_metres
 
 
+def figures_open_in_browser() -> bool:
+    """Return the ``open_figures_in_browser`` config switch (default False)."""
+    try:
+        return bool(common.get_configs("open_figures_in_browser"))
+    except KeyError:
+        return False
+
+
 class FigureExportMixin:
     """Focused plotting responsibility extracted from the legacy helper."""
 
@@ -53,6 +61,8 @@ class FigureExportMixin:
         """
         # disable mathjax globally for Kaleido
         pio.kaleido.scope.mathjax = None
+        # Opening every saved figure in a browser tab is opt-in via config.
+        open_browser = bool(open_browser) and figures_open_in_browser()
 
         output_root = os.path.join(common.get_configs("output"))
         final_root = self.folder_figures

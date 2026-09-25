@@ -9,13 +9,14 @@ from .advanced_statistics import (
     EquivalenceMixin,
     FeatureModelMixin,
     RepeatedMeasuresMixin,
+    RevisionAnalysesMixin,
     RunnerMixin,
     TOSTResult,
     TriggerFeatureMixin,
     WithinBetweenMixin,
 )
 
-ADVANCED_STATS_SPECIFICATION = "reviewer_response_v5_participant_bootstrap"
+ADVANCED_STATS_SPECIFICATION = "reviewer_response_v6_second_revision"
 
 
 class AdvancedStatsRunner(
@@ -27,6 +28,7 @@ class AdvancedStatsRunner(
     CommonWindowFigureMixin,
     WithinBetweenMixin,
     FeatureModelMixin,
+    RevisionAnalysesMixin,
     RunnerMixin,
 ):
     """Compatibility runner composed from focused statistical mixins."""
