@@ -106,14 +106,14 @@ class RatingPlotMixin:
 
         def camera_label(cam):
             return (
-                "Avatar first / participant second"
+                "Avatar first (AF)"
                 if cam == 0
-                else "Participant first / avatar second"
+                else "Participant first (PF)"
             )
 
         # Two-line subplot title, single-line trace label
         def case_title(row):
-            line1 = f"{'Yielding' if row['yielding'] == 1 else 'Non-yielding'}, {'eHMI' if row['eHMIOn'] == 1 else 'No eHMI'}"  # noqa: E501
+            line1 = f"{'Yielding' if row['yielding'] == 1 else 'Non-yielding'}, {'eHMI on' if row['eHMIOn'] == 1 else 'eHMI off'}"  # noqa: E501
             line2 = camera_label(int(row['camera']))
             return f"{line1}<br>{line2}"
 

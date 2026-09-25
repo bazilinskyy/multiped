@@ -3,7 +3,6 @@ using System.Collections.Generic;
 using System.IO; // For writing .txt logs
 using UnityEngine;
 using Pixelplacement;
-using Pixelplacement.TweenSystem;
 using UnityEngine.UI;
 using UnityEngine.XR;
 using PlayFab;
@@ -27,33 +26,17 @@ public class CarMovement : MonoBehaviour
     /// <summary>Splines for segmented routes (yield scenarios) and the full route (no yield).</summary>
     public Spline FirstSpline; public Spline SecondSpline; public Spline ThirdSpline; public Spline FourthSpline; public Spline FullSpline;
 
-    /// <summary>Animation curves for the motion timing of different route parts.</summary>
-    public AnimationCurve FirstCurve; public AnimationCurve SecondCurve; public AnimationCurve FullCurve;
-
-    // Tween handles for route segments
-    TweenBase FirstTween; TweenBase SecondTween; TweenBase ThirdTween; TweenBase FourthTween; TweenBase FullTween;
-
-    // Timings/distances used when yielding to a pedestrian (scenario specific)
-    // Realised yielding schedule in the multiped experiment (all yielding trials):
-    // braking begins 43 m before the first pedestrian (5.76 s after trial onset),
-    // standstill 3 m before that pedestrian at firstAni = 11.00 s (40-m braking
-    // distance in 5.24 s; design value 2.4 m/s^2 after Dey et al., 2021, realised
-    // mean 2.65 m/s^2), drive-off at secDel = 14.00 s (3.00 s standstill), and
-    // passage of the first pedestrian position at 14.92 s.
-    private float firstAni = 11f;   // Duration of first segment when yielding to P1
-    private float secDel = 14f;     // Delay before second segment when yielding to P1
-    private int firstDist = 115;    // Wheel rotation distance for segment 1 (yield P1)
+    /// <summary>Easing curve for the wheel rotation of the non-yielding car.</summary>
+    public AnimationCurve FullCurve;
 
     /// <summary>Reference point on car route used for distance checks.</summary>
     public GameObject measuringPoint;
     /// <summary>Current distance of car along measurement axis (meters).</summary>
     public float carDistance;
 
-    // Timings for other scenarios and wheel rotation parameters
-    private float secAni = 5f;
+    // Wheel rotation parameters
     private int Ani = 12;
     private float wheelSize = 0.5f;
-    private int secDist = 30;
     private int Dist = 145;
 
     /// <summary>Wheel mesh references (used for rotation animations).</summary>
@@ -99,10 +82,9 @@ public class CarMovement : MonoBehaviour
     public float pedestrian1_distance_x;
     public float pedestrian2_distance_x;
 
-    /// <summary>Estimated car speed (km/h), updated by SpeedCalculator.</summary>
+    /// <summary>Current commanded car speed (km/h).</summary>
     public float speed;
 
-    int counter;                      // Internal counter to gate yield logging events
     /// <summary>True while we are in a yielding phase (approach/stop/resume) for the current car.</summary>
     public bool yielding;
 
@@ -135,25 +117,6 @@ public class CarMovement : MonoBehaviour
     string logFilePath; // Absolute path to the text log file
     bool logInitialized = false;
 
-    // ========================= Yield event logging =========================
-
-    [Header("Yield event logging")]
-    [Tooltip("Consider the car 'stopped' if speed (km/h) is <= this threshold.")]
-    public float stoppedSpeedKmhThreshold = 0.5f;
-
-    bool lastYieldingState = false; // For rising/falling edge detection of yielding
-    bool isStopped = false;         // Tracks 'stopped' sub-state within yielding
-
-    // ========================= Speed sampling =========================
-
-    [Header("Speed sampling")]
-    [Tooltip("Interval in seconds between speed samples.")]
-    public float speedSampleInterval = 0.5f;
-
-    private Vector3 _lastSpeedSamplePos;
-    private float _lastSpeedSampleTime;
-    private bool _speedInitialized = false;
-
     // ========================= Speed limiting (non-yield) =========================
 
     [Header("Speed limit (non-yield)")]
@@ -169,6 +132,42 @@ public class CarMovement : MonoBehaviour
     bool _fullManualActive = false;
     float _fullT = 0f;               // current param on [0,1] along FullSpline
     float _currentSpeedMps = 0f;     // current speed in m/s (for movement, not logging)
+
+    // ========================= Yielding: constant deceleration =========================
+    // A yielding AV accelerates from rest like the non-yielding AV (accelKmhPerSec), cruises at
+    // yieldCruiseSpeedKmh, brakes at exactly yieldDecelerationMps2 so that it stops at the end of the
+    // stop spline (FirstSpline for Yield = 1, ThirdSpline for Yield = 2), stands still for exactly
+    // yieldStandstillS, and drives off along the next spline. The braking distance follows from
+    // v^2 / (2a): 40.19 m for 50 km/h and 2.4 m/s^2. Event times in the log are exact (interpolated
+    // within the physics step), and the logged speed is the commanded speed.
+    // (The multiped experiment used a tween with a hand-drawn speed curve instead, so its braking
+    // was not at a constant rate; that motion has been removed.)
+
+    [Header("Yielding (constant deceleration)")]
+    [Tooltip("Cruise speed before braking (km/h).")]
+    public float yieldCruiseSpeedKmh = 50f;
+
+    [Tooltip("Constant braking deceleration (m/s^2).")]
+    public float yieldDecelerationMps2 = 2.4f;
+
+    [Tooltip("Time at standstill before driving off (s).")]
+    public float yieldStandstillS = 3f;
+
+    [Tooltip("Acceleration when driving off after the standstill (m/s^2).")]
+    public float yieldDriveOffAccelMps2 = 2f;
+
+    enum YieldPhase { Idle, Approach, Braking, Standstill, DriveOff, Done }
+    YieldPhase _yPhase = YieldPhase.Idle;
+
+    Spline _yStopSpline, _yGoSpline;   // spline ending at the stop point, and the spline after it
+    float[] _yStopLut, _yGoLut;        // cumulative arc length (m) at t = i / ArcLutSteps
+    float _yStopLength, _yGoLength;    // spline lengths (m)
+    float _yS;                         // arc length travelled along the current spline (m)
+    float _ySpeedMps;                  // commanded speed (m/s)
+    float _yBrakeOnsetS;               // arc length on the stop spline where braking begins (m)
+    float _yBrakeDecelMps2;            // deceleration actually applied (equals yieldDecelerationMps2 when at cruise speed)
+    float _yStandstillElapsed;         // time spent at standstill (s)
+    const int ArcLutSteps = 1000;
 
     /// <summary>
     /// Unity Awake: cache AudioSource reference and initialize logging.
@@ -192,21 +191,12 @@ public class CarMovement : MonoBehaviour
     }
 
     /// <summary>
-    /// Unity Start: initialize speed sampling (logging already initialized in Awake).
+    /// Unity Start: check the scene references (logging already initialized in Awake).
     /// </summary>
     void Start()
     {
-        if (distance_cube != null)
-        {
-            _lastSpeedSamplePos = distance_cube.transform.position;
-            _lastSpeedSampleTime = Time.time;
-            _speedInitialized = true;
-        }
-        else
-        {
-            _speedInitialized = false;
-            Debug.LogWarning("CarMovement: distance_cube is not assigned. Speed sampling will be disabled until it is set.");
-        }
+        if (distance_cube == null)
+            Debug.LogWarning("CarMovement: distance_cube is not assigned. Distances and crossings will not be logged until it is set.");
     }
 
     /// <summary>
@@ -375,6 +365,12 @@ public class CarMovement : MonoBehaviour
             UpdateNonYieldMotion();
         }
 
+        // Yielding motion: constant deceleration
+        if (Yield > 0 && WaveStarted)
+        {
+            UpdateConstantDecelYield();
+        }
+
         // If conditionScript is not yet assigned, avoid null reference crashes
         if (conditionScript == null || distance_cube == null)
             return;
@@ -390,45 +386,11 @@ public class CarMovement : MonoBehaviour
         // Car distance along measurement axis (3D)
         carDistance = Vector3.Distance(measuringPoint.transform.position, distance_cube.transform.position);
 
-        // Update speed estimate (sampled every speedSampleInterval seconds)
-        SpeedCalculator();
+        // Commanded speed (km/h)
+        speed = WaveStarted ? (Yield > 0 ? _ySpeedMps : _currentSpeedMps) * 3.6f : 0f;
 
         // Continuous per-tick console log (verbose)
         Debug.Log($"[car_t={(Time.time - startTime):F2}s] continous_pedestrian1_distance= {pedestrian1_distance_x} pedestrian2_distance= {pedestrian2_distance_x}");
-
-        // --------------------------- Legacy yielding gates (counter-based) ---------------------------
-        if (pedestrian2_distance < 43 && Yield == 1)
-        {
-            counter += 1;
-            if (counter == 1)
-            {
-                yielding = true;
-                Debug.Log("Start yielding at: " + fixedDeltaTime + "; Distance: " + carDistance);
-                Debug.Log("distance cube: " + distance_cube.transform.position + "P1_distance: " + conditionScript.p1_object.transform.position + "P2_distance: " + conditionScript.p2_object.transform.position);
-                Debug.Log("pedestrian1_distance= " + pedestrian1_distance + " pedestrian2_distance=" + pedestrian2_distance);
-            }
-
-            if (pedestrian2_distance < 3)
-            {
-                yielding = false;
-                Debug.Log("2nd_distance cube: " + distance_cube.transform.position + "P1_distance: " + conditionScript.p1_object.transform.position + "P2_distance: " + conditionScript.p2_object.transform.position);
-                Debug.Log("pedestrian1_distance= " + pedestrian1_distance + " pedestrian2_distance=" + pedestrian2_distance);
-            }
-        }
-        if (pedestrian1_distance < 43 && Yield == 2)
-        {
-            counter += 1;
-            if (counter == 1)
-            {
-                yielding = true;
-            }
-
-            if (pedestrian1_distance < 3)
-            {
-                yielding = false;
-            }
-        }
-        // -------------------------------------------------------------------------------------------
 
         // ====================== Crossing detection (zero-crossing on X with proximity gate) ======================
         Vector3 carPos = distance_cube.transform.position;
@@ -454,7 +416,8 @@ public class CarMovement : MonoBehaviour
                     p1Crossed = true;
                     float t = Time.time - startTime;
                     string wallClock = System.DateTime.UtcNow.AddHours(2f).ToString("HH:mm:ss");
-                    LogLine($"[CROSS] P1 at t={t:F2}s (wall {wallClock}) | carDist={carDistance:F1}m | speed={speed:F1} km/h | pedDistance={pedestrianPairDistance:F2}m",
+                    string exact = $" | t_exact={ExactCrossTime(t, lastRelX1.Value, relX1):F3}s";
+                    LogLine($"[CROSS] P1 at t={t:F2}s (wall {wallClock}) | carDist={carDistance:F1}m | speed={speed:F1} km/h | pedDistance={pedestrianPairDistance:F2}m" + exact,
                             p1Pos, p2Pos);
                 }
             }
@@ -471,7 +434,8 @@ public class CarMovement : MonoBehaviour
                     p2Crossed = true;
                     float t = Time.time - startTime;
                     string wallClock = System.DateTime.UtcNow.AddHours(2f).ToString("HH:mm:ss");
-                    LogLine($"[CROSS] P2 at t={t:F2}s (wall {wallClock}) | carDist={carDistance:F1}m | speed={speed:F1} km/h | pedDistance={pedestrianPairDistance:F2}m",
+                    string exact = $" | t_exact={ExactCrossTime(t, lastRelX2.Value, relX2):F3}s";
+                    LogLine($"[CROSS] P2 at t={t:F2}s (wall {wallClock}) | carDist={carDistance:F1}m | speed={speed:F1} km/h | pedDistance={pedestrianPairDistance:F2}m" + exact,
                             p1Pos, p2Pos);
                 }
             }
@@ -479,53 +443,7 @@ public class CarMovement : MonoBehaviour
         }
         // ========================================================================================================
 
-        // ====================== Yield event logging (start/stop/resume/end) ======================
-        float tCar = Time.time - startTime;
-        string wall = System.DateTime.UtcNow.AddHours(2f).ToString("HH:mm:ss");
-
-        // Yield just started this frame
-        if (yielding && !lastYieldingState)
-        {
-            LogLine($"[YIELD_START] t={tCar:F2}s (wall {wall}) | " +
-                    $"carDist={carDistance:F2}m | speed={speed:F2} km/h | " +
-                    $"dP1={pedestrian1_distance:F2}m dP2={pedestrian2_distance:F2}m",
-                    p1Pos, p2Pos);
-            isStopped = false;
-        }
-
-        // While yielding, detect when we actually come to a stop and when we resume
-        if (yielding)
-        {
-            if (!isStopped && speed <= stoppedSpeedKmhThreshold)
-            {
-                isStopped = true;
-                LogLine($"[YIELD_STOP]  t={tCar:F2}s (wall {wall}) | " +
-                        $"carDist={carDistance:F2}m | speed={speed:F2} km/h | " +
-                        $"dP1={pedestrian1_distance:F2}m dP2={pedestrian2_distance:F2}m",
-                        p1Pos, p2Pos);
-            }
-            else if (isStopped && speed > stoppedSpeedKmhThreshold)
-            {
-                isStopped = false;
-                LogLine($"[YIELD_RESUME] t={tCar:F2}s (wall {wall}) | " +
-                        $"carDist={carDistance:F2}m | speed={speed:F2} km/h | " +
-                        $"dP1={pedestrian1_distance:F2}m dP2={pedestrian2_distance:F2}m",
-                        p1Pos, p2Pos);
-            }
-        }
-
-        // Yield just ended this frame
-        if (!yielding && lastYieldingState)
-        {
-            LogLine($"[YIELD_END]   t={tCar:F2}s (wall {wall}) | " +
-                    $"carDist={carDistance:F2}m | speed={speed:F2} km/h | " +
-                    $"dP1={pedestrian1_distance:F2}m dP2={pedestrian2_distance:F2}m",
-                    p1Pos, p2Pos);
-            isStopped = false;
-        }
-
-        // Keep last state for edge detection next tick
-        lastYieldingState = yielding;
+        // Yield events (start/stop/resume/end) are logged with exact times by UpdateConstantDecelYield.
     }
 
     /// <summary>
@@ -599,9 +517,6 @@ public class CarMovement : MonoBehaviour
                 LEDscript.counter = 0;
                 LEDscript.counter2 = 0;
             }
-
-            // Reset yield gate counter for next car
-            counter = 0;
         }
     }
 
@@ -611,56 +526,16 @@ public class CarMovement : MonoBehaviour
     /// </summary>
     public void DriveCar()
     {
+        // Align trial time with the physics clock, so that the first motion step covers
+        // t = 0 to t = fixedDeltaTime and logged event times are exact.
+        startTime = Time.fixedTime;
+
         if (Yield > 0)
         {
-            if (Yield == 1)
-            {
-                // Parameters for yielding to pedestrian 1
-                firstAni = 11f;
-                secDel = 14f;
-                firstDist = 115;
-                secAni = 5f;
-                secDist = 30;
-
-                // Two-segment route
-                FirstTween = Tween.Spline(FirstSpline, myObject, 0, 1, true, firstAni, 0, FirstCurve, Tween.LoopType.None);
-                SecondTween = Tween.Spline(SecondSpline, myObject, 0, 1, true, secAni, secDel, SecondCurve, Tween.LoopType.None);
-
-                // Wheel rotations for both segments
-                WheelSpin0 LF = new WheelSpin0(Lfront, FirstCurve, firstDist, wheelSize); LF.SetupTween(firstAni, 0);
-                WheelSpin0 LR = new WheelSpin0(Lrear, FirstCurve, firstDist, wheelSize); LR.SetupTween(firstAni, 0);
-                WheelSpin0 RF = new WheelSpin0(Rfront, FirstCurve, firstDist, wheelSize); RF.SetupTween(firstAni, 0);
-                WheelSpin0 RR = new WheelSpin0(Rrear, FirstCurve, firstDist, wheelSize); RR.SetupTween(firstAni, 0);
-                WheelSpin0 LF2 = new WheelSpin0(Lfront, FirstCurve, secDist, wheelSize); LF2.SetupTween(secAni, secDel);
-                WheelSpin0 LR2 = new WheelSpin0(Lrear, FirstCurve, secDist, wheelSize); LR2.SetupTween(secAni, secDel);
-                WheelSpin0 RF2 = new WheelSpin0(Rfront, FirstCurve, secDist, wheelSize); RF2.SetupTween(secAni, secDel);
-                WheelSpin0 RR2 = new WheelSpin0(Rrear, FirstCurve, secDist, wheelSize); RR2.SetupTween(secAni, secDel);
-            }
-            if (Yield == 2)
-            {
-                // Parameters for yielding to pedestrian 2
-                firstAni = 12f;
-                secDel = 15f;
-                firstDist = 125;
-
-                secAni = 4f;
-                secDist = 20;
-
-                // Two-segment route
-                ThirdTween = Tween.Spline(ThirdSpline, myObject, 0, 1, true, firstAni, 0, FirstCurve, Tween.LoopType.None);
-                FourthTween = Tween.Spline(FourthSpline, myObject, 0, 1, true, secAni, secDel, SecondCurve, Tween.LoopType.None);
-
-                // Wheel rotations for both segments
-                WheelSpin0 LF = new WheelSpin0(Lfront, FirstCurve, firstDist, wheelSize); LF.SetupTween(firstAni, 0);
-                WheelSpin0 LR = new WheelSpin0(Lrear, FirstCurve, firstDist, wheelSize); LR.SetupTween(firstAni, 0);
-                WheelSpin0 RF = new WheelSpin0(Rfront, FirstCurve, firstDist, wheelSize); RF.SetupTween(firstAni, 0);
-                WheelSpin0 RR = new WheelSpin0(Rrear, FirstCurve, firstDist, wheelSize); RR.SetupTween(firstAni, 0);
-                WheelSpin0 LF2 = new WheelSpin0(Lfront, FirstCurve, secDist, wheelSize); LF2.SetupTween(secAni, secDel);
-                WheelSpin0 LR2 = new WheelSpin0(Lrear, FirstCurve, secDist, wheelSize); LR2.SetupTween(secAni, secDel);
-                WheelSpin0 RF2 = new WheelSpin0(Rfront, FirstCurve, secDist, wheelSize); RF2.SetupTween(secAni, secDel);
-                WheelSpin0 RR2 = new WheelSpin0(Rrear, FirstCurve, secDist, wheelSize); RR2.SetupTween(secAni, secDel);
-            }
+            StartConstantDecelYield();
+            return;
         }
+
         if (Yield == 0)
         {
             // --- Manual movement along FullSpline with speed cap ---
@@ -770,6 +645,308 @@ public class CarMovement : MonoBehaviour
         }
     }
 
+    // ========================= Constant-deceleration yielding (future experiments) =========================
+
+    /// <summary>
+    /// Sets up constant-deceleration yielding: builds arc-length tables for the stop and
+    /// drive-off splines, computes the braking onset, logs the planned schedule and places
+    /// the car at the start of the stop spline.
+    /// </summary>
+    void StartConstantDecelYield()
+    {
+        _yStopSpline = (Yield == 2) ? ThirdSpline : FirstSpline;
+        _yGoSpline = (Yield == 2) ? FourthSpline : SecondSpline;
+
+        if (_yStopSpline == null || _yGoSpline == null || myObject == null)
+        {
+            Debug.LogError("CarMovement: stop/drive-off spline or myObject not assigned, cannot run constant-deceleration yielding.");
+            _yPhase = YieldPhase.Idle;
+            return;
+        }
+
+        _yStopLut = BuildArcLengthTable(_yStopSpline, out _yStopLength);
+        _yGoLut = BuildArcLengthTable(_yGoSpline, out _yGoLength);
+
+        float vCruise = yieldCruiseSpeedKmh / 3.6f;
+        float aAccel = accelKmhPerSec / 3.6f;
+        float aBrake = yieldDecelerationMps2;
+        float brakeDist = vCruise * vCruise / (2f * aBrake);
+        float accelDist = vCruise * vCruise / (2f * aAccel);
+
+        _yBrakeOnsetS = _yStopLength - brakeDist;
+        _yBrakeDecelMps2 = aBrake;
+        _yS = 0f;
+        _ySpeedMps = 0f;
+        _yStandstillElapsed = 0f;
+        _yPhase = YieldPhase.Approach;
+        yielding = false;
+
+        if (_yBrakeOnsetS < accelDist)
+        {
+            Debug.LogWarning($"CarMovement: stop spline ({_yStopLength:F2} m) is too short to reach {yieldCruiseSpeedKmh:F0} km/h " +
+                             $"and brake at {aBrake:F2} m/s^2 (needs {accelDist + brakeDist:F2} m). Lengthen the spline or start later.");
+        }
+
+        // Planned schedule (s after trial onset), written to the log for checking against the events
+        float tAccel = vCruise / aAccel;
+        float tOnset = tAccel + Mathf.Max(0f, _yBrakeOnsetS - accelDist) / vCruise;
+        float tStop = tOnset + vCruise / aBrake;
+        float tResume = tStop + yieldStandstillS;
+        LogLine($"[YIELD_PLAN] constant deceleration {aBrake:F2} m/s^2 from {yieldCruiseSpeedKmh:F2} km/h | " +
+                $"braking distance={brakeDist:F2}m | stop spline={_yStopLength:F2}m | drive-off spline={_yGoLength:F2}m | " +
+                $"onset t={tOnset:F3}s | stop t={tStop:F3}s | resume t={tResume:F3}s");
+
+        if (tResume > 19f)
+            Debug.LogWarning($"CarMovement: planned drive-off at {tResume:F2} s is later than the 19 s yielding trial length in Wave().");
+
+        PlaceOnSpline(_yStopSpline, 0f);
+    }
+
+    /// <summary>
+    /// Advances constant-deceleration yielding by one physics step. Each phase change is
+    /// found exactly within the step, so braking starts, standstill and drive-off happen at
+    /// the planned distance and time, and events are logged with exact times.
+    /// </summary>
+    void UpdateConstantDecelYield()
+    {
+        if (_yPhase == YieldPhase.Idle || _yPhase == YieldPhase.Done) return;
+
+        float dt = Time.fixedDeltaTime;
+        float tStepStart = Time.time - startTime - dt; // trial time at the start of this step
+        float rem = dt;                                // time left to integrate in this step
+        float vCruise = yieldCruiseSpeedKmh / 3.6f;
+        float aAccel = accelKmhPerSec / 3.6f;
+        float sBefore = _yS;
+        bool onGoSplineBefore = (_yPhase == YieldPhase.DriveOff);
+
+        // Bounded loop: at most one transition per phase within a step
+        for (int guard = 0; guard < 8 && rem > 0f; guard++)
+        {
+            switch (_yPhase)
+            {
+                case YieldPhase.Approach:
+                {
+                    float toOnset = _yBrakeOnsetS - _yS;
+                    if (toOnset <= 0f)
+                    {
+                        BeginBraking(tStepStart + (dt - rem));
+                        break;
+                    }
+                    if (_ySpeedMps < vCruise)
+                    {
+                        // Accelerating toward cruise speed
+                        float tToCruise = (vCruise - _ySpeedMps) / aAccel;
+                        float tau = Mathf.Min(rem, tToCruise);
+                        float d = _ySpeedMps * tau + 0.5f * aAccel * tau * tau;
+                        if (d >= toOnset)
+                        {
+                            float tHit = (-_ySpeedMps + Mathf.Sqrt(_ySpeedMps * _ySpeedMps + 2f * aAccel * toOnset)) / aAccel;
+                            _ySpeedMps += aAccel * tHit;
+                            _yS = _yBrakeOnsetS;
+                            rem -= tHit;
+                            BeginBraking(tStepStart + (dt - rem));
+                        }
+                        else
+                        {
+                            _ySpeedMps = (tau >= tToCruise) ? vCruise : _ySpeedMps + aAccel * tau;
+                            _yS += d;
+                            rem -= tau;
+                        }
+                    }
+                    else
+                    {
+                        // Cruising at constant speed
+                        float tHit = toOnset / _ySpeedMps;
+                        if (tHit <= rem)
+                        {
+                            _yS = _yBrakeOnsetS;
+                            rem -= tHit;
+                            BeginBraking(tStepStart + (dt - rem));
+                        }
+                        else
+                        {
+                            _yS += _ySpeedMps * rem;
+                            rem = 0f;
+                        }
+                    }
+                    break;
+                }
+
+                case YieldPhase.Braking:
+                {
+                    float tToStop = _ySpeedMps / _yBrakeDecelMps2;
+                    if (tToStop <= rem)
+                    {
+                        _ySpeedMps = 0f;
+                        _yS = _yStopLength;
+                        rem -= tToStop;
+                        _yStandstillElapsed = 0f;
+                        _yPhase = YieldPhase.Standstill;
+                        yielding = false;
+                        LogYieldEvent("YIELD_STOP", tStepStart + (dt - rem));
+                        LogYieldEvent("YIELD_END", tStepStart + (dt - rem));
+                    }
+                    else
+                    {
+                        _ySpeedMps -= _yBrakeDecelMps2 * rem;
+                        // Position from the remaining braking distance, so the car stops exactly at the end
+                        _yS = _yStopLength - _ySpeedMps * _ySpeedMps / (2f * _yBrakeDecelMps2);
+                        rem = 0f;
+                    }
+                    break;
+                }
+
+                case YieldPhase.Standstill:
+                {
+                    float need = yieldStandstillS - _yStandstillElapsed;
+                    if (need <= rem)
+                    {
+                        rem -= need;
+                        _yStandstillElapsed = yieldStandstillS;
+                        _yPhase = YieldPhase.DriveOff;
+                        _yS = 0f;
+                        LogYieldEvent("YIELD_RESUME", tStepStart + (dt - rem));
+                    }
+                    else
+                    {
+                        _yStandstillElapsed += rem;
+                        rem = 0f;
+                    }
+                    break;
+                }
+
+                case YieldPhase.DriveOff:
+                {
+                    float tToCruise = Mathf.Max(0f, (vCruise - _ySpeedMps) / yieldDriveOffAccelMps2);
+                    float tau = Mathf.Min(rem, tToCruise);
+                    _yS += _ySpeedMps * tau + 0.5f * yieldDriveOffAccelMps2 * tau * tau;
+                    _ySpeedMps = (tau >= tToCruise) ? vCruise : _ySpeedMps + yieldDriveOffAccelMps2 * tau;
+                    _yS += _ySpeedMps * (rem - tau);
+                    rem = 0f;
+
+                    if (_yS >= _yGoLength)
+                    {
+                        _yS = _yGoLength;
+                        _yPhase = YieldPhase.Done;
+                    }
+                    break;
+                }
+
+                default:
+                    rem = 0f;
+                    break;
+            }
+        }
+
+        // Place the car and spin the wheels by the distance travelled in this step
+        bool onGoSpline = (_yPhase == YieldPhase.DriveOff || _yPhase == YieldPhase.Done);
+        if (onGoSpline)
+            PlaceOnSpline(_yGoSpline, ArcLengthToT(_yGoLut, _yS));
+        else
+            PlaceOnSpline(_yStopSpline, ArcLengthToT(_yStopLut, _yS));
+
+        float travelled = (onGoSpline == onGoSplineBefore)
+            ? _yS - sBefore
+            : (_yStopLength - sBefore) + _yS; // switched splines in this step
+        SpinWheels(travelled);
+    }
+
+    /// <summary>
+    /// Switches to the braking phase. At cruise speed the deceleration is exactly
+    /// yieldDecelerationMps2; if the car has not reached cruise speed (spline too short),
+    /// the deceleration is adjusted so that it still stops at the end of the stop spline.
+    /// </summary>
+    void BeginBraking(float tEvent)
+    {
+        float remaining = _yStopLength - _yS;
+        _yBrakeDecelMps2 = yieldDecelerationMps2;
+        if (Mathf.Abs(_ySpeedMps - yieldCruiseSpeedKmh / 3.6f) > 0.01f && remaining > 0.01f)
+        {
+            _yBrakeDecelMps2 = _ySpeedMps * _ySpeedMps / (2f * remaining);
+            Debug.LogWarning($"CarMovement: braking started at {_ySpeedMps * 3.6f:F2} km/h, deceleration set to {_yBrakeDecelMps2:F2} m/s^2.");
+        }
+        _yPhase = YieldPhase.Braking;
+        yielding = true; // starts the yielding eHMI animation, as in the original setup
+        LogYieldEvent("YIELD_START", tEvent);
+    }
+
+    /// <summary>Logs a yield event with its exact trial time and the car state.</summary>
+    void LogYieldEvent(string tag, float tEvent)
+    {
+        string wall = System.DateTime.UtcNow.AddHours(2f).ToString("HH:mm:ss");
+        Vector3 p1Pos = conditionScript != null ? conditionScript.p1_object.transform.position : Vector3.zero;
+        Vector3 p2Pos = conditionScript != null ? conditionScript.p2_object.transform.position : Vector3.zero;
+        LogLine($"[{tag}] t={tEvent:F3}s (wall {wall}) | speed={_ySpeedMps * 3.6f:F2} km/h | " +
+                $"decel={_yBrakeDecelMps2:F2} m/s^2 | splineS={_yS:F2}m",
+                p1Pos, p2Pos);
+    }
+
+    /// <summary>
+    /// Trial time at which the car passed a pedestrian, by linear interpolation of the signed
+    /// X difference between the previous and the current physics step.
+    /// </summary>
+    float ExactCrossTime(float tNow, float lastRel, float rel)
+    {
+        float span = Mathf.Abs(lastRel) + Mathf.Abs(rel);
+        if (span < 1e-6f) return tNow;
+        return tNow - Time.fixedDeltaTime * Mathf.Abs(rel) / span;
+    }
+
+    /// <summary>Cumulative arc length (m) of a spline at t = i / ArcLutSteps.</summary>
+    float[] BuildArcLengthTable(Spline spline, out float length)
+    {
+        float[] lut = new float[ArcLutSteps + 1];
+        Vector3 prev = spline.GetPosition(0f);
+        lut[0] = 0f;
+        for (int i = 1; i <= ArcLutSteps; i++)
+        {
+            Vector3 p = spline.GetPosition((float)i / ArcLutSteps);
+            lut[i] = lut[i - 1] + Vector3.Distance(prev, p);
+            prev = p;
+        }
+        length = lut[ArcLutSteps];
+        return lut;
+    }
+
+    /// <summary>Spline parameter t for a given arc length s, using the arc-length table.</summary>
+    float ArcLengthToT(float[] lut, float s)
+    {
+        if (s <= 0f) return 0f;
+        if (s >= lut[ArcLutSteps]) return 1f;
+        int lo = 0, hi = ArcLutSteps;
+        while (hi - lo > 1)
+        {
+            int mid = (lo + hi) / 2;
+            if (lut[mid] < s) lo = mid; else hi = mid;
+        }
+        float seg = lut[hi] - lut[lo];
+        float f = seg > 1e-6f ? (s - lut[lo]) / seg : 0f;
+        return (lo + f) / ArcLutSteps;
+    }
+
+    /// <summary>Places the car at t on a spline, facing along the spline.</summary>
+    void PlaceOnSpline(Spline spline, float t)
+    {
+        Vector3 pos = spline.GetPosition(t);
+        myObject.position = pos;
+
+        // Look slightly ahead (or behind at the end) to get the driving direction
+        Vector3 dir = (t < 0.999f)
+            ? spline.GetPosition(Mathf.Min(t + 0.001f, 1f)) - pos
+            : pos - spline.GetPosition(t - 0.001f);
+        if (dir.sqrMagnitude > 1e-8f)
+            myObject.rotation = Quaternion.LookRotation(dir.normalized, Vector3.up);
+    }
+
+    /// <summary>Rotates the wheels to match the distance travelled (m).</summary>
+    void SpinWheels(float distance)
+    {
+        if (distance <= 0f) return;
+        float deg = distance / (Mathf.PI * wheelSize) * 360f;
+        foreach (GameObject w in new[] { Lfront, Lrear, Rfront, Rrear })
+            if (w != null) w.transform.Rotate(Vector3.right, -deg, Space.Self);
+    }
+
     /// <summary>
     /// Orients the car so its forward vector follows the spline tangent at t.
     /// </summary>
@@ -787,42 +964,6 @@ public class CarMovement : MonoBehaviour
             myObject.position = pos; // ensure we're exactly on the spline
             myObject.rotation = Quaternion.LookRotation(dir, Vector3.up);
         }
-    }
-
-    /// <summary>
-    /// Estimates vehicle speed by sampling the car proxy position at a fixed interval.
-    /// Runs every FixedUpdate without coroutines.
-    /// </summary>
-    void SpeedCalculator()
-    {
-        if (!_speedInitialized || distance_cube == null)
-            return;
-
-        // If no car is currently running, keep speed at 0 and reset the sample
-        if (!WaveStarted)
-        {
-            speed = 0f;
-            _lastSpeedSamplePos = distance_cube.transform.position;
-            _lastSpeedSampleTime = Time.time;
-            return;
-        }
-
-        float now = Time.time;
-        float dt = now - _lastSpeedSampleTime;
-
-        // Only update when enough time has passed
-        if (dt < speedSampleInterval)
-            return;
-
-        Vector3 currentPos = distance_cube.transform.position;
-        float distance = Vector3.Distance(_lastSpeedSamplePos, currentPos); // meters
-
-        // m/s = distance / dt, km/h = m/s * 3.6
-        float metersPerSecond = distance / dt;
-        speed = metersPerSecond * 3.6f;
-
-        _lastSpeedSamplePos = currentPos;
-        _lastSpeedSampleTime = now;
     }
 
     /// <summary>

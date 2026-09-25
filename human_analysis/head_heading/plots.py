@@ -65,7 +65,7 @@ def create_event_aligned_plotly(curves: pd.DataFrame, pointwise_tests: pd.DataFr
     marker_y = data_min - HEAD_HEADING_TTEST_ROW_HEIGHT_DEG
     plot_min = data_min - max(4.0 * HEAD_HEADING_TTEST_ROW_HEIGHT_DEG, 2.0)
     plot_max = data_max + max(0.02 * (data_max - data_min), 1.0)
-    labels = {"AF_PS": "Avatar first / participant second", "PF_AS": "Participant first / avatar second"}
+    labels = {"AF_PS": "Avatar first (AF)", "PF_AS": "Participant first (PF)"}
     colors = {"AF_PS": "#3569b8", "PF_AS": "#d95032"}
     fills = {"AF_PS": "rgba(53,105,184,0.18)", "PF_AS": "rgba(217,80,50,0.18)"}
     fig = make_subplots(rows=1, cols=2, shared_yaxes=True, subplot_titles=("Non-yielding", "Yielding"))
@@ -216,7 +216,7 @@ def create_passage_summary_plotly(features: pd.DataFrame) -> Any:
     )
     summary["se"] = summary["std"] / np.sqrt(summary["count"])
     summary["half_ci"] = stats.t.ppf(0.975, summary["count"] - 1) * summary["se"]
-    labels = {"AF_PS": "Avatar first / participant second", "PF_AS": "Participant first / avatar second"}
+    labels = {"AF_PS": "Avatar first (AF)", "PF_AS": "Participant first (PF)"}
     colors = {0: "#3569b8", 1: "#d95032"}
     fig = make_subplots(rows=1, cols=2, shared_yaxes=True, subplot_titles=("Non-yielding", "Yielding"))
     for column, yielding in enumerate((0, 1), 1):
@@ -231,7 +231,7 @@ def create_passage_summary_plotly(features: pd.DataFrame) -> Any:
                     mode="lines+markers",
                     marker=dict(size=9),
                     line=dict(color=colors[ehmi], width=2),
-                    name="Conditional eHMI" if ehmi else "No eHMI",
+                    name="eHMI on" if ehmi else "eHMI off",
                     legendgroup=f"eHMI{ehmi}",
                     showlegend=column == 1,
                 ),

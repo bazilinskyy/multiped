@@ -18,6 +18,10 @@ onset (``CarMovement.DriveCar``: ``firstAni = 11``, ``secDel = 14``). Braking
 onset and passage times are the modal logged values: one value per vehicle
 behaviour for the first roadside position and one value per vehicle behaviour
 and inter-pedestrian distance for the second position.
+
+The Unity script has since been changed so that future experiments do not
+have this scatter: the AV brakes at a constant 2.4 m/s^2 and every event is
+logged at its exact time (``CarMovement.UpdateConstantDecelYield``).
 """
 
 from __future__ import annotations
